@@ -33,7 +33,10 @@ data class QuranUiState(
     val currentWordInAyah: Int = -1,
     val recitationCursor: Int = 0,
     val correctionPlaying: Boolean = false,
+    val correctionPhase: CorrectionPhase = CorrectionPhase.LISTENING,
     val correctionMessage: String? = null,
+    val correctionAyahIndex: Int = -1,
+    val correctionFirstWordInAyah: Int = -1,
     val selectedSurah: Int = 1,
     val currentPage: Int = 0,
     val totalAyahsInSurah: Int = 7,
@@ -65,6 +68,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private var onlineSession: OnlineSpeechSession? = null
     private var localSession: LocalRecitationSession? = null
     private var progressTracker: RecitationProgressTracker? = null
+    private var activeCorrection: CorrectionRequest? = null
+    private var correctionWasListening = false
 
     private val state = mutableStateOf(
         QuranUiState(
@@ -201,8 +206,10 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (state.value.engine == RecitationEngine.OFFLINE && !state.value.modelReady) { state.value = state.value.copy(notice = "نزّل نموذج FastConformer أولاً لتفعيل التسميع Offline."); return }
-        if (state.value.listening) return
+        if (state.value.listening || state.value.correctionPlaying) return
         progressTracker = RecitationProgressTracker(state.value.ayahs)
+        activeCorrection = null
+        correctionWasListening = false
         state.value = state.value.copy(
             listening = true,
             transcript = "",
@@ -213,9 +220,17 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentAyahIndex = 0,
             currentWordInAyah = 0,
             recitationCursor = 0,
+            correctionPlaying = false,
+            correctionPhase = CorrectionPhase.LISTENING,
             correctionMessage = null,
+            correctionAyahIndex = -1,
+            correctionFirstWordInAyah = -1,
             notice = if (state.value.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق." else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك.",
         )
+        startRecognitionSession()
+    }
+
+    private fun startRecognitionSession() {
         if (state.value.engine == RecitationEngine.ONLINE) {
             onlineSession = OnlineSpeechSession(getApplication(), ::handleRecognitionUpdate)
             onlineSession?.start()
@@ -226,6 +241,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleRecognitionUpdate(update: RecognitionUpdate) {
+        if (state.value.correctionPlaying && update !is RecognitionUpdate.Started) return
         when (update) {
             RecognitionUpdate.Started -> Unit
             is RecognitionUpdate.Text -> {
@@ -250,59 +266,114 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     currentAyahIndex = result.currentAyahIndex,
                     currentWordInAyah = result.currentWordInAyah,
                     recitationCursor = result.currentGlobalWordIndex.coerceIn(0, targetWords.size),
-                    correctionMessage = correction?.let(::correctionMessage),
+                    correctionMessage = correction?.let(::correctionMessage) ?: previousState.correctionMessage,
+                    correctionAyahIndex = correction?.ayahIndex ?: previousState.correctionAyahIndex,
+                    correctionFirstWordInAyah = correction?.localWordIndex ?: previousState.correctionFirstWordInAyah,
                     notice = if (previousState.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.",
                 )
-                if (correction != null && (update.isFinal || update.segmentCompleted)) {
+                if (correction != null && (update.isFinal || update.segmentCompleted) && activeCorrection == null) {
+                    activeCorrection = correction
+                    correctionWasListening = previousState.listening
+                    pauseRecognitionForCorrection(correction)
                     playCorrection(correction)
                 }
             }
             is RecognitionUpdate.Failed -> {
+                if (activeCorrection != null) return
                 progressTracker = null
                 state.value = state.value.copy(listening = false, notice = update.message)
             }
             RecognitionUpdate.Stopped -> {
+                if (activeCorrection != null) return
                 progressTracker = null
                 state.value = state.value.copy(listening = false, notice = "انتهت الجلسة. راجع المواضع غير المؤكدة قبل اعتماد النتيجة.")
             }
         }
     }
 
+    private fun pauseRecognitionForCorrection(request: CorrectionRequest) {
+        state.value = state.value.copy(
+            listening = false,
+            correctionPlaying = true,
+            correctionPhase = CorrectionPhase.PLAYING_FIRST_ERROR,
+            correctionMessage = correctionMessage(request),
+            notice = "سيُقرأ تصحيح أول كلمة ثم الآية كاملة…",
+        )
+        onlineSession?.stop(); onlineSession = null
+        localSession?.stop(); localSession = null
+    }
+
     fun playCorrectionForCurrentWord() {
         val globalWordIndex = state.value.currentWordIndex
-        if (globalWordIndex < 0) return
+        if (globalWordIndex < 0 || activeCorrection != null) return
         val location = locateWord(globalWordIndex) ?: return
         val ayahIndex = state.value.ayahs.indexOfFirst { it.surah == location.first.surah && it.ayah == location.first.ayah }
         if (ayahIndex < 0) return
-        playCorrection(CorrectionRequest(CorrectionKind.WRONG_WORD, ayahIndex, location.second, null, "manual:$globalWordIndex"))
+        val request = CorrectionRequest(CorrectionKind.WRONG_WORD, ayahIndex, location.second, null, "manual:$globalWordIndex")
+        activeCorrection = request
+        correctionWasListening = state.value.listening
+        if (correctionWasListening) pauseRecognitionForCorrection(request)
+        playCorrection(request)
     }
 
     private fun playCorrection(request: CorrectionRequest) {
-        val ayah = state.value.ayahs.getOrNull(request.ayahIndex) ?: return
-        val localWordIndex = request.localWordIndex
-        val segment = timingRepository.forAyah(ayah.surah, ayah.ayah).firstOrNull { localWordIndex in it.wordStart until it.wordEnd } ?: return
+        val ayah = state.value.ayahs.getOrNull(request.ayahIndex) ?: return finishCorrectionPlayback()
+        val timings = timingRepository.forAyah(ayah.surah, ayah.ayah)
+        val firstWord = timings.firstOrNull { request.localWordIndex in it.wordStart until it.wordEnd }
+            ?: return finishCorrectionPlayback()
+        val wholeAyah = timings.firstOrNull()?.let { start ->
+            timings.lastOrNull()?.let { end -> TimingSegment(0, ayah.words.size, start.startMs, end.endMs) }
+        } ?: return finishCorrectionPlayback()
         val localFile = assetManager.cachedAudioFile(ayah.surah, ayah.ayah)
         if (state.value.mode == AssetMode.DOWNLOAD && localFile == null) {
-            state.value = state.value.copy(notice = "نزّل صوت السورة الحالية أولاً، أو اختر وضع البث المباشر للتشغيل دون حفظ.")
+            state.value = state.value.copy(correctionPlaying = false, correctionPhase = CorrectionPhase.LISTENING, notice = "نزّل صوت السورة الحالية أولاً، أو اختر وضع البث المباشر للتشغيل دون حفظ.")
+            activeCorrection = null
             return
         }
         state.value = state.value.copy(
             correctionPlaying = true,
+            correctionPhase = CorrectionPhase.PLAYING_FIRST_ERROR,
             correctionMessage = correctionMessage(request),
-            notice = "يُشغّل المقطع الصحيح ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…",
+            notice = "يُشغّل أول خطأ ثم تُقرأ الآية كاملة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…",
         )
-        val finished = { state.value = state.value.copy(correctionPlaying = false) }
-        if (localFile != null) referenceAudioPlayer.playLocalFile(localFile.absolutePath, segment.startMs, segment.endMs, finished)
-        else referenceAudioPlayer.playRemoteUrl(assetManager.audioUrl(ayah.surah, ayah.ayah), segment.startMs, segment.endMs, finished)
+        val wholeStarted = { state.value = state.value.copy(correctionPhase = CorrectionPhase.PLAYING_WHOLE_AYAH, notice = "تُقرأ الآية كاملة للتصحيح…") }
+        val finished = { finishCorrectionPlayback() }
+        val source = localFile?.absolutePath ?: assetManager.audioUrl(ayah.surah, ayah.ayah)
+        referenceAudioPlayer.playWordThenWholeAyah(source, firstWord, wholeAyah, wholeStarted, finished)
     }
+
+    private fun finishCorrectionPlayback() {
+        val request = activeCorrection
+        activeCorrection = null
+        val shouldResume = correctionWasListening
+        correctionWasListening = false
+        if (shouldResume && request != null) {
+            progressTracker?.resumeFrom(request.ayahIndex, request.localWordIndex)
+            state.value = state.value.copy(
+                listening = true,
+                correctionPlaying = false,
+                correctionPhase = CorrectionPhase.WAITING_RESUME,
+                currentAyahIndex = request.ayahIndex,
+                currentWordInAyah = request.localWordIndex,
+                currentWordIndex = trackerGlobalIndex(request),
+                notice = "انتهى التصحيح؛ ابدأ من أول الآية أو من أي كلمة داخلها.",
+            )
+            startRecognitionSession()
+        } else {
+            state.value = state.value.copy(listening = false, correctionPlaying = false, correctionPhase = CorrectionPhase.LISTENING)
+        }
+    }
+
+    private fun trackerGlobalIndex(request: CorrectionRequest): Int =
+        progressTracker?.globalWordIndex(request.ayahIndex, request.localWordIndex) ?: -1
 
     private fun correctionMessage(request: CorrectionRequest): String {
         val ayah = state.value.ayahs.getOrNull(request.ayahIndex)
         val word = ayah?.words?.getOrNull(request.localWordIndex)?.text.orEmpty()
         return when (request.kind) {
-            CorrectionKind.WRONG_WORD -> "الكلمة تحتاج تصحيحاً: $word"
-            CorrectionKind.SKIPPED_WORD -> "تخطيت كلمة؛ أعد: $word"
-            CorrectionKind.FIRST_WORD_EXPECTED_AYAH -> "انتقلت إلى آية أخرى؛ ابدأ بالآية التالية من: $word"
+            CorrectionKind.WRONG_WORD -> "أول كلمة تحتاج تصحيحاً: $word؛ سيُقرأ المقطع ثم الآية كاملة."
+            CorrectionKind.SKIPPED_WORD -> "أول كلمة متخطاة: $word؛ سيُقرأ المقطع ثم الآية كاملة."
+            CorrectionKind.FIRST_WORD_EXPECTED_AYAH -> "الآية المتوقعة تبدأ من: $word؛ سيُقرأ المقطع ثم الآية كاملة."
         }
     }
 
@@ -315,13 +386,20 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         return null
     }
 
-    fun stopCorrection() { referenceAudioPlayer.stop(); state.value = state.value.copy(correctionPlaying = false) }
+    fun stopCorrection() {
+        if (!state.value.correctionPlaying) return
+        referenceAudioPlayer.stop()
+        finishCorrectionPlayback()
+    }
 
     fun stopListening() {
+        referenceAudioPlayer.stop()
         onlineSession?.stop(); onlineSession = null
         localSession?.stop(); localSession = null
         progressTracker = null
-        state.value = state.value.copy(listening = false)
+        activeCorrection = null
+        correctionWasListening = false
+        state.value = state.value.copy(listening = false, correctionPlaying = false, correctionPhase = CorrectionPhase.LISTENING)
     }
 
     fun saveCurrentSession() {

@@ -55,11 +55,13 @@ class RecitationProgressTrackerTest {
 
         val result = tracker.update(final("e f"))
 
-        assertEquals(CorrectionKind.FIRST_WORD_EXPECTED_AYAH, result.correction?.kind)
-        assertEquals(1, result.correction?.ayahIndex)
+        assertEquals(CorrectionKind.SKIPPED_WORD, result.correction?.kind)
+        assertEquals(0, result.correction?.ayahIndex)
         assertEquals(0, result.correction?.localWordIndex)
         assertEquals(0, result.currentAyahIndex)
         assertEquals(0, result.evaluation.matched)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[0].status)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[1].status)
     }
 
     @Test
@@ -100,20 +102,86 @@ class RecitationProgressTrackerTest {
     }
 
     @Test
+    fun trackerDoesNotCorrectAlAlaminSpellingVariant() {
+        val tracker = RecitationProgressTracker(
+            listOf(
+                QuranAyah(
+                    surah = 1,
+                    ayah = 2,
+                    text = "ٱلْعَٰلَمِينَ",
+                    matchText = "العلمين",
+                    words = listOf(QuranWord(0, "ٱلْعَٰلَمِينَ", "العلمين")),
+                ),
+            ),
+        )
+
+        val result = tracker.update(final("العالمين"))
+
+        assertEquals(WordStatus.MATCHED, result.evaluation.words.single().status)
+        assertNull(result.correction)
+    }
+
+    @Test
+    fun chainedWrongWordsKeepFirstCorrectionAndMarkEachWrongPosition() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d")))
+
+        val result = tracker.update(final("x y"))
+
+        assertEquals(CorrectionKind.WRONG_WORD, result.correction?.kind)
+        assertEquals(0, result.correction?.localWordIndex)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[0].status)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[1].status)
+        assertEquals(2, result.currentWordInAyah)
+    }
+
+    @Test
+    fun jumpBeforeAyahCompletionMarksRemainingCurrentAyah() {
+        val tracker = RecitationProgressTracker(
+            listOf(ayah(1, "a", "b", "c"), ayah(2, "d", "e"), ayah(3, "f", "g")),
+        )
+
+        val result = tracker.update(final("f g"))
+
+        assertEquals(CorrectionKind.SKIPPED_WORD, result.correction?.kind)
+        assertEquals(0, result.correction?.ayahIndex)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[0].status)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[1].status)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[2].status)
+        assertEquals(0, result.currentAyahIndex)
+    }
+
+    @Test
+    fun resumeAcceptsAnyClearWordInsideCorrectionAyah() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d")))
+        tracker.update(final("a x"))
+
+        tracker.resumeFrom(0, 1)
+        val result = tracker.update(final("b c"))
+
+        assertNull(result.correction)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[1].status)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[2].status)
+        assertEquals(3, result.currentWordInAyah)
+    }
+
+    @Test
     fun correctionKeyIsDeduplicatedUntilWordIsResolved() {
         val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c")))
 
         val first = tracker.update(final("x"))
         val repeated = tracker.update(final("x"))
         val intermediateWrong = tracker.update(final("x z"))
-        val resolved = tracker.update(final("x z b"))
-        val nextWrong = tracker.update(final("x z b y"))
-
         assertEquals(CorrectionKind.WRONG_WORD, first.correction?.kind)
         assertNull(repeated.correction)
-        assertEquals(CorrectionKind.WRONG_WORD, intermediateWrong.correction?.kind)
+        assertNull(intermediateWrong.correction)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, intermediateWrong.evaluation.words[1].status)
+
+        tracker.resumeFrom(0, 0)
+        val resolved = tracker.update(final("a"))
+        val nextWrong = tracker.update(final("a y"))
+
         assertNull(resolved.correction)
         assertEquals(CorrectionKind.WRONG_WORD, nextWrong.correction?.kind)
-        assertEquals(2, nextWrong.correction?.localWordIndex)
+        assertEquals(1, nextWrong.correction?.localWordIndex)
     }
 }

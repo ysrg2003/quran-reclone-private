@@ -50,6 +50,29 @@ class ReferenceAudioPlayer {
     fun playRemoteUrl(url: String, startMs: Int, endMs: Int, onFinished: () -> Unit = {}) =
         playDataSource(url, startMs, endMs, onFinished)
 
+    /** Play the first-error word, then the complete ayah, exactly once. */
+    fun playWordThenWholeAyah(
+        source: String,
+        firstWord: TimingSegment,
+        wholeAyah: TimingSegment,
+        onWholeAyahStarted: () -> Unit = {},
+        onFinished: () -> Unit = {},
+    ) {
+        val segments = listOf(firstWord, wholeAyah)
+        var index = 0
+        fun playNext() {
+            if (index >= segments.size) {
+                onFinished()
+                return
+            }
+            val segment = segments[index]
+            index++
+            if (index == 2) onWholeAyahStarted()
+            playDataSource(source, segment.startMs, segment.endMs, ::playNext)
+        }
+        playNext()
+    }
+
     private fun playDataSource(source: String, startMs: Int, endMs: Int, onFinished: () -> Unit) {
         stop()
         val mediaPlayer = MediaPlayer()

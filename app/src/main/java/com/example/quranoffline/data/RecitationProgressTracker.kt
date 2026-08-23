@@ -13,12 +13,22 @@ enum class CorrectionKind {
     FIRST_WORD_EXPECTED_AYAH,
 }
 
+enum class CorrectionPhase {
+    LISTENING,
+    PLAYING_FIRST_ERROR,
+    PLAYING_WHOLE_AYAH,
+    WAITING_RESUME,
+}
+
 data class CorrectionRequest(
     val kind: CorrectionKind,
     val ayahIndex: Int,
     val localWordIndex: Int,
     val observed: String?,
     val dedupeKey: String,
+    val readWholeAyah: Boolean = true,
+    val rangeEndLocalWordIndex: Int = localWordIndex,
+    val stopProcessingSegment: Boolean = false,
 )
 
 data class RecitationProgressResult(
@@ -43,7 +53,7 @@ class RecitationProgressTracker(
     private val jumpConfirmationWords: Int = 2,
 ) {
     private val words = ayahs.flatMap { it.words }
-    private val normalizedWords = words.map { normalizeArabicForMatch(it.matchText) }
+    private val normalizedWords = words.map { normalizeArabicForComparison(it.matchText) }
     private val ayahStarts = IntArray(ayahs.size).also { starts ->
         var offset = 0
         ayahs.forEachIndexed { index, ayah ->
@@ -57,6 +67,8 @@ class RecitationProgressTracker(
     private var nextWordInAyah = 0
     private var activeCorrectionKey: String? = null
     private var activeCorrectionGlobalIndex: Int = -1
+    private var awaitingResume = false
+    private var resumeAnchorLocalIndex = 0
     private var lastTranscriptTokens: List<String> = emptyList()
 
     fun reset() {
@@ -66,6 +78,20 @@ class RecitationProgressTracker(
         nextWordInAyah = 0
         activeCorrectionKey = null
         activeCorrectionGlobalIndex = -1
+        awaitingResume = false
+        resumeAnchorLocalIndex = 0
+        lastTranscriptTokens = emptyList()
+    }
+
+    /** Prepare a fresh recognizer segment while preserving the current ayah and evaluations. */
+    fun resumeFrom(ayahIndex: Int, localWordIndex: Int) {
+        currentAyahIndex = ayahIndex.coerceIn(0, ayahs.lastIndex.coerceAtLeast(0))
+        nextWordInAyah = 0
+        resumeAnchorLocalIndex = localWordIndex.coerceAtLeast(0)
+        awaitingResume = true
+        activeCorrectionKey = null
+        activeCorrectionGlobalIndex = -1
+        committedTokens.clear()
         lastTranscriptTokens = emptyList()
     }
 
@@ -84,7 +110,7 @@ class RecitationProgressTracker(
                 val before = currentGlobalWordIndex()
                 val event = acceptStableToken(token, newTokens, index)
                 if (event != null && correction == null) correction = event
-                if (event?.kind == CorrectionKind.FIRST_WORD_EXPECTED_AYAH) {
+                if (event?.kind == CorrectionKind.FIRST_WORD_EXPECTED_AYAH || event?.stopProcessingSegment == true) {
                     spokenGlobalWordIndex = before
                     break
                 }
@@ -132,10 +158,28 @@ class RecitationProgressTracker(
     ): CorrectionRequest? {
         if (currentAyahIndex !in ayahs.indices) return null
         val expectedAyah = ayahs[currentAyahIndex]
-        val expected = expectedAyah.words.map { normalizeArabicForMatch(it.matchText) }
+        val expected = expectedAyah.words.map { normalizeArabicForComparison(it.matchText) }
         if (expected.isEmpty()) {
             advanceAyah()
             return acceptStableToken(token, segment, segmentIndex)
+        }
+
+        if (awaitingResume) {
+            val resumeIndex = expected.indices
+                .filter { expected[it] == token }
+                .minByOrNull { kotlin.math.abs(it - resumeAnchorLocalIndex) }
+            if (resumeIndex != null) {
+                awaitingResume = false
+                nextWordInAyah = resumeIndex + 1
+                markMatched(resumeIndex, token)
+                clearCorrectionIfResolved(globalWordIndex(currentAyahIndex, resumeIndex))
+                if (nextWordInAyah >= expected.size) advanceAyah()
+                return null
+            }
+            // A wrong first word after playback is judged near the saved error,
+            // not at word zero; the reader may still choose another valid word.
+            awaitingResume = false
+            nextWordInAyah = resumeAnchorLocalIndex.coerceIn(0, expected.lastIndex)
         }
 
         val current = nextWordInAyah.coerceIn(0, expected.lastIndex)
@@ -174,16 +218,27 @@ class RecitationProgressTracker(
                 request
             }
             isClearJump(segment, segmentIndex) -> {
-                // Keep the expected context. The correction is the first word of
-                // the immediate next ayah, never the ayah the reader jumped to.
-                val nextAyah = currentAyahIndex + 1
-                if (nextAyah !in ayahs.indices) null
-                else correctionFor(
-                    kind = CorrectionKind.FIRST_WORD_EXPECTED_AYAH,
-                    ayahIndex = nextAyah,
-                    localWordIndex = 0,
-                    observed = token,
-                )
+                if (nextWordInAyah < expected.size) {
+                    // The current ayah was not complete: mark its remaining words
+                    // as wrong/missing and replay this same ayah from its first gap.
+                    for (missing in current until expected.size) markMissing(missing)
+                    correctionFor(
+                        kind = CorrectionKind.SKIPPED_WORD,
+                        ayahIndex = currentAyahIndex,
+                        localWordIndex = current,
+                        observed = token,
+                        stopProcessingSegment = true,
+                    )
+                } else {
+                    // The current ayah was complete: keep context on the immediate
+                    // next ayah, never on the ayah the reader jumped to.
+                    correctionFor(
+                        kind = CorrectionKind.FIRST_WORD_EXPECTED_AYAH,
+                        ayahIndex = currentAyahIndex,
+                        localWordIndex = 0,
+                        observed = token,
+                    )
+                }
             }
             else -> {
                 markWrong(current, token)
@@ -202,10 +257,10 @@ class RecitationProgressTracker(
 
     private fun isClearJump(segment: List<String>, segmentIndex: Int): Boolean {
         if (segmentIndex + jumpConfirmationWords > segment.size) return false
-        if (currentAyahIndex + 2 !in ayahs.indices) return false
+        if (currentAyahIndex + 1 !in ayahs.indices) return false
         val phrase = segment.subList(segmentIndex, segmentIndex + jumpConfirmationWords)
-        return ayahs.drop(currentAyahIndex + 2).any { ayah ->
-            val start = ayah.words.map { normalizeArabicForMatch(it.matchText) }
+        return ayahs.drop(currentAyahIndex + 1).any { ayah ->
+            val start = ayah.words.map { normalizeArabicForComparison(it.matchText) }
             start.size >= jumpConfirmationWords && start.take(jumpConfirmationWords) == phrase
         }
     }
@@ -235,12 +290,16 @@ class RecitationProgressTracker(
         ayahIndex: Int,
         localWordIndex: Int,
         observed: String?,
+        stopProcessingSegment: Boolean = false,
     ): CorrectionRequest? {
-        val key = "$kind:$ayahIndex:$localWordIndex:${normalizeArabicForMatch(observed.orEmpty())}"
-        if (activeCorrectionKey == key) return null
+        val key = "$kind:$ayahIndex:$localWordIndex:${normalizeArabicForComparison(observed.orEmpty())}"
+        if (activeCorrectionKey != null) return null
         activeCorrectionKey = key
         activeCorrectionGlobalIndex = globalWordIndex(ayahIndex, localWordIndex) ?: -1
-        return CorrectionRequest(kind, ayahIndex, localWordIndex, observed, key)
+        val end = if (kind == CorrectionKind.SKIPPED_WORD) {
+            (ayahs.getOrNull(ayahIndex)?.words?.lastIndex ?: localWordIndex)
+        } else localWordIndex
+        return CorrectionRequest(kind, ayahIndex, localWordIndex, observed, key, readWholeAyah = true, rangeEndLocalWordIndex = end, stopProcessingSegment = stopProcessingSegment)
     }
 
     private fun clearCorrectionIfResolved(globalIndex: Int?) {
@@ -273,10 +332,10 @@ class RecitationProgressTracker(
         )
     }
 
-    private fun tokenize(text: String): List<String> = normalizeArabicForMatch(text)
+    private fun tokenize(text: String): List<String> = normalizeArabicForComparison(text)
         .split(' ')
         .filter(String::isNotBlank)
-        .map(::normalizeArabicForMatch)
+        .map(::normalizeArabicForComparison)
 
     private fun longestCommonPrefix(first: List<String>, second: List<String>): Int {
         val limit = minOf(first.size, second.size)

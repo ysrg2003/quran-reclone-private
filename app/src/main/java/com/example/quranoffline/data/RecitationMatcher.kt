@@ -13,6 +13,17 @@ fun normalizeArabicForMatch(value: String): String {
         .trim()
 }
 
+/**
+ * Comparison-only spelling normalization. The source assets use "العلمين"
+ * while Android recognizers commonly return the fully written "العالمين".
+ * This narrow equivalence does not alter the Quran text shown to the user.
+ */
+fun normalizeArabicForComparison(value: String): String = normalizeArabicForMatch(value)
+    .replace("العلمين", "العالمين")
+
+fun arabicWordsEquivalent(first: String, second: String): Boolean =
+    normalizeArabicForComparison(first) == normalizeArabicForComparison(second)
+
 enum class WordStatus { MATCHED, MISSING, EXTRA_OR_UNEXPECTED, UNCERTAIN }
 
 data class WordEvaluation(
@@ -65,8 +76,8 @@ object RecitationMatcher {
             .filter(String::isNotBlank)
         if (expected.isEmpty()) return RecitationEvaluation(emptyList(), 0, 0, 0, observed.size)
 
-        val expectedNormalized = expected.map { normalizeArabicForMatch(it.matchText) }
-        val observedNormalized = observed.map(::normalizeArabicForMatch)
+        val expectedNormalized = expected.map { normalizeArabicForComparison(it.matchText) }
+        val observedNormalized = observed.map(::normalizeArabicForComparison)
         val preferred = preferredExpectedIndex.coerceIn(0, expected.lastIndex)
         val firstObserved = observedNormalized.firstOrNull()
         val matchingCandidates = if (firstObserved == null) emptyList() else expectedNormalized.indices.filter { expectedNormalized[it] == firstObserved }

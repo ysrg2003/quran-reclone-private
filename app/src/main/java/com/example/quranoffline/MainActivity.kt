@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import com.example.quranoffline.data.AssetMode
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranViewModel
+import com.example.quranoffline.data.CorrectionPhase
 import com.example.quranoffline.data.RecitationEngine
 import com.example.quranoffline.data.WordStatus
 import java.text.DateFormat
@@ -516,7 +517,7 @@ private fun AyahBlock(
                         WordStatus.MATCHED -> Color(0xFFDFF1E5)
                         WordStatus.EXTRA_OR_UNEXPECTED -> Color(0xFFFFDDD8)
                         WordStatus.UNCERTAIN -> Color(0xFFFFF0C9)
-                        WordStatus.MISSING -> Color(0xFFF0E6E0)
+                        WordStatus.MISSING -> Color(0xFFFFDDD8)
                         null -> if (isCurrent) Color(0xFFDFF1E5) else Color.Transparent
                     }
                     val shownText = when {
@@ -562,7 +563,7 @@ private fun RecitationCard(
             )
             Button(
                 onClick = onStart,
-                enabled = state.engine != RecitationEngine.OFFLINE || state.offlineSupported,
+                enabled = !state.correctionPlaying && (state.engine != RecitationEngine.OFFLINE || state.offlineSupported),
                 modifier = Modifier.fillMaxWidth(),
                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFD6B277),
@@ -575,14 +576,21 @@ private fun RecitationCard(
                 Text(
                     when {
                         state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "Offline غير متاح على هذا الهاتف"
+                        state.correctionPlaying -> "يعمل التصحيح الصوتي…"
                         state.listening -> "إيقاف الجلسة"
                         else -> "ابدأ التسميع"
                     },
-                    color = if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) Color(0xFFC9D9D1) else Color(0xFF183D33),
+                    color = if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported || state.correctionPlaying) Color(0xFFC9D9D1) else Color(0xFF183D33),
                 )
             }
             state.correctionMessage?.let { message ->
                 Text(message, color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
+            }
+            when (state.correctionPhase) {
+                CorrectionPhase.PLAYING_FIRST_ERROR -> Text("يُصحّح أول كلمة خاطئة…", color = Color(0xFFFFE1B5))
+                CorrectionPhase.PLAYING_WHOLE_AYAH -> Text("تُقرأ الآية كاملة للتصحيح…", color = Color(0xFFFFE1B5))
+                CorrectionPhase.WAITING_RESUME -> Text("ابدأ من أول الآية أو من أي كلمة داخلها.", color = Color(0xFFFFE1B5))
+                CorrectionPhase.LISTENING -> Unit
             }
             if (state.listening && state.currentAyahIndex >= 0) {
                 val ayahNumber = state.ayahs.getOrNull(state.currentAyahIndex)?.ayah
