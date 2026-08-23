@@ -46,6 +46,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,8 +64,11 @@ import com.example.quranoffline.data.AssetMode
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranViewModel
 import com.example.quranoffline.data.CorrectionPhase
+import com.example.quranoffline.data.CorrectionSettings
+import com.example.quranoffline.data.ResumePosition
 import com.example.quranoffline.data.RecitationEngine
 import com.example.quranoffline.data.WordStatus
+import com.example.quranoffline.data.displayPause
 import java.text.DateFormat
 import java.util.Date
 
@@ -194,6 +198,8 @@ private fun QuranOfflineApp(
                 onDeleteDownload = viewModel::deleteCurrentSurah,
                 onSelectEngine = viewModel::setEngine,
                 onDownloadModel = viewModel::downloadOfflineModel,
+                onUpdateCorrectionSettings = viewModel::updateCorrectionSettings,
+                onResetCorrectionSettings = viewModel::resetCorrectionSettings,
                 modifier = Modifier.padding(padding),
             )
         } else {
@@ -224,6 +230,8 @@ private fun MemorizationScreen(
     onDeleteDownload: () -> Unit,
     onSelectEngine: (RecitationEngine) -> Unit,
     onDownloadModel: () -> Unit,
+    onUpdateCorrectionSettings: ((CorrectionSettings) -> CorrectionSettings) -> Unit,
+    onResetCorrectionSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val wordOffsets = remember(state.ayahs) {
@@ -330,6 +338,13 @@ private fun MemorizationScreen(
         item {
             Text("الإعدادات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
         }
+        item {
+            CorrectionSettingsCard(
+                settings = state.correctionSettings,
+                onUpdate = onUpdateCorrectionSettings,
+                onReset = onResetCorrectionSettings,
+            )
+        }
         item { EngineCard(state, onSelectEngine, onDownloadModel) }
         item { OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload) }
         item { GoalCard(state.goal, onSetGoal) }
@@ -363,6 +378,182 @@ private fun MemorizationScreen(
         }
         item { Spacer(Modifier.height(18.dp)) }
     }
+}
+
+@Composable
+private fun CorrectionSettingsCard(
+    settings: CorrectionSettings,
+    onUpdate: ((CorrectionSettings) -> CorrectionSettings) -> Unit,
+    onReset: () -> Unit,
+) {
+    val controlsEnabled = settings.automaticCorrectionEnabled
+    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("سياسة تصحيح الشيخ", fontWeight = FontWeight.Bold)
+                    Text("يمكن تعديل توقيت التصحيح وحساسية الأخطاء محلياً.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+                }
+                OutlinedButton(onClick = onReset) { Text("الافتراضي") }
+            }
+            SettingSwitchRow(
+                title = "التصحيح التلقائي",
+                description = "شغّل المرجع تلقائياً عند ثبوت خطأ أو تخطٍ.",
+                checked = settings.automaticCorrectionEnabled,
+                enabled = true,
+                onCheckedChange = { checked -> onUpdate { it.copy(automaticCorrectionEnabled = checked) } },
+            )
+            SettingSwitchRow(
+                title = "تصحيح الكلمة الخاطئة",
+                description = "يطبّق التصحيح على الكلمة التي لا تطابق الموضع المتوقع.",
+                checked = settings.correctWrongWords,
+                enabled = controlsEnabled,
+                onCheckedChange = { checked -> onUpdate { it.copy(correctWrongWords = checked) } },
+            )
+            SettingSwitchRow(
+                title = "تصحيح الكلمات المتخطاة",
+                description = "يصحح أول كلمة تركتها عند الانتقال إلى كلمة لاحقة.",
+                checked = settings.correctSkippedWords,
+                enabled = controlsEnabled,
+                onCheckedChange = { checked -> onUpdate { it.copy(correctSkippedWords = checked) } },
+            )
+            SettingSwitchRow(
+                title = "تصحيح القفز بين الآيات",
+                description = "يثبت الآية المتوقعة ولا يتبع آية قفزت إليها.",
+                checked = settings.correctAyahJumps,
+                enabled = controlsEnabled,
+                onCheckedChange = { checked -> onUpdate { it.copy(correctAyahJumps = checked) } },
+            )
+            Text("متى تُقرأ الآية كاملة؟", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+            Text("تُقرأ الكلمة فقط قبل هذا العدد، وتُقرأ الكلمة الأولى ثم الآية كاملة عند بلوغه في الآية نفسها.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                (1..CorrectionSettings.MAX_ERROR_THRESHOLD).forEach { count ->
+                    FilterChip(
+                        selected = settings.wholeAyahAfterConsecutiveErrors == count,
+                        enabled = controlsEnabled,
+                        onClick = { onUpdate { it.copy(wholeAyahAfterConsecutiveErrors = count) } },
+                        label = { Text("$count") },
+                    )
+                }
+            }
+            Text("الافتراضي الحالي: 3 أخطاء متتالية في الآية نفسها.", style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C))
+            SettingSwitchRow(
+                title = "تشغيل مقطع أول خطأ قبل الآية",
+                description = "عند اختيار الآية كاملة: شغّل مقطع أول خطأ ثم الآية، أو الآية وحدها.",
+                checked = settings.playFirstErrorBeforeWholeAyah,
+                enabled = controlsEnabled,
+                onCheckedChange = { checked -> onUpdate { it.copy(playFirstErrorBeforeWholeAyah = checked) } },
+            )
+            Text("عدد تكرار مقطع الكلمة", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+            RepeatChoices(
+                value = settings.wordRepeatCount,
+                enabled = controlsEnabled,
+                onSelected = { count -> onUpdate { current -> current.copy(wordRepeatCount = count) } },
+            )
+            Text("عدد تكرار الآية الكاملة", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+            RepeatChoices(
+                value = settings.wholeAyahRepeatCount,
+                enabled = controlsEnabled,
+                onSelected = { count -> onUpdate { current -> current.copy(wholeAyahRepeatCount = count) } },
+            )
+            Text("الفاصل بين المقاطع: ${settings.displayPause()}", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                CorrectionSettings.PAUSE_OPTIONS_MS.forEach { pause ->
+                    FilterChip(
+                        selected = settings.pauseBetweenPartsMs == pause,
+                        enabled = controlsEnabled,
+                        onClick = { onUpdate { it.copy(pauseBetweenPartsMs = pause) } },
+                        label = { Text(if (pause == 0) "فوري" else "${pause}ms") },
+                    )
+                }
+            }
+            Text("هامش مقطع الكلمة قبل/بعد الصوت", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+            PaddingChoiceRow(
+                title = "قبل",
+                value = settings.clipPaddingBeforeMs,
+                enabled = controlsEnabled,
+                onSelected = { paddingMs -> onUpdate { current -> current.copy(clipPaddingBeforeMs = paddingMs) } },
+            )
+            PaddingChoiceRow(
+                title = "بعد",
+                value = settings.clipPaddingAfterMs,
+                enabled = controlsEnabled,
+                onSelected = { paddingMs -> onUpdate { current -> current.copy(clipPaddingAfterMs = paddingMs) } },
+            )
+            Text("موضع الاستئناف بعد التصحيح", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                ResumePosition.values().forEach { position ->
+                    FilterChip(
+                        selected = settings.resumePosition == position,
+                        enabled = controlsEnabled,
+                        onClick = { onUpdate { it.copy(resumePosition = position) } },
+                        label = { Text(position.label()) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold, color = if (enabled) Color(0xFF183D33) else Color(0xFF9AA7A0))
+            Text(description, style = MaterialTheme.typography.bodySmall, color = if (enabled) Color(0xFF66736C) else Color(0xFFADB7B1))
+        }
+        Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun RepeatChoices(
+    value: Int,
+    enabled: Boolean,
+    onSelected: (Int) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        (1..CorrectionSettings.MAX_REPEAT_COUNT).forEach { count ->
+            FilterChip(
+                selected = value == count,
+                enabled = enabled,
+                onClick = { onSelected(count) },
+                label = { Text("$count مرة") },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PaddingChoiceRow(
+    title: String,
+    value: Int,
+    enabled: Boolean,
+    onSelected: (Int) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(32.dp))
+        listOf(0, 80, 150, 300).forEach { paddingMs ->
+            FilterChip(
+                selected = value == paddingMs,
+                enabled = enabled,
+                onClick = { onSelected(paddingMs) },
+                label = { Text(if (paddingMs == 0) "0" else "${paddingMs}ms") },
+            )
+        }
+    }
+}
+
+private fun ResumePosition.label(): String = when (this) {
+    ResumePosition.AYAH_START -> "أول الآية"
+    ResumePosition.FIRST_ERROR -> "أول خطأ"
+    ResumePosition.WORD_AFTER_ERROR -> "بعد الخطأ"
 }
 
 @Composable

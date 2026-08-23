@@ -51,7 +51,9 @@ class RecitationProgressTracker(
     private val ayahs: List<QuranAyah>,
     private val rollbackWindow: Int = 3,
     private val jumpConfirmationWords: Int = 2,
+    correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
 ) {
+    private var settings = correctionSettings.normalized()
     private val words = ayahs.flatMap { it.words }
     private val ayahStarts = IntArray(ayahs.size).also { starts ->
         var offset = 0
@@ -69,6 +71,10 @@ class RecitationProgressTracker(
     private var awaitingResume = false
     private var resumeAnchorLocalIndex = 0
     private var lastTranscriptTokens: List<String> = emptyList()
+
+    fun updateSettings(newSettings: CorrectionSettings) {
+        settings = newSettings.normalized()
+    }
 
     fun reset() {
         committedTokens.clear()
@@ -205,12 +211,12 @@ class RecitationProgressTracker(
             }
             laterMatch != null -> {
                 for (missing in current until laterMatch) markMissing(missing)
-                val request = correctionFor(
+                val request = correctionForIfEnabled(
                     kind = CorrectionKind.SKIPPED_WORD,
                     ayahIndex = currentAyahIndex,
                     localWordIndex = current,
                     observed = token,
-                    readWholeAyah = consecutiveIssueCount(expectedWords, current, segment, segmentIndex) > 2,
+                    readWholeAyah = shouldReadWholeAyah(consecutiveIssueCount(expectedWords, current, segment, segmentIndex)),
                 )
                 markMatched(laterMatch, token)
                 nextWordInAyah = laterMatch + 1
@@ -223,33 +229,34 @@ class RecitationProgressTracker(
                     // The current ayah was not complete: mark its remaining words
                     // as wrong/missing and replay this same ayah from its first gap.
                     for (missing in current until expected.size) markMissing(missing)
-                    correctionFor(
+                    correctionForIfEnabled(
                         kind = CorrectionKind.SKIPPED_WORD,
                         ayahIndex = currentAyahIndex,
                         localWordIndex = current,
                         observed = token,
-                        readWholeAyah = expected.size - current > 2,
+                        readWholeAyah = shouldReadWholeAyah(expected.size - current),
                         stopProcessingSegment = true,
                     )
                 } else {
                     // The current ayah was complete: keep context on the immediate
                     // next ayah, never on the ayah the reader jumped to.
-                    correctionFor(
+                    correctionForIfEnabled(
                         kind = CorrectionKind.FIRST_WORD_EXPECTED_AYAH,
                         ayahIndex = currentAyahIndex,
                         localWordIndex = 0,
                         observed = token,
+                        readWholeAyah = true,
                     )
                 }
             }
             else -> {
                 markWrong(current, token)
-                val request = correctionFor(
+                val request = correctionForIfEnabled(
                     kind = CorrectionKind.WRONG_WORD,
                     ayahIndex = currentAyahIndex,
                     localWordIndex = current,
                     observed = token,
-                    readWholeAyah = consecutiveIssueCount(expectedWords, current, segment, segmentIndex) > 2,
+                    readWholeAyah = shouldReadWholeAyah(consecutiveIssueCount(expectedWords, current, segment, segmentIndex)),
                 )
                 nextWordInAyah = current + 1
                 if (nextWordInAyah >= expected.size) advanceAyah()
@@ -317,6 +324,24 @@ class RecitationProgressTracker(
         judged[global] = WordEvaluation(ayahs[currentAyahIndex].words[localIndex].text, observed, WordStatus.EXTRA_OR_UNEXPECTED)
     }
 
+    private fun correctionForIfEnabled(
+        kind: CorrectionKind,
+        ayahIndex: Int,
+        localWordIndex: Int,
+        observed: String?,
+        readWholeAyah: Boolean = false,
+        stopProcessingSegment: Boolean = false,
+    ): CorrectionRequest? {
+        if (!settings.automaticCorrectionEnabled) return null
+        val enabled = when (kind) {
+            CorrectionKind.WRONG_WORD -> settings.correctWrongWords
+            CorrectionKind.SKIPPED_WORD -> settings.correctSkippedWords
+            CorrectionKind.FIRST_WORD_EXPECTED_AYAH -> settings.correctAyahJumps
+        }
+        if (!enabled) return null
+        return correctionFor(kind, ayahIndex, localWordIndex, observed, readWholeAyah, stopProcessingSegment)
+    }
+
     private fun correctionFor(
         kind: CorrectionKind,
         ayahIndex: Int,
@@ -334,6 +359,9 @@ class RecitationProgressTracker(
         } else localWordIndex
         return CorrectionRequest(kind, ayahIndex, localWordIndex, observed, key, readWholeAyah = readWholeAyah, rangeEndLocalWordIndex = end, stopProcessingSegment = stopProcessingSegment)
     }
+
+    private fun shouldReadWholeAyah(issueCount: Int): Boolean =
+        settings.playFirstErrorBeforeWholeAyah && issueCount >= settings.wholeAyahAfterConsecutiveErrors
 
     private fun clearCorrectionIfResolved(globalIndex: Int?) {
         if (globalIndex != null && globalIndex == activeCorrectionGlobalIndex) {

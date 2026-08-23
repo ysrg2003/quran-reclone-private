@@ -43,6 +43,7 @@ class ReferenceAudioPlayer {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var player: MediaPlayer? = null
     private var stopRunnable: Runnable? = null
+    private var nextSequenceRunnable: Runnable? = null
 
     fun playLocalFile(filePath: String, startMs: Int, endMs: Int, onFinished: () -> Unit = {}) =
         playDataSource(filePath, startMs, endMs, onFinished)
@@ -53,28 +54,99 @@ class ReferenceAudioPlayer {
     fun playWord(source: String, startMs: Int, endMs: Int, onFinished: () -> Unit = {}) =
         playDataSource(source, startMs, endMs, onFinished)
 
-    /** Play the first-error word, then the complete ayah, exactly once. */
+    /**
+     * Plays a correction according to the user policy. A whole-ayah request is
+     * represented by the first-error word followed by the complete ayah when
+     * that option is enabled; a word-only request never adds the ayah.
+     */
+    fun playCorrection(
+        source: String,
+        firstWord: TimingSegment,
+        wholeAyah: TimingSegment?,
+        settings: CorrectionSettings,
+        onWholeAyahStarted: () -> Unit = {},
+        onFinished: () -> Unit = {},
+    ) {
+        val normalized = settings.normalized()
+        val items = buildList {
+            if (wholeAyah == null) {
+                repeat(normalized.wordRepeatCount) {
+                    add(PlaybackItem(firstWord.withPadding(normalized), isWholeAyah = false))
+                }
+            } else {
+                if (normalized.playFirstErrorBeforeWholeAyah) {
+                    repeat(normalized.wordRepeatCount) {
+                        add(PlaybackItem(firstWord.withPadding(normalized), isWholeAyah = false))
+                    }
+                }
+                repeat(normalized.wholeAyahRepeatCount) {
+                    add(PlaybackItem(wholeAyah.withPadding(normalized), isWholeAyah = true))
+                }
+            }
+        }
+        playSequence(source, items, normalized.pauseBetweenPartsMs, onWholeAyahStarted, onFinished)
+    }
+
+    /** Backward-compatible default policy used by older callers and tests. */
     fun playWordThenWholeAyah(
         source: String,
         firstWord: TimingSegment,
         wholeAyah: TimingSegment,
         onWholeAyahStarted: () -> Unit = {},
         onFinished: () -> Unit = {},
+    ) = playCorrection(
+        source = source,
+        firstWord = firstWord,
+        wholeAyah = wholeAyah,
+        settings = CorrectionSettings.DEFAULTS,
+        onWholeAyahStarted = onWholeAyahStarted,
+        onFinished = onFinished,
+    )
+
+    private data class PlaybackItem(
+        val segment: TimingSegment,
+        val isWholeAyah: Boolean,
+    )
+
+    private fun playSequence(
+        source: String,
+        items: List<PlaybackItem>,
+        pauseBetweenPartsMs: Int,
+        onWholeAyahStarted: () -> Unit,
+        onFinished: () -> Unit,
     ) {
-        val segments = listOf(firstWord, wholeAyah)
+        if (items.isEmpty()) {
+            onFinished()
+            return
+        }
         var index = 0
         fun playNext() {
-            if (index >= segments.size) {
+            if (index >= items.size) {
                 onFinished()
                 return
             }
-            val segment = segments[index]
-            index++
-            if (index == 2) onWholeAyahStarted()
-            playDataSource(source, segment.startMs, segment.endMs, ::playNext)
+            val item = items[index++]
+            if (item.isWholeAyah) onWholeAyahStarted()
+            playDataSource(source, item.segment.startMs, item.segment.endMs) {
+                if (index < items.size && pauseBetweenPartsMs > 0) {
+                    val delayedNext = Runnable {
+                        nextSequenceRunnable = null
+                        playNext()
+                    }
+                    nextSequenceRunnable = delayedNext
+                    mainHandler.postDelayed(delayedNext, pauseBetweenPartsMs.toLong())
+                } else {
+                    playNext()
+                }
+            }
         }
         playNext()
     }
+
+    private fun TimingSegment.withPadding(settings: CorrectionSettings): TimingSegment = copy(
+        startMs = (startMs - settings.clipPaddingBeforeMs).coerceAtLeast(0),
+        endMs = endMs + settings.clipPaddingAfterMs,
+    )
 
     private fun playDataSource(source: String, startMs: Int, endMs: Int, onFinished: () -> Unit) {
         stop()
@@ -116,6 +188,8 @@ class ReferenceAudioPlayer {
     fun stop() {
         stopRunnable?.let(mainHandler::removeCallbacks)
         stopRunnable = null
+        nextSequenceRunnable?.let(mainHandler::removeCallbacks)
+        nextSequenceRunnable = null
         player?.let { active ->
             try { if (active.isPlaying) active.stop() } catch (_: IllegalStateException) { }
             active.release()

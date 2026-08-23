@@ -35,6 +35,7 @@ data class QuranUiState(
     val correctionPlaying: Boolean = false,
     val correctionPhase: CorrectionPhase = CorrectionPhase.LISTENING,
     val correctionMessage: String? = null,
+    val correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
     val correctionAyahIndex: Int = -1,
     val correctionFirstWordInAyah: Int = -1,
     val selectedSurah: Int = 1,
@@ -63,6 +64,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private var repository = QuranRepository(application)
     private val store = LocalSessionStore(application)
     private val goalStore = LocalGoalStore(application)
+    private val correctionSettingsStore = LocalCorrectionSettingsStore(application)
     private val timingRepository = ReferenceTimingRepository()
     private val referenceAudioPlayer = ReferenceAudioPlayer()
     private var onlineSession: OnlineSpeechSession? = null
@@ -75,6 +77,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         QuranUiState(
             sessions = store.list(),
             goal = goalStore.current(),
+            correctionSettings = correctionSettingsStore.current(),
             offlineSupported = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
         ),
     )
@@ -207,7 +210,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (state.value.engine == RecitationEngine.OFFLINE && !state.value.modelReady) { state.value = state.value.copy(notice = "نزّل نموذج FastConformer أولاً لتفعيل التسميع Offline."); return }
         if (state.value.listening || state.value.correctionPlaying) return
-        progressTracker = RecitationProgressTracker(state.value.ayahs)
+        progressTracker = RecitationProgressTracker(state.value.ayahs, correctionSettings = state.value.correctionSettings)
         activeCorrection = null
         correctionWasListening = false
         state.value = state.value.copy(
@@ -246,7 +249,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             RecognitionUpdate.Started -> Unit
             is RecognitionUpdate.Text -> {
                 val previousState = state.value
-                val tracker = progressTracker ?: RecitationProgressTracker(previousState.ayahs).also { progressTracker = it }
+                val tracker = progressTracker ?: RecitationProgressTracker(previousState.ayahs, correctionSettings = previousState.correctionSettings).also { progressTracker = it }
                 val result = tracker.update(
                     RecitationProgressInput(
                         transcript = update.value,
@@ -297,7 +300,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             correctionPlaying = true,
             correctionPhase = CorrectionPhase.PLAYING_FIRST_ERROR,
             correctionMessage = correctionMessage(request),
-            notice = "سيُقرأ تصحيح أول كلمة ثم الآية كاملة…",
+            notice = when {
+                request.readWholeAyah && state.value.correctionSettings.playFirstErrorBeforeWholeAyah -> "سيُقرأ مقطع أول خطأ ثم الآية كاملة…"
+                request.readWholeAyah -> "ستُقرأ الآية كاملة للتصحيح…"
+                else -> "سيُقرأ مقطع الكلمة فقط…"
+            },
         )
         onlineSession?.stop(); onlineSession = null
         localSession?.stop(); localSession = null
@@ -309,7 +316,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val location = locateWord(globalWordIndex) ?: return
         val ayahIndex = state.value.ayahs.indexOfFirst { it.surah == location.first.surah && it.ayah == location.first.ayah }
         if (ayahIndex < 0) return
-        val request = CorrectionRequest(CorrectionKind.WRONG_WORD, ayahIndex, location.second, null, "manual:$globalWordIndex", readWholeAyah = false)
+        val request = CorrectionRequest(
+            CorrectionKind.WRONG_WORD,
+            ayahIndex,
+            location.second,
+            null,
+            "manual:$globalWordIndex",
+            readWholeAyah = false,
+        )
         activeCorrection = request
         correctionWasListening = state.value.listening
         if (correctionWasListening) pauseRecognitionForCorrection(request)
@@ -336,20 +350,23 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             correctionPlaying = true,
             correctionPhase = CorrectionPhase.PLAYING_FIRST_ERROR,
             correctionMessage = correctionMessage(request),
-            notice = if (request.readWholeAyah) {
-                "يُشغّل أول خطأ ثم تُقرأ الآية كاملة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…"
-            } else {
-                "يُشغّل تصحيح الكلمة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…"
+            notice = when {
+                request.readWholeAyah && state.value.correctionSettings.playFirstErrorBeforeWholeAyah -> "يُشغّل مقطع أول خطأ ثم الآية كاملة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…"
+                request.readWholeAyah -> "تُشغّل الآية كاملة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…"
+                else -> "يُشغّل مقطع الكلمة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…"
             },
         )
         val finished = { finishCorrectionPlayback() }
         val source = localFile?.absolutePath ?: assetManager.audioUrl(ayah.surah, ayah.ayah)
-        if (request.readWholeAyah && wholeAyah != null) {
-            val wholeStarted = { state.value = state.value.copy(correctionPhase = CorrectionPhase.PLAYING_WHOLE_AYAH, notice = "تُقرأ الآية كاملة للتصحيح…") }
-            referenceAudioPlayer.playWordThenWholeAyah(source, firstWord, wholeAyah, wholeStarted, finished)
-        } else {
-            referenceAudioPlayer.playWord(source, firstWord.startMs, firstWord.endMs, finished)
-        }
+        val wholeStarted = { state.value = state.value.copy(correctionPhase = CorrectionPhase.PLAYING_WHOLE_AYAH, notice = "تُقرأ الآية كاملة للتصحيح…") }
+        referenceAudioPlayer.playCorrection(
+            source = source,
+            firstWord = firstWord,
+            wholeAyah = wholeAyah,
+            settings = state.value.correctionSettings,
+            onWholeAyahStarted = wholeStarted,
+            onFinished = finished,
+        )
     }
 
     private fun finishCorrectionPlayback() {
@@ -358,7 +375,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val shouldResume = correctionWasListening
         correctionWasListening = false
         if (shouldResume && request != null) {
-            progressTracker?.resumeFrom(request.ayahIndex, request.localWordIndex)
+            progressTracker?.resumeFrom(request.ayahIndex, resumeAnchorFor(request))
             state.value = state.value.copy(
                 listening = true,
                 correctionPlaying = false,
@@ -375,16 +392,32 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun trackerGlobalIndex(request: CorrectionRequest): Int =
-        progressTracker?.globalWordIndex(request.ayahIndex, request.localWordIndex) ?: -1
+        progressTracker?.globalWordIndex(request.ayahIndex, resumeAnchorFor(request)) ?: -1
+
+    private fun resumeAnchorFor(request: CorrectionRequest): Int = when (state.value.correctionSettings.resumePosition) {
+        ResumePosition.AYAH_START -> 0
+        ResumePosition.FIRST_ERROR -> request.localWordIndex
+        ResumePosition.WORD_AFTER_ERROR -> request.localWordIndex + 1
+    }
 
     private fun correctionMessage(request: CorrectionRequest): String {
         val ayah = state.value.ayahs.getOrNull(request.ayahIndex)
         val word = ayah?.words?.getOrNull(request.localWordIndex)?.text.orEmpty()
+        val settings = state.value.correctionSettings
         return when (request.kind) {
-            CorrectionKind.WRONG_WORD -> if (request.readWholeAyah) "أول كلمة تحتاج تصحيحاً: $word؛ سيُقرأ المقطع ثم الآية كاملة." else "الكلمة تحتاج تصحيحاً: $word؛ سيُقرأ مقطعها فقط."
-            CorrectionKind.SKIPPED_WORD -> if (request.readWholeAyah) "أول كلمة متخطاة: $word؛ سيُقرأ المقطع ثم الآية كاملة." else "الكلمة المتخطاة: $word؛ سيُقرأ مقطعها فقط."
-            CorrectionKind.FIRST_WORD_EXPECTED_AYAH -> "الآية المتوقعة تبدأ من: $word؛ سيُقرأ المقطع ثم الآية كاملة."
+            CorrectionKind.WRONG_WORD -> correctionText("الكلمة تحتاج تصحيحاً", word, request.readWholeAyah, settings)
+            CorrectionKind.SKIPPED_WORD -> correctionText("الكلمة المتخطاة", word, request.readWholeAyah, settings)
+            CorrectionKind.FIRST_WORD_EXPECTED_AYAH -> correctionText("الآية المتوقعة تبدأ من", word, true, settings)
         }
+    }
+
+    private fun correctionText(prefix: String, word: String, wholeAyah: Boolean, settings: CorrectionSettings): String {
+        val suffix = when {
+            !wholeAyah -> "سيُقرأ مقطع الكلمة فقط."
+            settings.playFirstErrorBeforeWholeAyah -> "سيُقرأ مقطع أول خطأ ثم الآية كاملة."
+            else -> "ستُقرأ الآية كاملة."
+        }
+        return "$prefix: $word؛ $suffix"
     }
 
     private fun locateWord(globalWordIndex: Int): Pair<QuranAyah, Int>? {
@@ -421,8 +454,30 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setDailyGoal(targetAyahs: Int) { goalStore.setTarget(targetAyahs); state.value = state.value.copy(goal = goalStore.current(), notice = "تم تحديث الهدف اليومي محلياً.") }
 
+    fun updateCorrectionSettings(transform: (CorrectionSettings) -> CorrectionSettings) {
+        val updated = transform(state.value.correctionSettings).normalized()
+        correctionSettingsStore.save(updated)
+        progressTracker?.updateSettings(updated)
+        state.value = state.value.copy(correctionSettings = updated, notice = "تم حفظ إعدادات التصحيح على هذا الجهاز.")
+    }
+
+    fun resetCorrectionSettings() {
+        val defaults = correctionSettingsStore.reset()
+        progressTracker?.updateSettings(defaults)
+        state.value = state.value.copy(correctionSettings = defaults, notice = "أعيدت إعدادات التصحيح إلى الوضع الافتراضي الحالي.")
+    }
+
     fun exportBackup(uri: android.net.Uri) {
-        try { LocalBackup.write(getApplication(), uri, store.list(), goalStore.current()); state.value = state.value.copy(notice = "تم تصدير النسخة الاحتياطية إلى الملف الذي اخترته.") }
+        try {
+            LocalBackup.write(
+                getApplication(),
+                uri,
+                store.list(),
+                goalStore.current(),
+                state.value.correctionSettings,
+            )
+            state.value = state.value.copy(notice = "تم تصدير النسخة الاحتياطية وإعدادات التصحيح إلى الملف الذي اخترته.")
+        }
         catch (error: Throwable) { state.value = state.value.copy(notice = "تعذر تصدير النسخة الاحتياطية: ${error.message ?: "خطأ غير معروف"}") }
     }
 
