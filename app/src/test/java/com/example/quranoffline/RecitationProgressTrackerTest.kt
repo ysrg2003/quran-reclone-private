@@ -36,6 +36,38 @@ class RecitationProgressTrackerTest {
     }
 
     @Test
+    fun oneWrongWordRequestsWordOnlyCorrection() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d")))
+
+        val result = tracker.update(final("x"))
+
+        assertEquals(false, result.correction?.readWholeAyah)
+    }
+
+    @Test
+    fun twoConsecutiveWrongWordsStillRequestWordOnlyCorrection() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d")))
+
+        val result = tracker.update(final("x y"))
+
+        assertEquals(false, result.correction?.readWholeAyah)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[0].status)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[1].status)
+    }
+
+    @Test
+    fun moreThanTwoConsecutiveWrongWordsRequestWholeAyahCorrection() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d", "e")))
+
+        val result = tracker.update(final("x y z"))
+
+        assertEquals(true, result.correction?.readWholeAyah)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[0].status)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[1].status)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[2].status)
+    }
+
+    @Test
     fun skippedWordProducesCorrectionWithoutShiftingLaterMatch() {
         val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c")))
 
@@ -99,6 +131,26 @@ class RecitationProgressTrackerTest {
         assertEquals(WordStatus.MATCHED, first.evaluation.words[0].status)
         assertEquals(WordStatus.MATCHED, first.evaluation.words[1].status)
         assertEquals(WordStatus.MATCHED, second.evaluation.words[2].status)
+    }
+
+    @Test
+    fun trackerDoesNotCorrectHamzaSeatVariant() {
+        val tracker = RecitationProgressTracker(
+            listOf(
+                QuranAyah(
+                    surah = 1,
+                    ayah = 5,
+                    text = "إِيَّاكَ",
+                    matchText = "إياك",
+                    words = listOf(QuranWord(0, "إِيَّاكَ", "إياك")),
+                ),
+            ),
+        )
+
+        val result = tracker.update(final("اياك"))
+
+        assertEquals(WordStatus.MATCHED, result.evaluation.words.single().status)
+        assertNull(result.correction)
     }
 
     @Test

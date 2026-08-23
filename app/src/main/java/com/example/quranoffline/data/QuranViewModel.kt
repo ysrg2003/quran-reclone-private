@@ -309,7 +309,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val location = locateWord(globalWordIndex) ?: return
         val ayahIndex = state.value.ayahs.indexOfFirst { it.surah == location.first.surah && it.ayah == location.first.ayah }
         if (ayahIndex < 0) return
-        val request = CorrectionRequest(CorrectionKind.WRONG_WORD, ayahIndex, location.second, null, "manual:$globalWordIndex")
+        val request = CorrectionRequest(CorrectionKind.WRONG_WORD, ayahIndex, location.second, null, "manual:$globalWordIndex", readWholeAyah = false)
         activeCorrection = request
         correctionWasListening = state.value.listening
         if (correctionWasListening) pauseRecognitionForCorrection(request)
@@ -321,25 +321,35 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val timings = timingRepository.forAyah(ayah.surah, ayah.ayah)
         val firstWord = timings.firstOrNull { request.localWordIndex in it.wordStart until it.wordEnd }
             ?: return finishCorrectionPlayback()
-        val wholeAyah = timings.firstOrNull()?.let { start ->
-            timings.lastOrNull()?.let { end -> TimingSegment(0, ayah.words.size, start.startMs, end.endMs) }
-        } ?: return finishCorrectionPlayback()
+        val wholeAyah = if (request.readWholeAyah) {
+            timings.firstOrNull()?.let { start ->
+                timings.lastOrNull()?.let { end -> TimingSegment(0, ayah.words.size, start.startMs, end.endMs) }
+            }
+        } else null
         val localFile = assetManager.cachedAudioFile(ayah.surah, ayah.ayah)
         if (state.value.mode == AssetMode.DOWNLOAD && localFile == null) {
-            state.value = state.value.copy(correctionPlaying = false, correctionPhase = CorrectionPhase.LISTENING, notice = "نزّل صوت السورة الحالية أولاً، أو اختر وضع البث المباشر للتشغيل دون حفظ.")
-            activeCorrection = null
+            finishCorrectionPlayback()
+            state.value = state.value.copy(notice = "نزّل صوت السورة الحالية أولاً، أو اختر وضع البث المباشر للتشغيل دون حفظ.")
             return
         }
         state.value = state.value.copy(
             correctionPlaying = true,
             correctionPhase = CorrectionPhase.PLAYING_FIRST_ERROR,
             correctionMessage = correctionMessage(request),
-            notice = "يُشغّل أول خطأ ثم تُقرأ الآية كاملة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…",
+            notice = if (request.readWholeAyah) {
+                "يُشغّل أول خطأ ثم تُقرأ الآية كاملة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…"
+            } else {
+                "يُشغّل تصحيح الكلمة ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…"
+            },
         )
-        val wholeStarted = { state.value = state.value.copy(correctionPhase = CorrectionPhase.PLAYING_WHOLE_AYAH, notice = "تُقرأ الآية كاملة للتصحيح…") }
         val finished = { finishCorrectionPlayback() }
         val source = localFile?.absolutePath ?: assetManager.audioUrl(ayah.surah, ayah.ayah)
-        referenceAudioPlayer.playWordThenWholeAyah(source, firstWord, wholeAyah, wholeStarted, finished)
+        if (request.readWholeAyah && wholeAyah != null) {
+            val wholeStarted = { state.value = state.value.copy(correctionPhase = CorrectionPhase.PLAYING_WHOLE_AYAH, notice = "تُقرأ الآية كاملة للتصحيح…") }
+            referenceAudioPlayer.playWordThenWholeAyah(source, firstWord, wholeAyah, wholeStarted, finished)
+        } else {
+            referenceAudioPlayer.playWord(source, firstWord.startMs, firstWord.endMs, finished)
+        }
     }
 
     private fun finishCorrectionPlayback() {
@@ -371,8 +381,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val ayah = state.value.ayahs.getOrNull(request.ayahIndex)
         val word = ayah?.words?.getOrNull(request.localWordIndex)?.text.orEmpty()
         return when (request.kind) {
-            CorrectionKind.WRONG_WORD -> "أول كلمة تحتاج تصحيحاً: $word؛ سيُقرأ المقطع ثم الآية كاملة."
-            CorrectionKind.SKIPPED_WORD -> "أول كلمة متخطاة: $word؛ سيُقرأ المقطع ثم الآية كاملة."
+            CorrectionKind.WRONG_WORD -> if (request.readWholeAyah) "أول كلمة تحتاج تصحيحاً: $word؛ سيُقرأ المقطع ثم الآية كاملة." else "الكلمة تحتاج تصحيحاً: $word؛ سيُقرأ مقطعها فقط."
+            CorrectionKind.SKIPPED_WORD -> if (request.readWholeAyah) "أول كلمة متخطاة: $word؛ سيُقرأ المقطع ثم الآية كاملة." else "الكلمة المتخطاة: $word؛ سيُقرأ مقطعها فقط."
             CorrectionKind.FIRST_WORD_EXPECTED_AYAH -> "الآية المتوقعة تبدأ من: $word؛ سيُقرأ المقطع ثم الآية كاملة."
         }
     }

@@ -50,6 +50,9 @@ class ReferenceAudioPlayer {
     fun playRemoteUrl(url: String, startMs: Int, endMs: Int, onFinished: () -> Unit = {}) =
         playDataSource(url, startMs, endMs, onFinished)
 
+    fun playWord(source: String, startMs: Int, endMs: Int, onFinished: () -> Unit = {}) =
+        playDataSource(source, startMs, endMs, onFinished)
+
     /** Play the first-error word, then the complete ayah, exactly once. */
     fun playWordThenWholeAyah(
         source: String,

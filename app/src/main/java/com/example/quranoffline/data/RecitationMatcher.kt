@@ -21,12 +21,22 @@ private fun normalizeArabicWithSmallAlif(value: String): String {
         .replace(smallAlif, 'ا')
         .replace('ٱ', 'ا')
         .replace('آ', 'ا')
+        .replace('أ', 'ا')
+        .replace('إ', 'ا')
+        .replace('ؤ', 'و')
+        .replace('ئ', 'ي')
+        .replace("ء", "")
         .replace(Regex("\\s+"), " ")
         .trim()
 }
 
 /** Comparison-only spelling normalization; it never changes displayed Quran text. */
 fun normalizeArabicForComparison(value: String): String = normalizeArabicForMatch(value)
+    .replace('أ', 'ا')
+    .replace('إ', 'ا')
+    .replace('ؤ', 'و')
+    .replace('ئ', 'ي')
+    .replace("ء", "")
 
 /**
  * Treats a small alif as optional only when the canonical word actually has it.

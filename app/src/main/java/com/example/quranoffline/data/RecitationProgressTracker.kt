@@ -210,6 +210,7 @@ class RecitationProgressTracker(
                     ayahIndex = currentAyahIndex,
                     localWordIndex = current,
                     observed = token,
+                    readWholeAyah = consecutiveIssueCount(expectedWords, current, segment, segmentIndex) > 2,
                 )
                 markMatched(laterMatch, token)
                 nextWordInAyah = laterMatch + 1
@@ -227,6 +228,7 @@ class RecitationProgressTracker(
                         ayahIndex = currentAyahIndex,
                         localWordIndex = current,
                         observed = token,
+                        readWholeAyah = expected.size - current > 2,
                         stopProcessingSegment = true,
                     )
                 } else {
@@ -247,12 +249,42 @@ class RecitationProgressTracker(
                     ayahIndex = currentAyahIndex,
                     localWordIndex = current,
                     observed = token,
+                    readWholeAyah = consecutiveIssueCount(expectedWords, current, segment, segmentIndex) > 2,
                 )
                 nextWordInAyah = current + 1
                 if (nextWordInAyah >= expected.size) advanceAyah()
                 request
             }
         }
+    }
+
+    private fun consecutiveIssueCount(
+        expected: List<QuranWord>,
+        startIndex: Int,
+        segment: List<String>,
+        segmentIndex: Int,
+    ): Int {
+        var expectedIndex = startIndex
+        var issueCount = 0
+        var maximum = 0
+        for (token in segment.drop(segmentIndex)) {
+            if (expectedIndex >= expected.size) break
+            if (quranWordMatches(expected[expectedIndex], token)) {
+                maximum = maxOf(maximum, issueCount)
+                issueCount = 0
+                expectedIndex++
+                continue
+            }
+            val later = ((expectedIndex + 1)..expected.lastIndex).firstOrNull { quranWordMatches(expected[it], token) }
+            if (later != null) {
+                issueCount += later - expectedIndex
+                expectedIndex = later + 1
+            } else {
+                issueCount++
+                expectedIndex++
+            }
+        }
+        return maxOf(maximum, issueCount)
     }
 
     private fun isClearJump(segment: List<String>, segmentIndex: Int): Boolean {
@@ -290,6 +322,7 @@ class RecitationProgressTracker(
         ayahIndex: Int,
         localWordIndex: Int,
         observed: String?,
+        readWholeAyah: Boolean = false,
         stopProcessingSegment: Boolean = false,
     ): CorrectionRequest? {
         val key = "$kind:$ayahIndex:$localWordIndex:${normalizeArabicForComparison(observed.orEmpty())}"
@@ -299,7 +332,7 @@ class RecitationProgressTracker(
         val end = if (kind == CorrectionKind.SKIPPED_WORD) {
             (ayahs.getOrNull(ayahIndex)?.words?.lastIndex ?: localWordIndex)
         } else localWordIndex
-        return CorrectionRequest(kind, ayahIndex, localWordIndex, observed, key, readWholeAyah = true, rangeEndLocalWordIndex = end, stopProcessingSegment = stopProcessingSegment)
+        return CorrectionRequest(kind, ayahIndex, localWordIndex, observed, key, readWholeAyah = readWholeAyah, rangeEndLocalWordIndex = end, stopProcessingSegment = stopProcessingSegment)
     }
 
     private fun clearCorrectionIfResolved(globalIndex: Int?) {

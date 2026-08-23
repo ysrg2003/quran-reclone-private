@@ -115,6 +115,15 @@ class RecitationMatcherTest {
     }
 
     @Test
+    fun hamzaSeatVariantOfIyyakaIsMatched() {
+        val expectedWord = listOf(QuranWord(0, "إِيَّاكَ", "إياك"))
+        val result = RecitationMatcher.evaluate(expectedWord, "اياك", hasFinalResult = true)
+        assertEquals(1, result.matched)
+        assertEquals(WordStatus.MATCHED, result.words.single().status)
+        assertEquals(0, result.unexpected)
+    }
+
+    @Test
     fun alifSpellingVariantOfAlAlaminIsMatched() {
         val expectedWord = listOf(QuranWord(0, "ٱلْعَٰلَمِينَ", "العلمين"))
         val result = RecitationMatcher.evaluate(expectedWord, "العالمين", hasFinalResult = true)
