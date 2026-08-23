@@ -1,13 +1,14 @@
 # مصفوفة التحقق والإصدار
 
-**المشروع:** `ysrg2003/quran-memorization-online`  
-**آخر commit مرفوع:** `97b5c5d`  
-**آخر APK مثبت:** `quran-online-context-offline-guard.apk`  
-**SHA-256:** `d590f246a8776aba3af183bec3e498f8810f0bc9421911f84ce3701a53f3f3d3`
+**المشروع:** `ysrg2003/quran-memorization-online`
+
+**آخر commit مرفوع:** `fc0ff4f`
+**آخر APK مثبت:** `quran-online-settings-v10.apk`
+**SHA-256:** `7c7b4a8dcc3233a8e039c31479d5b911cb38be90ea2f5bc880cfdac8fafd9aa8`
 
 ## قرار الإصدار
 
-الإصدار صالح للاختبار على الهاتف الحالي لمسار Online ومسار الحماية من إغلاق Offline. لا يُعلن هذا الإصدار أن inference الخاص بـ FastConformer يعمل على كل الأجهزة؛ فقد ثبت أن الهاتف المستخدم 32-bit يتسبب في `SIGSEGV` native داخل `OnlineRecognizer.decode`، ولذلك أصبح Offline غير متاح عليه بوضوح بدلاً من إغلاق التطبيق أو التحويل الصامت إلى Online.
+الإصدار صالح للاختبار على الهاتف الحالي لمسار Online، وإعدادات التصحيح، ومسار الحماية من إغلاق Offline. لا يُعلن هذا الإصدار أن inference الخاص بـ FastConformer يعمل على كل الأجهزة؛ فقد ثبت أن الهاتف المستخدم 32-bit يتسبب في `SIGSEGV` native داخل `OnlineRecognizer.decode`، ولذلك أصبح Offline غير متاح عليه بوضوح بدلاً من إغلاق التطبيق أو التحويل الصامت إلى Online. إصلاحات المطابقة مبنية في المتعقب العام الذي يقرأ مصدر القرآن الكامل، وليست قائمة استثناءات خاصة بالفاتحة.
 
 ## الأدلة
 
@@ -24,7 +25,10 @@
 | قفز إلى آية غير التالية | اختبار وحدة | بقاء السياق على الآية التالية وطلب `FIRST_WORD_EXPECTED_AYAH` لأول كلمة منها | مثبت برمجياً |
 | الرجوع داخل الآية | اختبار وحدة | البحث في نافذة رجوع داخل الآية وإعادة المطابقة دون انتقال حر إلى آية أخرى | مثبت برمجياً |
 | partial غير مستقر | اختبار وحدة | لا تقدم ولا تشغيل صوت قبل final/segment-complete | مثبت برمجياً |
-| تشغيل مقطع التصحيح | فحص الكود + البناء | `QuranViewModel` يمرر آية وكلمة صريحتين إلى `ReferenceAudioPlayer`، مع بث أو ملف محلي حسب الوضع | مثبت بنيوياً، غير مثبت صوتياً لكل الحالات |
+| تشغيل مقطع التصحيح | فحص الكود + البناء | `QuranViewModel` يمرر آية وكلمة صريحتين إلى `ReferenceAudioPlayer`، مع تكرار وفاصل وهامش زمني قابل للتخصيص، وبث أو ملف محلي حسب الوضع | مثبت بنيوياً، غير مثبت صوتياً لكل الحالات |
+| سياسة تصحيح الشيخ وإعداداتها | تثبيت APK v10 + `quran-online-settings-v10-policy-card.png` | ظهرت بطاقة الإعدادات، والافتراضي المعروض 3 أخطاء متتالية، وتكرار واحد، وفاصل فوري، وهامش صفري، وترتيب مقطع أول خطأ ثم الآية | مثبت على الهاتف كواجهة |
+| حفظ الإعدادات وإعادة الافتراضي | تفاعل ADB + `run-as` على APK v10 | تغيّرت العتبة إلى 4 وحُفظت في `quran_correction_settings.xml`، ثم أُعيدت إلى 3 بمسح الاختيارات المحفوظة | مثبت على الهاتف |
+| تغطية مصدر القرآن الكامل للمطابقة | `scripts/validate_full_quran_matching.py` | فُحصت 6236 آية و77881 كلمة؛ كل أزواج `text`/`matchText` قُبلت بالتطبيع المحافظة | مثبت كمصدر بيانات، وليس ضماناً لفهم SpeechRecognizer لكل نطق |
 | سبب إغلاق Offline السابق | logcat جهاز حقيقي | `SIGSEGV` داخل مكتبة sherpa native بعد نجاح AudioRecord ووجود ملفات النموذج على `armeabi-v7a`/`zygote32` | مثبت تشخيصياً |
 | منع الإغلاق على الهاتف الحالي | تثبيت APK + لقطتا `offline-final-card-verified.png` و`offline-final-start-after.png` + PID/logcat | ظهر تحذير 32-bit وتعطل زر بدء Offline، ثم بقي PID التطبيق `29014` موجوداً دون `FATAL` أو `SIGSEGV` بعد محاولة الضغط على موضع البدء | مثبت على الهاتف الحالي |
 | inference Offline على 64-bit | لا يوجد جهاز 64-bit في الجولة | لم يُشغّل ولم يُثبت | مؤجل |
@@ -38,18 +42,21 @@
 gradle :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --offline --no-daemon --max-workers=1
 ```
 
-نجح الأمر أعلاه بعد إضافة المتعقب السياقي وحارس 32-bit وتحسين حالة الواجهة. كما مرّ `git diff --check`، وأصبح الفرع `main` متزامناً مع `origin/main` عند commit `97b5c5d`.
+نجح الأمر أعلاه بعد إضافة إعدادات التصحيح ومشغل الطابور القابل للتخصيص. كما نجح `python3 scripts/validate_full_quran_matching.py /tmp/quran_content_remote.json`، ومرّ `git diff --check`، وأصبح الفرع `main` متزامناً مع `origin/main` عند commit `fc0ff4f`.
 
 ## ملفات الأدلة
 
 | الملف | الغرض |
 |---|---|
-| `docs/RECITATION_CONTEXT_BUILD_SPEC.md` | عقد المتعقب وقواعد المحاذاة والانتقال والتصحيح |
+| `docs/RECITATION_CORRECTION_EPISODE_SPEC.md` | عقد المتعقب وقواعد المحاذاة والانتقال والتصحيح |
+| `docs/CORRECTION_SETTINGS_SPEC.md` | عقد خيارات تصحيح الشيخ وقيمها الافتراضية والحفظ |
 | `docs/OFFLINE_CRASH_FINDINGS.md` | تشخيص logcat وملفات النموذج وABI للهاتف |
 | `docs/PHONE_DIRECT_TEST.md` | نتائج الرحلات المباشرة ولقطات الهاتف |
 | `/home/ubuntu/phone-direct-test-findings.md` | السجل الزمني التفصيلي لجلسة ADB |
 | `offline-final-card-verified.png` | لقطة الهاتف بعد اختيار Offline في APK النهائي |
 | `offline-guard-after-tap.png` | لقطة سابقة تثبت بقاء العملية بعد محاولة الضغط على بدء Offline |
+| `quran-online-settings-v10-home.png` | شاشة الجاهزية للإصدار المثبت الأخير مع بقاء PID التطبيق |
+| `quran-online-settings-v10-policy-card.png` | بطاقة إعدادات سياسة تصحيح الشيخ في الإصدار المثبت الأخير |
 
 ## القيود والخصوصية
 
