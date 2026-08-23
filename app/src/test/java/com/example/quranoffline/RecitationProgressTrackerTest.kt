@@ -1,6 +1,7 @@
 package com.example.quranoffline
 
 import com.example.quranoffline.data.CorrectionKind
+import com.example.quranoffline.data.CorrectionSettings
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranWord
 import com.example.quranoffline.data.RecitationProgressInput
@@ -240,6 +241,59 @@ class RecitationProgressTrackerTest {
         assertEquals(WordStatus.MATCHED, result.evaluation.words[1].status)
         assertEquals(WordStatus.MATCHED, result.evaluation.words[2].status)
         assertEquals(3, result.currentWordInAyah)
+    }
+
+    @Test
+    fun previousAyahCanBeSelectedAsNewSessionStart() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b"), ayah(2, "c", "d")))
+        tracker.update(final("a b"))
+
+        tracker.startFromAyah(0)
+        val result = tracker.update(final("a"))
+
+        assertEquals(0, result.currentAyahIndex)
+        assertEquals(1, result.currentWordInAyah)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[0].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[1].status)
+        assertNull(result.correction)
+    }
+
+    @Test
+    fun longWordPrefixDoesNotCreateCorrectionBeforeCompletedWordArrives() {
+        val tracker = RecitationProgressTracker(
+            listOf(
+                QuranAyah(
+                    surah = 1,
+                    ayah = 7,
+                    text = "الضالين",
+                    matchText = "الضالين",
+                    words = listOf(QuranWord(0, "الضالين", "الضالين")),
+                ),
+            ),
+        )
+
+        val partial = tracker.update(RecitationProgressInput("الضال", isFinal = false, segmentCompleted = false))
+        val prefix = tracker.update(final("الضال"))
+        val completed = tracker.update(final("الضالين"))
+
+        assertNull(partial.correction)
+        assertNull(prefix.correction)
+        assertEquals(0, prefix.currentWordInAyah)
+        assertEquals(WordStatus.UNCERTAIN, prefix.evaluation.words.single().status)
+        assertNull(completed.correction)
+        assertEquals(WordStatus.MATCHED, completed.evaluation.words.single().status)
+    }
+
+    @Test
+    fun wholeAyahThresholdIsIndependentFromFirstWordPlaybackOrder() {
+        val tracker = RecitationProgressTracker(
+            listOf(ayah(1, "a", "b", "c")),
+            correctionSettings = CorrectionSettings.DEFAULTS.copy(playFirstErrorBeforeWholeAyah = false),
+        )
+
+        val result = tracker.update(final("x y z"))
+
+        assertEquals(true, result.correction?.readWholeAyah)
     }
 
     @Test

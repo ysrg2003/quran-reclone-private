@@ -190,6 +190,7 @@ private fun QuranOfflineApp(
                 onSetGoal = viewModel::setDailyGoal,
                 onCorrection = viewModel::playCorrectionForCurrentWord,
                 onStopCorrection = viewModel::stopCorrection,
+                onPreviousAyah = viewModel::startFromPreviousAyah,
                 onSelectSurah = viewModel::selectSurah,
                 onPreviousPage = viewModel::previousPage,
                 onNextPage = viewModel::nextPage,
@@ -222,6 +223,7 @@ private fun MemorizationScreen(
     onSetGoal: (Int) -> Unit,
     onCorrection: () -> Unit,
     onStopCorrection: () -> Unit,
+    onPreviousAyah: () -> Unit,
     onSelectSurah: (Int) -> Unit,
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
@@ -295,7 +297,7 @@ private fun MemorizationScreen(
         item {
             Text("مصحف التدريب — السورة كاملة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF123F35))
         }
-        item { RecitationCard(state, onStart, onCorrection, onStopCorrection) }
+        item { RecitationCard(state, onStart, onCorrection, onStopCorrection, onPreviousAyah) }
         if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
             item {
                 Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
@@ -738,6 +740,7 @@ private fun RecitationCard(
     onStart: () -> Unit,
     onCorrection: () -> Unit,
     onStopCorrection: () -> Unit,
+    onPreviousAyah: () -> Unit,
 ) {
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF183D33))) {
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -791,6 +794,16 @@ private fun RecitationCard(
             }
             if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) {
                 Text("Offline غير متاح بأمان على هذا الهاتف 32-bit؛ استخدم Online أو هاتفاً 64-bit.", color = Color(0xFFFFE1B5))
+            }
+            if (state.listening && !state.correctionPlaying && state.currentAyahIndex > 0) {
+                val previousAyahNumber = state.ayahs.getOrNull(state.currentAyahIndex - 1)?.ayah
+                if (previousAyahNumber != null) {
+                    OutlinedButton(onClick = onPreviousAyah, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Refresh, null, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("ابدأ من الآية السابقة ($previousAyahNumber)", color = Color.White)
+                    }
+                }
             }
             if (state.currentWordIndex >= 0) {
                 OutlinedButton(

@@ -30,9 +30,11 @@ class OnlineSpeechSession(
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-SA")
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1_200L)
-        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 350L)
-        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1_200L)
+        // Quranic words can contain deliberately long madd; do not finalize a
+        // segment after a short breath while the word is still being extended.
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, FINAL_SILENCE_MS)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, MINIMUM_SPEECH_MS)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, POSSIBLY_COMPLETE_SILENCE_MS)
     }
 
     init {
@@ -120,6 +122,9 @@ class OnlineSpeechSession(
 
     companion object {
         private const val RESTART_DELAY_MS = 280L
+        private const val MINIMUM_SPEECH_MS = 350L
+        private const val POSSIBLY_COMPLETE_SILENCE_MS = 2_000L
+        private const val FINAL_SILENCE_MS = 2_400L
         private val TRANSIENT_ERRORS = setOf(
             SpeechRecognizer.ERROR_AUDIO,
             SpeechRecognizer.ERROR_CLIENT,

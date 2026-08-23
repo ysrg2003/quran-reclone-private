@@ -71,6 +71,7 @@ class RecitationProgressTracker(
     private var awaitingResume = false
     private var resumeAnchorLocalIndex = 0
     private var lastTranscriptTokens: List<String> = emptyList()
+    private var pendingWordPrefix: String? = null
 
     fun updateSettings(newSettings: CorrectionSettings) {
         settings = newSettings.normalized()
@@ -86,6 +87,13 @@ class RecitationProgressTracker(
         awaitingResume = false
         resumeAnchorLocalIndex = 0
         lastTranscriptTokens = emptyList()
+        pendingWordPrefix = null
+    }
+
+    /** Start a new recitation session from a chosen ayah and discard the prior session judgement. */
+    fun startFromAyah(ayahIndex: Int) {
+        reset()
+        currentAyahIndex = ayahIndex.coerceIn(0, ayahs.lastIndex.coerceAtLeast(0))
     }
 
     /** Prepare a fresh recognizer segment while preserving the current ayah and evaluations. */
@@ -98,6 +106,7 @@ class RecitationProgressTracker(
         activeCorrectionGlobalIndex = -1
         committedTokens.clear()
         lastTranscriptTokens = emptyList()
+        pendingWordPrefix = null
     }
 
     fun update(input: RecitationProgressInput): RecitationProgressResult {
@@ -110,8 +119,38 @@ class RecitationProgressTracker(
 
         if (stable) {
             val newTokens = suffixAfterCommitted(tokens)
-            for (index in newTokens.indices) {
-                val token = newTokens[index]
+            var index = 0
+            while (index < newTokens.size) {
+                var token = newTokens[index]
+                if (pendingWordPrefix != null) {
+                    val pending = pendingWordPrefix.orEmpty()
+                    pendingWordPrefix = null
+                    when {
+                        matchesCurrentExpected(token) -> Unit
+                        matchesCurrentExpected(pending + token) -> token = pending + token
+                        else -> {
+                            val beforePending = currentGlobalWordIndex()
+                            val pendingEvent = acceptStableToken(pending, listOf(pending), 0)
+                            if (pendingEvent != null && correction == null) correction = pendingEvent
+                            if (pendingEvent?.kind == CorrectionKind.FIRST_WORD_EXPECTED_AYAH || pendingEvent?.stopProcessingSegment == true) {
+                                spokenGlobalWordIndex = beforePending
+                                break
+                            }
+                        }
+                    }
+                }
+                if (index < newTokens.lastIndex) {
+                    val joined = newTokens[index] + newTokens[index + 1]
+                    if (matchesCurrentExpected(joined)) {
+                        token = joined
+                        index++
+                    }
+                }
+                if (isPotentialWordPrefix(token) && index == newTokens.lastIndex) {
+                    pendingWordPrefix = token
+                    spokenGlobalWordIndex = currentGlobalWordIndex()
+                    break
+                }
                 val before = currentGlobalWordIndex()
                 val event = acceptStableToken(token, newTokens, index)
                 if (event != null && correction == null) correction = event
@@ -120,6 +159,7 @@ class RecitationProgressTracker(
                     break
                 }
                 spokenGlobalWordIndex = acceptedGlobalWordIndex(token, before)
+                index++
             }
             committedTokens.clear()
             committedTokens.addAll(tokens)
@@ -265,6 +305,32 @@ class RecitationProgressTracker(
         }
     }
 
+    private fun matchesCurrentExpected(token: String): Boolean {
+        if (currentAyahIndex !in ayahs.indices) return false
+        val expectedWords = ayahs[currentAyahIndex].words
+        val candidateIndices = if (awaitingResume) {
+            expectedWords.indices
+        } else {
+            listOf(nextWordInAyah.coerceIn(0, expectedWords.lastIndex))
+        }
+        return candidateIndices.any { quranWordMatches(expectedWords[it], token) }
+    }
+
+    private fun isPotentialWordPrefix(token: String): Boolean {
+        if (currentAyahIndex !in ayahs.indices) return false
+        val expectedWords = ayahs[currentAyahIndex].words
+        val targetIndex = if (awaitingResume) {
+            resumeAnchorLocalIndex.coerceIn(0, expectedWords.lastIndex)
+        } else {
+            nextWordInAyah.coerceIn(0, expectedWords.lastIndex)
+        }
+        val observed = normalizeArabicForComparison(token)
+        if (observed.length < 2) return false
+        return listOf(expectedWords[targetIndex].text, expectedWords[targetIndex].matchText)
+            .map(::normalizeArabicForComparison)
+            .any { it.startsWith(observed) && it.length > observed.length }
+    }
+
     private fun consecutiveIssueCount(
         expected: List<QuranWord>,
         startIndex: Int,
@@ -361,7 +427,7 @@ class RecitationProgressTracker(
     }
 
     private fun shouldReadWholeAyah(issueCount: Int): Boolean =
-        settings.playFirstErrorBeforeWholeAyah && issueCount >= settings.wholeAyahAfterConsecutiveErrors
+        issueCount >= settings.wholeAyahAfterConsecutiveErrors
 
     private fun clearCorrectionIfResolved(globalIndex: Int?) {
         if (globalIndex != null && globalIndex == activeCorrectionGlobalIndex) {

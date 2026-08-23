@@ -70,6 +70,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private var onlineSession: OnlineSpeechSession? = null
     private var localSession: LocalRecitationSession? = null
     private var progressTracker: RecitationProgressTracker? = null
+    private var recognitionGeneration = 0L
     private var activeCorrection: CorrectionRequest? = null
     private var correctionWasListening = false
 
@@ -234,13 +235,54 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun startRecognitionSession() {
+        val generation = ++recognitionGeneration
+        val guardedUpdate: (RecognitionUpdate) -> Unit = { update ->
+            if (generation == recognitionGeneration) handleRecognitionUpdate(update)
+        }
         if (state.value.engine == RecitationEngine.ONLINE) {
-            onlineSession = OnlineSpeechSession(getApplication(), ::handleRecognitionUpdate)
+            onlineSession = OnlineSpeechSession(getApplication(), guardedUpdate)
             onlineSession?.start()
         } else {
-            localSession = LocalRecitationSession(getApplication(), assetManager.modelDirectory(), ::handleRecognitionUpdate)
+            localSession = LocalRecitationSession(getApplication(), assetManager.modelDirectory(), guardedUpdate)
             localSession?.start()
         }
+    }
+
+    fun startFromPreviousAyah() {
+        val currentAyah = state.value.currentAyahIndex
+        if (!state.value.assetsReady) {
+            state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً.")
+            return
+        }
+        if (currentAyah <= 0 || currentAyah !in state.value.ayahs.indices || state.value.correctionPlaying) return
+        val previousAyahIndex = currentAyah - 1
+        referenceAudioPlayer.stop()
+        recognitionGeneration++
+        onlineSession?.stop(); onlineSession = null
+        localSession?.stop(); localSession = null
+        val tracker = RecitationProgressTracker(state.value.ayahs, correctionSettings = state.value.correctionSettings)
+        tracker.startFromAyah(previousAyahIndex)
+        progressTracker = tracker
+        activeCorrection = null
+        correctionWasListening = false
+        state.value = state.value.copy(
+            listening = true,
+            transcript = "",
+            evaluation = null,
+            currentWordIndex = tracker.globalWordIndex(previousAyahIndex, 0) ?: -1,
+            currentSpokenWord = null,
+            currentSpokenWordIndex = -1,
+            currentAyahIndex = previousAyahIndex,
+            currentWordInAyah = 0,
+            recitationCursor = tracker.globalWordIndex(previousAyahIndex, 0) ?: 0,
+            correctionPlaying = false,
+            correctionPhase = CorrectionPhase.LISTENING,
+            correctionMessage = null,
+            correctionAyahIndex = -1,
+            correctionFirstWordInAyah = -1,
+            notice = "بدأت جلسة جديدة من الآية ${state.value.ayahs[previousAyahIndex].ayah}.",
+        )
+        startRecognitionSession()
     }
 
     private fun handleRecognitionUpdate(update: RecognitionUpdate) {
@@ -295,6 +337,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun pauseRecognitionForCorrection(request: CorrectionRequest) {
+        recognitionGeneration++
         state.value = state.value.copy(
             listening = false,
             correctionPlaying = true,
@@ -436,6 +479,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopListening() {
+        recognitionGeneration++
         referenceAudioPlayer.stop()
         onlineSession?.stop(); onlineSession = null
         localSession?.stop(); localSession = null
@@ -483,7 +527,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearSessions() { store.clear(); state.value = state.value.copy(sessions = emptyList(), notice = "حُذف سجل الجلسات المحلي.") }
 
-    override fun onCleared() { onlineSession?.stop(); localSession?.stop(); progressTracker = null; referenceAudioPlayer.stop(); super.onCleared() }
+    override fun onCleared() { recognitionGeneration++; onlineSession?.stop(); localSession?.stop(); progressTracker = null; referenceAudioPlayer.stop(); super.onCleared() }
 
     private fun offlineUnavailableMessage(): String = "التسميع Offline غير متاح بأمان على هذا الهاتف؛ النظام يعمل 32-bit، وظهر انهيار native داخل محرك FastConformer. استخدم Online أو هاتفاً 64-bit."
 
