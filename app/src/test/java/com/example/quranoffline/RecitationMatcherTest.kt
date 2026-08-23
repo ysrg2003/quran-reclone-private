@@ -31,6 +31,41 @@ class RecitationMatcherTest {
     }
 
     @Test
+    fun skippedExpectedWordDoesNotShiftLaterWord() {
+        val result = RecitationMatcher.evaluate(expected, "بسم الرحمن", hasFinalResult = true)
+        assertEquals(2, result.matched)
+        assertEquals(1, result.missing)
+        assertEquals(0, result.unexpected)
+        assertEquals(WordStatus.MISSING, result.words[1].status)
+        assertEquals(WordStatus.MATCHED, result.words[2].status)
+    }
+
+    @Test
+    fun extraObservedWordDoesNotShiftLaterWords() {
+        val result = RecitationMatcher.evaluate(expected, "بسم الله خطأ الرحمن", hasFinalResult = true)
+        assertEquals(3, result.matched)
+        assertEquals(1, result.unexpected)
+        assertEquals(WordStatus.MATCHED, result.words[2].status)
+    }
+
+    @Test
+    fun partialSkippedWordIsMissingWhenLaterWordWasHeard() {
+        val result = RecitationMatcher.evaluate(expected, "بسم الرحمن", hasFinalResult = false)
+        assertEquals(2, result.matched)
+        assertEquals(1, result.missing)
+        assertEquals(0, result.uncertain)
+        assertEquals(WordStatus.MISSING, result.words[1].status)
+    }
+
+    @Test
+    fun trailingPartialWordsRemainUncertain() {
+        val result = RecitationMatcher.evaluate(expected, "بسم", hasFinalResult = false)
+        assertEquals(1, result.matched)
+        assertEquals(2, result.uncertain)
+        assertEquals(WordStatus.UNCERTAIN, result.words[2].status)
+    }
+
+    @Test
     fun diacriticsDoNotBreakBasicMatching() {
         val result = RecitationMatcher.evaluate(expected, "بِسْمِ اللَّهِ الرَّحْمَٰنِ", hasFinalResult = true)
         assertEquals(3, result.matched)
