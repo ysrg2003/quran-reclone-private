@@ -37,6 +37,13 @@ The Arabic Mushaf-organization metadata in `app/src/main/assets/quran/quran-meta
 - Source: https://github.com/quran/quran.com-images
 - Generator code: GPL as stated in the upstream README.
 - Fonts and generated page resources: attributed by upstream to the King Fahd Quran Complex and subject to their terms. They must not be redistributed in an application until the applicable permission and attribution requirements are verified.
+- In this project, the repository is used only as an external, build-time comparison reference for page/line/ayah structure. Its pages, fonts, glyph data, and generated resources are not embedded in the APK. The extracted structural report is not a substitute for a license review.
+
+## Quran-PNG comparison reference
+
+- Source: https://github.com/GovarJabbar/Quran-PNG
+- The GitHub repository metadata inspected for the reference did not declare a license (`license: null`), and no clear LICENSE file was found in the inspected clone.
+- The local clone is used only for deterministic validation of page filenames, dimensions, and limited raster signals. The `001.png`–`604.png` files are not copied into the Android project and are not redistributed by this application. No permission to redistribute them should be inferred.
 
 ## sherpa-onnx
 

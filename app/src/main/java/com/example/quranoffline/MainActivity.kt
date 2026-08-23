@@ -64,7 +64,6 @@ import com.example.quranoffline.data.AssetMode
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranAyahMetadata
 import com.example.quranoffline.data.QuranViewModel
-import com.example.quranoffline.data.displayArabic
 import com.example.quranoffline.data.CorrectionPhase
 import com.example.quranoffline.data.CorrectionSettings
 import com.example.quranoffline.data.ResumePosition
@@ -257,6 +256,8 @@ private fun MemorizationScreen(
         item {
             Spacer(Modifier.height(10.dp))
             var surahMenuExpanded by remember { mutableStateOf(false) }
+            val visibleSurahNumbers = state.ayahs.map { it.surah }.distinct()
+            val visibleSurahLabel = visibleSurahLabel(state, visibleSurahNumbers)
             Card(
                 shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF123F35)),
@@ -268,8 +269,8 @@ private fun MemorizationScreen(
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("ورد اليوم", color = Color(0xFFB9D9C9), style = MaterialTheme.typography.labelLarge)
-                        Text("سورة ${state.metadata?.sura(state.selectedSurah)?.arabicName ?: state.selectedSurah}", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("آيات ${state.ayahs.firstOrNull()?.ayah ?: 0}–${state.ayahs.lastOrNull()?.ayah ?: 0} من ${state.totalAyahsInSurah}", color = Color(0xFFD7E9DF), style = MaterialTheme.typography.bodySmall)
+                        Text(visibleSurahLabel, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("صفحة ${state.currentPage}/${state.totalPages} • آيات ${visibleAyahRangeLabel(state)}", color = Color(0xFFD7E9DF), style = MaterialTheme.typography.bodySmall)
                     }
                     Box {
                         Button(
@@ -297,9 +298,10 @@ private fun MemorizationScreen(
             }
         }
         item {
-            Text("مصحف التدريب — السورة كاملة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF123F35))
+            Text("مصحف التدريب — صفحات المصحف 1–604", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF123F35))
         }
         item { MushafMetadataCard(state) }
+        item { MushafPageNavigationCard(state, onPreviousPage, onNextPage) }
         item { RecitationCard(state, onStart, onCorrection, onStopCorrection, onPreviousAyah) }
         if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
             item {
@@ -325,7 +327,7 @@ private fun MemorizationScreen(
             items = state.ayahs,
             key = { _, ayah -> "${ayah.surah}:${ayah.ayah}" },
         ) { index, ayah ->
-            val wordOffset = wordOffsets.getOrElse(index) { 0 }
+            val wordOffset = state.pageWordOffset + wordOffsets.getOrElse(index) { 0 }
             val ayahMetadata = state.metadata?.ayah(ayah.surah, ayah.ayah)
             val previousMetadata = if (index > 0) {
                 state.ayahs.getOrNull(index - 1)?.let { previous -> state.metadata?.ayah(previous.surah, previous.ayah) }
@@ -699,9 +701,31 @@ private fun GoalCard(
 }
 
 @Composable
+private fun MushafPageNavigationCard(
+    state: com.example.quranoffline.data.QuranUiState,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
+) {
+    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("صفحات المصحف", color = Color(0xFF183D33), fontWeight = FontWeight.Bold)
+            Text("الصفحة ${state.currentPage} من ${state.totalPages} — مطابقة بنيوية لترقيم الصفحات وتسلسل الآيات في مرجع التحقق؛ لا تُستخدم الصور داخل التطبيق.", color = Color(0xFF66736C), style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onPreviousPage, enabled = state.currentPage > 1, modifier = Modifier.weight(1f)) {
+                    Text("الصفحة السابقة")
+                }
+                Button(onClick = onNextPage, enabled = state.currentPage < state.totalPages, modifier = Modifier.weight(1f)) {
+                    Text("الصفحة التالية")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MushafMetadataCard(state: com.example.quranoffline.data.QuranUiState) {
     val metadata = state.metadata
-    val surah = metadata?.sura(state.selectedSurah)
+    val visibleSurahs = state.ayahs.map { it.surah }.distinct()
     val first = state.ayahs.firstOrNull()?.let { metadata?.ayah(it.surah, it.ayah) }
     val last = state.ayahs.lastOrNull()?.let { metadata?.ayah(it.surah, it.ayah) }
     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
@@ -709,9 +733,15 @@ private fun MushafMetadataCard(state: com.example.quranoffline.data.QuranUiState
             Text("تنظيم المصحف", color = Color(0xFF183D33), fontWeight = FontWeight.Bold)
             Text(
                 buildString {
-                    append(surah?.arabicName ?: "سورة ${state.selectedSurah}")
-                    surah?.revelationType?.let { append(" • ").append(it.displayArabic()) }
-                    surah?.ayahCount?.let { append(" • $it آية") }
+                    if (visibleSurahs.size <= 1) {
+                        val surah = visibleSurahs.firstOrNull()?.let { metadata?.sura(it) }
+                        append(surah?.arabicName ?: "سورة ${visibleSurahs.firstOrNull() ?: state.selectedSurah}")
+                        surah?.revelationType?.let { append(" • ").append(revelationLabel(it)) }
+                        surah?.ayahCount?.let { append(" • $it آية") }
+                    } else {
+                        append("السور: ")
+                        append(visibleSurahs.joinToString("، ") { metadata?.sura(it)?.arabicName ?: "سورة $it" })
+                    }
                 },
                 color = Color(0xFF36584B),
             )
@@ -742,7 +772,7 @@ private fun MushafBoundaryRow(metadata: QuranAyahMetadata) {
                 style = MaterialTheme.typography.bodySmall,
             )
             metadata.sajda?.let { sajda ->
-                Text(sajda.displayArabic(), color = Color(0xFF8A3D2E), style = MaterialTheme.typography.bodySmall)
+                Text(sajdaLabel(sajda), color = Color(0xFF8A3D2E), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -752,7 +782,33 @@ private fun isMushafBoundary(previous: QuranAyahMetadata, current: QuranAyahMeta
     previous.page != current.page || previous.juz != current.juz || previous.quarter != current.quarter ||
         previous.manzil != current.manzil || previous.ruku != current.ruku || previous.sajda != current.sajda
 
+private fun visibleSurahLabel(state: com.example.quranoffline.data.QuranUiState, surahs: List<Int>): String = when {
+    surahs.isEmpty() -> "المصحف"
+    surahs.size == 1 -> "سورة ${state.metadata?.sura(surahs.first())?.arabicName ?: surahs.first()}"
+    else -> "السور: ${surahs.joinToString("، ") { state.metadata?.sura(it)?.arabicName ?: "سورة $it" }}"
+}
+
+private fun visibleAyahRangeLabel(state: com.example.quranoffline.data.QuranUiState): String {
+    val first = state.ayahs.firstOrNull() ?: return "—"
+    val last = state.ayahs.lastOrNull() ?: return "${first.surah}:${first.ayah}"
+    return if (first.surah == last.surah) {
+        "${first.surah}:${first.ayah}–${last.ayah}"
+    } else {
+        "${first.surah}:${first.ayah}–${last.surah}:${last.ayah}"
+    }
+}
+
 private fun rangeLabel(first: Int, last: Int): String = if (first == last) "$first" else "$first–$last"
+
+private fun revelationLabel(type: com.example.quranoffline.data.RevelationType): String = when (type) {
+    com.example.quranoffline.data.RevelationType.MECCAN -> "مكية"
+    com.example.quranoffline.data.RevelationType.MEDINAN -> "مدنية"
+}
+
+private fun sajdaLabel(type: com.example.quranoffline.data.SajdaType): String = when (type) {
+    com.example.quranoffline.data.SajdaType.RECOMMENDED -> "سجدة تلاوة مستحبة"
+    com.example.quranoffline.data.SajdaType.OBLIGATORY -> "سجدة تلاوة واجبة"
+}
 
 private fun quarterLabel(quarter: Int): String {
     val hizb = ((quarter - 1) / 4) + 1
@@ -869,7 +925,8 @@ private fun RecitationCard(
                 CorrectionPhase.LISTENING -> Unit
             }
             if (state.listening && state.currentAyahIndex >= 0) {
-                val ayahNumber = state.ayahs.getOrNull(state.currentAyahIndex)?.ayah
+                val currentAyah = state.allAyahs.getOrNull(state.currentAyahIndex)
+                val ayahNumber = currentAyah?.ayah
                 if (ayahNumber != null) {
                     Text("الآية المتوقعة: $ayahNumber • الكلمة التالية: ${state.currentWordInAyah + 1}", color = Color(0xFFD7E9DF))
                 }
@@ -878,7 +935,8 @@ private fun RecitationCard(
                 Text("Offline غير متاح بأمان على هذا الهاتف 32-bit؛ استخدم Online أو هاتفاً 64-bit.", color = Color(0xFFFFE1B5))
             }
             if (state.listening && !state.correctionPlaying && state.currentAyahIndex > 0) {
-                val previousAyahNumber = state.ayahs.getOrNull(state.currentAyahIndex - 1)?.ayah
+                val previousAyah = state.allAyahs.getOrNull(state.currentAyahIndex - 1)
+                val previousAyahNumber = previousAyah?.ayah
                 if (previousAyahNumber != null) {
                     OutlinedButton(onClick = onPreviousAyah, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Refresh, null, tint = Color.White)

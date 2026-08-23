@@ -10,13 +10,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val AYAH_PAGE_SIZE = 8
-
 enum class AssetMode { STREAM, DOWNLOAD }
 enum class RecitationEngine { ONLINE, OFFLINE }
 
 data class QuranUiState(
     val ayahs: List<QuranAyah> = emptyList(),
+    val allAyahs: List<QuranAyah> = emptyList(),
     val metadata: QuranMetadata? = null,
     val hidden: Boolean = false,
     val listening: Boolean = false,
@@ -40,7 +39,9 @@ data class QuranUiState(
     val correctionAyahIndex: Int = -1,
     val correctionFirstWordInAyah: Int = -1,
     val selectedSurah: Int = 1,
-    val currentPage: Int = 0,
+    val currentPage: Int = 1,
+    val totalPages: Int = 604,
+    val pageWordOffset: Int = 0,
     val totalAyahsInSurah: Int = 7,
     val mode: AssetMode = AssetMode.STREAM,
     val downloadInProgress: Boolean = false,
@@ -54,7 +55,9 @@ data class QuranUiState(
 private data class PreparedAssets(
     val repository: QuranRepository,
     val metadata: QuranMetadata,
+    val allAyahs: List<QuranAyah>,
     val ayahs: List<QuranAyah>,
+    val pageWordOffset: Int,
     val selectedSurah: Int,
     val totalAyahs: Int,
     val downloadedAyahs: Int,
@@ -88,7 +91,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: State<QuranUiState> = state
 
     private val targetWords: List<QuranWord>
-        get() = state.value.ayahs.flatMap { it.words }
+        get() = state.value.allAyahs.flatMap { it.words }
 
     init { loadAssets(AssetMode.STREAM) }
 
@@ -138,13 +141,18 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     val parsedMetadata = metadataRepository.load()
                     parsedMetadata.requireCompatible(parsedRepository.allAyahs())
                     timingRepository.update(timings)
-                    val requested = parsedRepository.ayahsForSurah(requestedSurah).ifEmpty { parsedRepository.ayahsForSurah(1) }
-                    val selectedSurah = requested.firstOrNull()?.surah ?: 1
+                    val allAyahs = parsedRepository.allAyahs()
+                    val requestedSurahAyahs = parsedRepository.ayahsForSurah(requestedSurah).ifEmpty { parsedRepository.ayahsForSurah(1) }
+                    val selectedSurah = requestedSurahAyahs.firstOrNull()?.surah ?: 1
                     val totalAyahs = parsedRepository.ayahsForSurah(selectedSurah).size
+                    val initialPage = parsedMetadata.ayah(selectedSurah, 1)?.page ?: 1
+                    val visiblePage = page(allAyahs, parsedMetadata, initialPage)
                     PreparedAssets(
                         repository = parsedRepository,
                         metadata = parsedMetadata,
-                        ayahs = requested,
+                        allAyahs = allAyahs,
+                        ayahs = visiblePage,
+                        pageWordOffset = globalWordOffset(allAyahs, visiblePage.firstOrNull()),
                         selectedSurah = selectedSurah,
                         totalAyahs = totalAyahs,
                         downloadedAyahs = assetManager.downloadedAyahCount(selectedSurah, totalAyahs),
@@ -153,7 +161,10 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 repository = prepared.repository
                 state.value = state.value.copy(
-                    ayahs = prepared.ayahs, metadata = prepared.metadata, selectedSurah = prepared.selectedSurah, currentPage = 0,
+                    ayahs = prepared.ayahs, allAyahs = prepared.allAyahs, metadata = prepared.metadata, selectedSurah = prepared.selectedSurah,
+                    currentPage = prepared.metadata.ayah(prepared.selectedSurah, 1)?.page ?: 1,
+                    totalPages = prepared.metadata.pages.size,
+                    pageWordOffset = prepared.pageWordOffset,
                     totalAyahsInSurah = prepared.totalAyahs,
                     loadingAssets = false, assetsReady = true,
                     downloadedAyahs = prepared.downloadedAyahs,
@@ -168,19 +179,54 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectSurah(surah: Int) {
         val surahAyahs = repository.ayahsForSurah(surah)
+        val metadata = state.value.metadata ?: return
         if (surahAyahs.isEmpty()) return
-        state.value = state.value.copy(ayahs = surahAyahs, selectedSurah = surah, currentPage = 0, totalAyahsInSurah = surahAyahs.size, downloadedAyahs = assetManager.downloadedAyahCount(surah, surahAyahs.size), hidden = false, transcript = "", evaluation = null, currentWordIndex = -1, currentSpokenWord = null, currentSpokenWordIndex = -1, recitationCursor = 0, notice = "تم اختيار السورة $surah من المستودع العام.")
+        stopListening()
+        val pageNumber = metadata.ayah(surah, 1)?.page ?: 1
+        showPage(pageNumber, notice = "تم اختيار السورة ${metadata.sura(surah)?.arabicName ?: surah} من المصحف.")
+        state.value = state.value.copy(
+            selectedSurah = surah,
+            totalAyahsInSurah = surahAyahs.size,
+            downloadedAyahs = assetManager.downloadedAyahCount(surah, surahAyahs.size),
+        )
     }
 
     fun nextPage() {
-        val next = state.value.currentPage + 1
-        if (next * AYAH_PAGE_SIZE >= state.value.totalAyahsInSurah) return
-        state.value = state.value.copy(ayahs = page(repository.ayahsForSurah(state.value.selectedSurah), next), currentPage = next, hidden = false, transcript = "", evaluation = null, currentWordIndex = -1, currentSpokenWord = null, currentSpokenWordIndex = -1, recitationCursor = 0)
+        if (state.value.currentPage >= state.value.totalPages) return
+        stopListening()
+        showPage(state.value.currentPage + 1)
     }
 
     fun previousPage() {
-        val previous = (state.value.currentPage - 1).coerceAtLeast(0)
-        state.value = state.value.copy(ayahs = page(repository.ayahsForSurah(state.value.selectedSurah), previous), currentPage = previous, hidden = false, transcript = "", evaluation = null, currentWordIndex = -1, currentSpokenWord = null, currentSpokenWordIndex = -1, recitationCursor = 0)
+        if (state.value.currentPage <= 1) return
+        stopListening()
+        showPage(state.value.currentPage - 1)
+    }
+
+    private fun showPage(pageNumber: Int, notice: String? = null) {
+        val metadata = state.value.metadata ?: return
+        val actualPage = pageNumber.coerceIn(1, metadata.pages.size)
+        val visible = page(state.value.allAyahs, metadata, actualPage)
+        val pageSurah = visible.firstOrNull()?.surah ?: state.value.selectedSurah
+        val pageSurahAyahs = state.value.allAyahs.filter { it.surah == pageSurah }
+        state.value = state.value.copy(
+            ayahs = visible,
+            selectedSurah = pageSurah,
+            totalAyahsInSurah = pageSurahAyahs.size,
+            downloadedAyahs = assetManager.downloadedAyahCount(pageSurah, pageSurahAyahs.size),
+            currentPage = actualPage,
+            pageWordOffset = globalWordOffset(state.value.allAyahs, visible.firstOrNull()),
+            hidden = false,
+            transcript = "",
+            evaluation = null,
+            currentWordIndex = -1,
+            currentSpokenWord = null,
+            currentSpokenWordIndex = -1,
+            currentAyahIndex = -1,
+            currentWordInAyah = -1,
+            recitationCursor = globalWordOffset(state.value.allAyahs, visible.firstOrNull()),
+            notice = notice ?: "صفحة $actualPage من ${state.value.totalPages}.",
+        )
     }
 
     fun downloadCurrentSurah() {
@@ -211,25 +257,39 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startListening() {
         if (!state.value.assetsReady) { state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً."); return }
+        if (state.value.allAyahs.isEmpty() || state.value.metadata == null) { state.value = state.value.copy(notice = "تعذر تجهيز ترتيب صفحات المصحف."); return }
         if (state.value.engine == RecitationEngine.OFFLINE && !state.value.offlineSupported) {
             state.value = state.value.copy(listening = false, notice = offlineUnavailableMessage())
             return
         }
         if (state.value.engine == RecitationEngine.OFFLINE && !state.value.modelReady) { state.value = state.value.copy(notice = "نزّل نموذج FastConformer أولاً لتفعيل التسميع Offline."); return }
         if (state.value.listening || state.value.correctionPlaying) return
-        progressTracker = RecitationProgressTracker(state.value.ayahs, correctionSettings = state.value.correctionSettings)
+        val metadata = state.value.metadata ?: return
+        val pageStart = QuranPageLayout.firstAyahIndexOnPage(state.value.allAyahs, metadata, state.value.currentPage)
+        val selectedSurahStart = state.value.allAyahs.indexOfFirst { ayah ->
+            ayah.surah == state.value.selectedSurah && ayah.ayah == 1
+        }
+        val startAyahIndex = (if (pageStart >= 0) pageStart else selectedSurahStart).coerceAtLeast(0)
+        val tracker = RecitationProgressTracker(state.value.allAyahs, correctionSettings = state.value.correctionSettings)
+        tracker.startFromAyah(startAyahIndex)
+        progressTracker = tracker
+        val startPage = pageForAyahIndex(startAyahIndex)
+        val startVisibleAyahs = page(state.value.allAyahs, state.value.metadata!!, startPage)
         activeCorrection = null
         correctionWasListening = false
         state.value = state.value.copy(
+            ayahs = startVisibleAyahs,
+            currentPage = startPage,
+            pageWordOffset = globalWordOffset(state.value.allAyahs, startVisibleAyahs.firstOrNull()),
             listening = true,
             transcript = "",
             evaluation = null,
-            currentWordIndex = -1,
+            currentWordIndex = tracker.globalWordIndex(startAyahIndex, 0) ?: -1,
             currentSpokenWord = null,
             currentSpokenWordIndex = -1,
-            currentAyahIndex = 0,
+            currentAyahIndex = startAyahIndex,
             currentWordInAyah = 0,
-            recitationCursor = 0,
+            recitationCursor = tracker.globalWordIndex(startAyahIndex, 0) ?: 0,
             correctionPlaying = false,
             correctionPhase = CorrectionPhase.LISTENING,
             correctionMessage = null,
@@ -260,18 +320,23 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً.")
             return
         }
-        if (currentAyah <= 0 || currentAyah !in state.value.ayahs.indices || state.value.correctionPlaying) return
+        if (currentAyah <= 0 || currentAyah !in state.value.allAyahs.indices || state.value.correctionPlaying) return
         val previousAyahIndex = currentAyah - 1
         referenceAudioPlayer.stop()
         recognitionGeneration++
         onlineSession?.stop(); onlineSession = null
         localSession?.stop(); localSession = null
-        val tracker = RecitationProgressTracker(state.value.ayahs, correctionSettings = state.value.correctionSettings)
+        val tracker = RecitationProgressTracker(state.value.allAyahs, correctionSettings = state.value.correctionSettings)
         tracker.startFromAyah(previousAyahIndex)
         progressTracker = tracker
         activeCorrection = null
         correctionWasListening = false
+        val previousPage = pageForAyahIndex(previousAyahIndex)
+        val previousVisibleAyahs = page(state.value.allAyahs, state.value.metadata!!, previousPage)
         state.value = state.value.copy(
+            ayahs = previousVisibleAyahs,
+            currentPage = previousPage,
+            pageWordOffset = globalWordOffset(state.value.allAyahs, previousVisibleAyahs.firstOrNull()),
             listening = true,
             transcript = "",
             evaluation = null,
@@ -286,7 +351,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             correctionMessage = null,
             correctionAyahIndex = -1,
             correctionFirstWordInAyah = -1,
-            notice = "بدأت جلسة جديدة من الآية ${state.value.ayahs[previousAyahIndex].ayah}.",
+            notice = "بدأت جلسة جديدة من السورة ${state.value.allAyahs[previousAyahIndex].surah}، الآية ${state.value.allAyahs[previousAyahIndex].ayah}.",
         )
         startRecognitionSession()
     }
@@ -297,7 +362,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             RecognitionUpdate.Started -> Unit
             is RecognitionUpdate.Text -> {
                 val previousState = state.value
-                val tracker = progressTracker ?: RecitationProgressTracker(previousState.ayahs, correctionSettings = previousState.correctionSettings).also { progressTracker = it }
+                val tracker = progressTracker ?: RecitationProgressTracker(previousState.allAyahs, correctionSettings = previousState.correctionSettings).also { progressTracker = it }
                 val result = tracker.update(
                     RecitationProgressInput(
                         transcript = update.value,
@@ -308,7 +373,13 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val correction = result.correction
                 val currentTarget = correction?.let { tracker.globalWordIndex(it.ayahIndex, it.localWordIndex) }
                     ?: result.currentGlobalWordIndex.takeIf { it < targetWords.size }
+                val resolvedAyah = previousState.allAyahs.getOrNull(result.currentAyahIndex)
+                val resolvedPage = resolvedAyah?.let { previousState.metadata?.ayah(it.surah, it.ayah)?.page } ?: previousState.currentPage
+                val resolvedVisibleAyahs = previousState.metadata?.let { page(previousState.allAyahs, it, resolvedPage) } ?: previousState.ayahs
                 state.value = previousState.copy(
+                    ayahs = resolvedVisibleAyahs,
+                    currentPage = resolvedPage,
+                    pageWordOffset = globalWordOffset(previousState.allAyahs, resolvedVisibleAyahs.firstOrNull()),
                     transcript = update.value,
                     evaluation = result.evaluation,
                     currentWordIndex = currentTarget ?: -1,
@@ -363,7 +434,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val globalWordIndex = state.value.currentWordIndex
         if (globalWordIndex < 0 || activeCorrection != null) return
         val location = locateWord(globalWordIndex) ?: return
-        val ayahIndex = state.value.ayahs.indexOfFirst { it.surah == location.first.surah && it.ayah == location.first.ayah }
+        val ayahIndex = state.value.allAyahs.indexOfFirst { it.surah == location.first.surah && it.ayah == location.first.ayah }
         if (ayahIndex < 0) return
         val request = CorrectionRequest(
             CorrectionKind.WRONG_WORD,
@@ -380,7 +451,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun playCorrection(request: CorrectionRequest) {
-        val ayah = state.value.ayahs.getOrNull(request.ayahIndex) ?: return finishCorrectionPlayback()
+        val ayah = state.value.allAyahs.getOrNull(request.ayahIndex) ?: return finishCorrectionPlayback()
         val timings = timingRepository.forAyah(ayah.surah, ayah.ayah)
         val firstWord = timings.firstOrNull { request.localWordIndex in it.wordStart until it.wordEnd }
             ?: return finishCorrectionPlayback()
@@ -450,7 +521,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun correctionMessage(request: CorrectionRequest): String {
-        val ayah = state.value.ayahs.getOrNull(request.ayahIndex)
+        val ayah = state.value.allAyahs.getOrNull(request.ayahIndex)
         val word = ayah?.words?.getOrNull(request.localWordIndex)?.text.orEmpty()
         val settings = state.value.correctionSettings
         return when (request.kind) {
@@ -471,7 +542,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun locateWord(globalWordIndex: Int): Pair<QuranAyah, Int>? {
         var remaining = globalWordIndex
-        state.value.ayahs.forEach { ayah ->
+        state.value.allAyahs.forEach { ayah ->
             if (remaining < ayah.words.size) return ayah to remaining
             remaining -= ayah.words.size
         }
@@ -537,5 +608,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun offlineUnavailableMessage(): String = "التسميع Offline غير متاح بأمان على هذا الهاتف؛ النظام يعمل 32-bit، وظهر انهيار native داخل محرك FastConformer. استخدم Online أو هاتفاً 64-bit."
 
-    private fun page(ayahs: List<QuranAyah>, page: Int): List<QuranAyah> = ayahs.drop(page * AYAH_PAGE_SIZE).take(AYAH_PAGE_SIZE)
+    private fun page(ayahs: List<QuranAyah>, metadata: QuranMetadata, pageNumber: Int): List<QuranAyah> =
+        QuranPageLayout.ayahsOnPage(ayahs, metadata, pageNumber)
+
+    private fun globalWordOffset(allAyahs: List<QuranAyah>, firstVisibleAyah: QuranAyah?): Int =
+        QuranPageLayout.globalWordOffset(allAyahs, firstVisibleAyah)
+
+    private fun pageForAyahIndex(index: Int): Int {
+        val metadata = state.value.metadata ?: return state.value.currentPage
+        return QuranPageLayout.pageForAyahIndex(state.value.allAyahs, metadata, index, state.value.currentPage)
+    }
 }

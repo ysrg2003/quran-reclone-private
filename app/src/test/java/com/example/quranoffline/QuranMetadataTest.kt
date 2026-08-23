@@ -2,6 +2,8 @@ package com.example.quranoffline
 
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranMetadata
+import com.example.quranoffline.data.QuranPageLayout
+import com.example.quranoffline.data.QuranWord
 import com.example.quranoffline.data.RevelationType
 import com.example.quranoffline.data.SajdaType
 import org.junit.Assert.assertEquals
@@ -63,6 +65,48 @@ class QuranMetadataTest {
     }
 
     @Test
+    fun metadataPagesExposeExpectedCanonicalBoundaries() {
+        val metadata = load()
+        val ayahs = canonicalAyahs(metadata)
+
+        assertEquals(listOf("1:1", "1:2", "1:3", "1:4", "1:5", "1:6", "1:7"), keys(QuranPageLayout.ayahsOnPage(ayahs, metadata, 1)))
+        assertEquals((1..5).map { "2:$it" }, keys(QuranPageLayout.ayahsOnPage(ayahs, metadata, 2)))
+        assertEquals((6..16).map { "2:$it" }, keys(QuranPageLayout.ayahsOnPage(ayahs, metadata, 3)))
+        assertEquals((54..61).map { "18:$it" }, keys(QuranPageLayout.ayahsOnPage(ayahs, metadata, 300)))
+
+        val lastPage = QuranPageLayout.ayahsOnPage(ayahs, metadata, 604)
+        assertEquals(3, lastPage.map { it.surah }.distinct().size)
+        assertEquals(
+            listOf("112:1", "112:2", "112:3", "112:4", "113:1", "113:2", "113:3", "113:4", "113:5", "114:1", "114:2", "114:3", "114:4", "114:5", "114:6"),
+            keys(lastPage),
+        )
+        assertEquals("112:1", "${lastPage.first().surah}:${lastPage.first().ayah}")
+        assertEquals("114:6", "${lastPage.last().surah}:${lastPage.last().ayah}")
+    }
+
+    @Test
+    fun pageWordOffsetsUseTheCanonicalGlobalWordSequence() {
+        val metadata = load()
+        val ayahs = canonicalAyahs(metadata).mapIndexed { index, ayah ->
+            ayah.copy(words = List((index % 5) + 1) { wordIndex ->
+                QuranWord(index = wordIndex, text = "كلمة", matchText = "كلمة")
+            })
+        }
+
+        listOf(1, 2, 300, 604).forEach { pageNumber ->
+            val pageAyahs = QuranPageLayout.ayahsOnPage(ayahs, metadata, pageNumber)
+            val expectedOffset = ayahs.takeWhile { it !== pageAyahs.first() }.sumOf { it.words.size }
+            assertEquals(expectedOffset, QuranPageLayout.globalWordOffset(ayahs, pageAyahs.first()))
+        }
+        assertEquals(604, QuranPageLayout.pageForAyahIndex(ayahs, metadata, ayahs.lastIndex))
+        assertEquals(0, QuranPageLayout.firstAyahIndexOnPage(ayahs, metadata, 1))
+        assertEquals(7, QuranPageLayout.firstAyahIndexOnPage(ayahs, metadata, 2))
+        assertEquals(ayahs.indexOfFirst { it.surah == 2 && it.ayah == 6 }, QuranPageLayout.firstAyahIndexOnPage(ayahs, metadata, 3))
+        assertEquals(ayahs.indexOfFirst { it.surah == 18 && it.ayah == 54 }, QuranPageLayout.firstAyahIndexOnPage(ayahs, metadata, 300))
+        assertEquals(ayahs.indexOfFirst { it.surah == 112 && it.ayah == 1 }, QuranPageLayout.firstAyahIndexOnPage(ayahs, metadata, 604))
+    }
+
+    @Test
     fun metadataIsCompatibleWithCanonicalAyahSequence() {
         val metadata = load()
         val ayahs = metadata.suras.flatMap { sura ->
@@ -79,4 +123,18 @@ class QuranMetadataTest {
 
         metadata.requireCompatible(ayahs)
     }
+
+    private fun canonicalAyahs(metadata: QuranMetadata): List<QuranAyah> = metadata.suras.flatMap { sura ->
+        (1..sura.ayahCount).map { ayah ->
+            QuranAyah(
+                surah = sura.index,
+                ayah = ayah,
+                text = "",
+                matchText = "",
+                words = emptyList(),
+            )
+        }
+    }
+
+    private fun keys(ayahs: List<QuranAyah>): List<String> = ayahs.map { "${it.surah}:${it.ayah}" }
 }

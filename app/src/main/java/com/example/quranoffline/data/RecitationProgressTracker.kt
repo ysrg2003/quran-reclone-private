@@ -63,7 +63,11 @@ class RecitationProgressTracker(
         }
     }
     private val committedTokens = mutableListOf<String>()
-    private val judged = linkedMapOf<Int, WordEvaluation>()
+    private val evaluationWords = words.map { word -> WordEvaluation(word.text, null, WordStatus.UNCERTAIN) }.toMutableList()
+    private var matchedCount = 0
+    private var uncertainCount = evaluationWords.size
+    private var missingCount = 0
+    private var unexpectedCount = 0
     private var currentAyahIndex = 0
     private var nextWordInAyah = 0
     private var activeCorrectionKey: String? = null
@@ -79,7 +83,13 @@ class RecitationProgressTracker(
 
     fun reset() {
         committedTokens.clear()
-        judged.clear()
+        evaluationWords.forEachIndexed { index, word ->
+            evaluationWords[index] = WordEvaluation(word.expected, null, WordStatus.UNCERTAIN)
+        }
+        matchedCount = 0
+        uncertainCount = evaluationWords.size
+        missingCount = 0
+        unexpectedCount = 0
         currentAyahIndex = 0
         nextWordInAyah = 0
         activeCorrectionKey = null
@@ -394,23 +404,27 @@ class RecitationProgressTracker(
     }
 
     private fun acceptedGlobalWordIndex(token: String, fallback: Int): Int {
-        val candidates = words.indices.filter { quranWordMatches(words[it], token) }
-        return candidates.minByOrNull { kotlin.math.abs(it - fallback) } ?: fallback
+        if (currentAyahIndex !in ayahs.indices) return fallback
+        val start = ayahStarts[currentAyahIndex]
+        val candidates = ayahs[currentAyahIndex].words.indices.filter { local ->
+            quranWordMatches(ayahs[currentAyahIndex].words[local], token)
+        }
+        return candidates.minByOrNull { local -> kotlin.math.abs(start + local - fallback) }?.let(start::plus) ?: fallback
     }
 
     private fun markMatched(localIndex: Int, observed: String) {
         val global = globalWordIndex(currentAyahIndex, localIndex) ?: return
-        judged[global] = WordEvaluation(ayahs[currentAyahIndex].words[localIndex].text, observed, WordStatus.MATCHED)
+        setEvaluation(global, WordEvaluation(ayahs[currentAyahIndex].words[localIndex].text, observed, WordStatus.MATCHED))
     }
 
     private fun markMissing(localIndex: Int) {
         val global = globalWordIndex(currentAyahIndex, localIndex) ?: return
-        judged[global] = WordEvaluation(ayahs[currentAyahIndex].words[localIndex].text, null, WordStatus.MISSING)
+        setEvaluation(global, WordEvaluation(ayahs[currentAyahIndex].words[localIndex].text, null, WordStatus.MISSING))
     }
 
     private fun markWrong(localIndex: Int, observed: String) {
         val global = globalWordIndex(currentAyahIndex, localIndex) ?: return
-        judged[global] = WordEvaluation(ayahs[currentAyahIndex].words[localIndex].text, observed, WordStatus.EXTRA_OR_UNEXPECTED)
+        setEvaluation(global, WordEvaluation(ayahs[currentAyahIndex].words[localIndex].text, observed, WordStatus.EXTRA_OR_UNEXPECTED))
     }
 
     private fun correctionForIfEnabled(
@@ -469,18 +483,30 @@ class RecitationProgressTracker(
         return ayahStarts[currentAyahIndex] + nextWordInAyah.coerceAtMost(ayahs[currentAyahIndex].words.size)
     }
 
-    private fun buildEvaluation(): RecitationEvaluation {
-        val evaluations = words.mapIndexed { index, word ->
-            judged[index] ?: WordEvaluation(word.text, null, WordStatus.UNCERTAIN)
+    private fun setEvaluation(globalIndex: Int, evaluation: WordEvaluation) {
+        if (globalIndex !in evaluationWords.indices) return
+        when (evaluationWords[globalIndex].status) {
+            WordStatus.MATCHED -> matchedCount--
+            WordStatus.UNCERTAIN -> uncertainCount--
+            WordStatus.MISSING -> missingCount--
+            WordStatus.EXTRA_OR_UNEXPECTED -> unexpectedCount--
         }
-        return RecitationEvaluation(
-            words = evaluations,
-            matched = evaluations.count { it.status == WordStatus.MATCHED },
-            uncertain = evaluations.count { it.status == WordStatus.UNCERTAIN },
-            missing = evaluations.count { it.status == WordStatus.MISSING },
-            unexpected = evaluations.count { it.status == WordStatus.EXTRA_OR_UNEXPECTED },
-        )
+        evaluationWords[globalIndex] = evaluation
+        when (evaluation.status) {
+            WordStatus.MATCHED -> matchedCount++
+            WordStatus.UNCERTAIN -> uncertainCount++
+            WordStatus.MISSING -> missingCount++
+            WordStatus.EXTRA_OR_UNEXPECTED -> unexpectedCount++
+        }
     }
+
+    private fun buildEvaluation(): RecitationEvaluation = RecitationEvaluation(
+        words = evaluationWords.toList(),
+        matched = matchedCount,
+        uncertain = uncertainCount,
+        missing = missingCount,
+        unexpected = unexpectedCount,
+    )
 
     private fun tokenize(text: String): List<String> = normalizeArabicForComparison(text)
         .split(' ')
