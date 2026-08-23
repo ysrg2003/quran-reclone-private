@@ -40,6 +40,15 @@ data class QuranUiState(
     val modelDownloading: Boolean = false,
 )
 
+private data class PreparedAssets(
+    val repository: QuranRepository,
+    val ayahs: List<QuranAyah>,
+    val selectedSurah: Int,
+    val totalAyahs: Int,
+    val downloadedAyahs: Int,
+    val modelReady: Boolean,
+)
+
 class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val assetManager = RemoteAssetManager(application)
     private var repository = QuranRepository(application)
@@ -88,18 +97,35 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadAssets(mode: AssetMode) {
         viewModelScope.launch {
             try {
-                val text = withContext(Dispatchers.IO) { if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadText() else assetManager.fetchText() }
-                val timings = withContext(Dispatchers.IO) { if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadTimings() else assetManager.fetchTimings() }
-                repository = QuranRepository(getApplication(), text)
-                timingRepository.update(timings)
-                val requested = repository.ayahsForSurah(state.value.selectedSurah).ifEmpty { repository.ayahsForSurah(1) }
-                val selectedSurah = requested.firstOrNull()?.surah ?: 1
+                val text = withContext(Dispatchers.IO) {
+                    if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadText() else assetManager.fetchText()
+                }
+                val timings = withContext(Dispatchers.IO) {
+                    if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadTimings() else assetManager.fetchTimings()
+                }
+                val requestedSurah = state.value.selectedSurah
+                val prepared = withContext(Dispatchers.Default) {
+                    val parsedRepository = QuranRepository(getApplication(), text)
+                    timingRepository.update(timings)
+                    val requested = parsedRepository.ayahsForSurah(requestedSurah).ifEmpty { parsedRepository.ayahsForSurah(1) }
+                    val selectedSurah = requested.firstOrNull()?.surah ?: 1
+                    val totalAyahs = parsedRepository.ayahsForSurah(selectedSurah).size
+                    PreparedAssets(
+                        repository = parsedRepository,
+                        ayahs = requested,
+                        selectedSurah = selectedSurah,
+                        totalAyahs = totalAyahs,
+                        downloadedAyahs = assetManager.downloadedAyahCount(selectedSurah, totalAyahs),
+                        modelReady = assetManager.isModelDownloaded(),
+                    )
+                }
+                repository = prepared.repository
                 state.value = state.value.copy(
-                    ayahs = page(requested, 0), selectedSurah = selectedSurah, currentPage = 0,
-                    totalAyahsInSurah = repository.ayahsForSurah(selectedSurah).size,
+                    ayahs = page(prepared.ayahs, 0), selectedSurah = prepared.selectedSurah, currentPage = 0,
+                    totalAyahsInSurah = prepared.totalAyahs,
                     loadingAssets = false, assetsReady = true,
-                    downloadedAyahs = assetManager.downloadedAyahCount(selectedSurah, repository.ayahsForSurah(selectedSurah).size),
-                    modelReady = assetManager.isModelDownloaded(),
+                    downloadedAyahs = prepared.downloadedAyahs,
+                    modelReady = prepared.modelReady,
                     notice = if (mode == AssetMode.STREAM) "البث المباشر فعال؛ النص والتوقيتات في الذاكرة فقط." else "وضع التنزيل فعال؛ الصوت يُحفظ فقط عندما تختار تنزيله.",
                 )
             } catch (error: Throwable) {
