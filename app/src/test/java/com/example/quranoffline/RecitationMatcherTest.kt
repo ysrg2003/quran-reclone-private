@@ -66,6 +66,48 @@ class RecitationMatcherTest {
     }
 
     @Test
+    fun repeatedPhraseUsesCurrentEarliestOccurrence() {
+        val repeated = listOf(
+            QuranWord(0, "بِسْمِ", "بسم"),
+            QuranWord(1, "اللَّهِ", "الله"),
+            QuranWord(2, "الرَّحْمَٰنِ", "الرحمن"),
+            QuranWord(3, "الرَّحِيمِ", "الرحيم"),
+            QuranWord(4, "الرَّحْمَٰنِ", "الرحمن"),
+            QuranWord(5, "الرَّحِيمِ", "الرحيم"),
+        )
+        val result = RecitationMatcher.evaluate(repeated, "الرحمن الرحيم", hasFinalResult = true)
+        assertEquals(2, result.matched)
+        assertEquals(WordStatus.MATCHED, result.words[2].status)
+        assertEquals(WordStatus.MATCHED, result.words[3].status)
+        assertEquals(WordStatus.MISSING, result.words[4].status)
+    }
+
+    @Test
+    fun preferredCursorChoosesCurrentRepeatedOccurrence() {
+        val repeated = listOf(
+            QuranWord(0, "بِسْمِ", "بسم"),
+            QuranWord(1, "الرَّحْمَٰنِ", "الرحمن"),
+            QuranWord(2, "الرَّحِيمِ", "الرحيم"),
+            QuranWord(3, "الرَّحْمَٰنِ", "الرحمن"),
+            QuranWord(4, "الرَّحِيمِ", "الرحيم"),
+        )
+        val result = RecitationMatcher.evaluate(repeated, "الرحمن الرحيم", hasFinalResult = true, preferredExpectedIndex = 3)
+        assertEquals(2, result.matched)
+        assertEquals(WordStatus.MATCHED, result.words[3].status)
+        assertEquals(WordStatus.MATCHED, result.words[4].status)
+    }
+
+    @Test
+    fun previousJudgementsArePreservedWhenNewSegmentArrives() {
+        val previous = RecitationMatcher.evaluate(expected, "بسم الله", hasFinalResult = true)
+        val current = RecitationMatcher.evaluate(expected, "الرحمن", hasFinalResult = false, preferredExpectedIndex = 2)
+        val merged = RecitationMatcher.mergePrevious(previous, current, preserveBeforeIndex = 2)
+        assertEquals(WordStatus.MATCHED, merged.words[0].status)
+        assertEquals(WordStatus.MATCHED, merged.words[1].status)
+        assertEquals(WordStatus.MATCHED, merged.words[2].status)
+    }
+
+    @Test
     fun diacriticsDoNotBreakBasicMatching() {
         val result = RecitationMatcher.evaluate(expected, "بِسْمِ اللَّهِ الرَّحْمَٰنِ", hasFinalResult = true)
         assertEquals(3, result.matched)

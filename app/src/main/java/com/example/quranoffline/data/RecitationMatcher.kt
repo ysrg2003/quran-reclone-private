@@ -32,13 +32,8 @@ data class RecitationEvaluation(
 }
 
 /**
- * Aligns the recognizer hypothesis with the expected Quran words instead of
- * comparing both lists by the same index. This preserves a later correct word
- * after a skipped word and marks the skipped expected word as missing.
- *
- * For a partial recognizer hypothesis, only expected words after the last
- * observed token remain uncertain. A deletion between two observed tokens is
- * already a real missing word and is reported immediately.
+ * Aligns speech with Quran words. Repeated words are resolved from the
+ * current recitation cursor first, not by an unrestricted global search.
  */
 object RecitationMatcher {
     private const val DELETE_COST = 1
@@ -59,13 +54,31 @@ object RecitationMatcher {
         val op: AlignmentOp,
     )
 
-    fun evaluate(expected: List<QuranWord>, observedText: String, hasFinalResult: Boolean = false): RecitationEvaluation {
+    fun evaluate(
+        expected: List<QuranWord>,
+        observedText: String,
+        hasFinalResult: Boolean = false,
+        preferredExpectedIndex: Int = 0,
+    ): RecitationEvaluation {
         val observed = normalizeArabicForMatch(observedText)
             .split(' ')
             .filter(String::isNotBlank)
+        if (expected.isEmpty()) return RecitationEvaluation(emptyList(), 0, 0, 0, observed.size)
+
         val expectedNormalized = expected.map { normalizeArabicForMatch(it.matchText) }
         val observedNormalized = observed.map(::normalizeArabicForMatch)
-        val steps = align(expectedNormalized, observedNormalized)
+        val preferred = preferredExpectedIndex.coerceIn(0, expected.lastIndex)
+        val firstObserved = observedNormalized.firstOrNull()
+        val matchingCandidates = if (firstObserved == null) emptyList() else expectedNormalized.indices.filter { expectedNormalized[it] == firstObserved }
+        val anchor = matchingCandidates.firstOrNull { it >= preferred }
+            ?: matchingCandidates.firstOrNull()
+            ?: preferred
+
+        val prefixSteps = (0 until anchor).map { AlignmentStep(AlignmentOp.DELETE, expectedIndex = it) }
+        val suffixSteps = alignGreedy(expectedNormalized.drop(anchor), observedNormalized).map { step ->
+            step.copy(expectedIndex = step.expectedIndex?.plus(anchor))
+        }
+        val steps = prefixSteps + suffixSteps
 
         val evaluations = arrayOfNulls<WordEvaluation>(expected.size)
         var matched = 0
@@ -78,31 +91,19 @@ object RecitationMatcher {
                 AlignmentOp.MATCH -> {
                     val expectedIndex = requireNotNull(step.expectedIndex)
                     val observedIndex = requireNotNull(step.observedIndex)
-                    evaluations[expectedIndex] = WordEvaluation(
-                        expected[expectedIndex].text,
-                        observed[observedIndex],
-                        WordStatus.MATCHED,
-                    )
+                    evaluations[expectedIndex] = WordEvaluation(expected[expectedIndex].text, observed[observedIndex], WordStatus.MATCHED)
                     matched++
                 }
                 AlignmentOp.SUBSTITUTE -> {
                     val expectedIndex = requireNotNull(step.expectedIndex)
                     val observedIndex = requireNotNull(step.observedIndex)
-                    evaluations[expectedIndex] = WordEvaluation(
-                        expected[expectedIndex].text,
-                        observed[observedIndex],
-                        WordStatus.EXTRA_OR_UNEXPECTED,
-                    )
+                    evaluations[expectedIndex] = WordEvaluation(expected[expectedIndex].text, observed[observedIndex], WordStatus.EXTRA_OR_UNEXPECTED)
                     unexpected++
                 }
                 AlignmentOp.DELETE -> {
                     val expectedIndex = requireNotNull(step.expectedIndex)
                     val hasLaterObservedToken = steps.drop(stepIndex + 1).any { it.observedIndex != null }
-                    val status = if (!hasFinalResult && !hasLaterObservedToken) {
-                        WordStatus.UNCERTAIN
-                    } else {
-                        WordStatus.MISSING
-                    }
+                    val status = if (!hasFinalResult && !hasLaterObservedToken) WordStatus.UNCERTAIN else WordStatus.MISSING
                     evaluations[expectedIndex] = WordEvaluation(expected[expectedIndex].text, null, status)
                     if (status == WordStatus.UNCERTAIN) uncertain++ else missing++
                 }
@@ -119,6 +120,72 @@ object RecitationMatcher {
         }
 
         return RecitationEvaluation(evaluations.map { requireNotNull(it) }, matched, uncertain, missing, unexpected)
+    }
+
+    /** Preserve already-judged words when a recognizer returns a shorter/rebased segment. */
+    fun mergePrevious(
+        previous: RecitationEvaluation?,
+        current: RecitationEvaluation,
+        preserveBeforeIndex: Int,
+    ): RecitationEvaluation {
+        if (previous == null || previous.words.size != current.words.size || preserveBeforeIndex <= 0) return current
+        val words = current.words.mapIndexed { index, word ->
+            if (index < preserveBeforeIndex) previous.words[index] else word
+        }
+        return summarize(words, current.unexpected)
+    }
+
+    private fun summarize(words: List<WordEvaluation>, unexpected: Int): RecitationEvaluation {
+        return RecitationEvaluation(
+            words = words,
+            matched = words.count { it.status == WordStatus.MATCHED },
+            uncertain = words.count { it.status == WordStatus.UNCERTAIN },
+            missing = words.count { it.status == WordStatus.MISSING },
+            unexpected = unexpected + words.count { it.status == WordStatus.EXTRA_OR_UNEXPECTED },
+        )
+    }
+
+    /**
+     * Walk from the current anchor and prefer the earliest local match. A
+     * global edit-distance backtrace can choose a later duplicate when two
+     * repeated Quran phrases have the same cost; this local walk cannot skip
+     * over an equal current word merely to reach a later duplicate.
+     */
+    private fun alignGreedy(expected: List<String>, observed: List<String>): List<AlignmentStep> {
+        val steps = mutableListOf<AlignmentStep>()
+        var i = 0
+        var j = 0
+        while (i < expected.size || j < observed.size) {
+            when {
+                i < expected.size && j < observed.size && expected[i] == observed[j] -> {
+                    steps += AlignmentStep(AlignmentOp.MATCH, i, j)
+                    i++
+                    j++
+                }
+                i + 1 < expected.size && j < observed.size && expected[i + 1] == observed[j] -> {
+                    steps += AlignmentStep(AlignmentOp.DELETE, expectedIndex = i)
+                    i++
+                }
+                i < expected.size && j + 1 < observed.size && expected[i] == observed[j + 1] -> {
+                    steps += AlignmentStep(AlignmentOp.INSERT, observedIndex = j)
+                    j++
+                }
+                i < expected.size && j < observed.size -> {
+                    steps += AlignmentStep(AlignmentOp.SUBSTITUTE, i, j)
+                    i++
+                    j++
+                }
+                i < expected.size -> {
+                    steps += AlignmentStep(AlignmentOp.DELETE, expectedIndex = i)
+                    i++
+                }
+                else -> {
+                    steps += AlignmentStep(AlignmentOp.INSERT, observedIndex = j)
+                    j++
+                }
+            }
+        }
+        return steps
     }
 
     private fun align(expected: List<String>, observed: List<String>): List<AlignmentStep> {

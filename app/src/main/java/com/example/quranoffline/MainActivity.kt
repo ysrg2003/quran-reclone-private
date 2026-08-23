@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
@@ -222,6 +225,15 @@ private fun MemorizationScreen(
     onDownloadModel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val wordOffsets = remember(state.ayahs) {
+        IntArray(state.ayahs.size).also { offsets ->
+            var offset = 0
+            state.ayahs.forEachIndexed { index, ayah ->
+                offsets[index] = offset
+                offset += ayah.words.size
+            }
+        }
+    }
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -272,82 +284,45 @@ private fun MemorizationScreen(
             }
         }
         item {
-            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("مصحف التدريب", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    var wordOffset = 0
-                    state.ayahs.forEach { ayah ->
-                        AyahBlock(
-                            ayah = ayah,
-                            hidden = state.hidden,
-                            evaluation = state.evaluation,
-                            wordOffset = wordOffset,
-                            listening = state.listening,
-                            currentSpokenWord = state.currentSpokenWord,
-                            currentSpokenWordIndex = state.currentSpokenWordIndex,
-                        )
-                        wordOffset += ayah.words.size
-                    }
-                    OutlinedButton(onClick = onToggleHidden, modifier = Modifier.fillMaxWidth()) {
-                        Icon(if (state.hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (state.hidden) "إظهار الآيات" else "إخفاء الآيات واختبرني")
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = onPreviousPage, modifier = Modifier.weight(1f)) { Text("السابق") }
-                        Button(onClick = onNextPage, modifier = Modifier.weight(1f)) { Text("التالي") }
-                    }
-                }
-            }
+            Text("مصحف التدريب — السورة كاملة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF123F35))
         }
+        item { RecitationCard(state, onStart, onCorrection, onStopCorrection) }
         if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
             item {
                 Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("الكلمة التي التقطها الجهاز", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
-                        Text(state.currentSpokenWord ?: "", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF246B57), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
-                        Text("يظهر آخر مقطع لفظي مؤكد أو جزئي أثناء إخفاء النص.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+                        Text("الكلمة الحالية", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+                        Text(state.currentSpokenWord.orEmpty(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF246B57), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+                        Text("تظهر الكلمة التي التقطها الجهاز، مع بقاء الكلمات السابقة ملوّنة داخل الآيات.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
                     }
                 }
             }
         }
         item {
-            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF183D33))) {
-                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Text("التسميع", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-                    Text(
-                        if (state.listening) {
-                            if (state.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
-                            else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك…"
-                        } else {
-                            if (state.engine == RecitationEngine.ONLINE) "ابدأ التلاوة؛ التعرف Online والتصحيح الصوتي يمكن بثه دون حفظ."
-                            else "ابدأ التلاوة؛ التعرف Offline محلي بعد تجهيز النموذج."
-                        },
-                        color = Color(0xFFD7E9DF),
+            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                OutlinedButton(onClick = onToggleHidden, modifier = Modifier.fillMaxWidth().padding(18.dp)) {
+                    Icon(if (state.hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (state.hidden) "إظهار الآيات" else "إخفاء الآيات واختبرني")
+                }
+            }
+        }
+        itemsIndexed(
+            items = state.ayahs,
+            key = { _, ayah -> "${ayah.surah}:${ayah.ayah}" },
+        ) { index, ayah ->
+            val wordOffset = wordOffsets.getOrElse(index) { 0 }
+            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                    AyahBlock(
+                        ayah = ayah,
+                        hidden = state.hidden,
+                        evaluation = state.evaluation,
+                        wordOffset = wordOffset,
+                        listening = state.listening,
+                        currentSpokenWord = state.currentSpokenWord,
+                        currentSpokenWordIndex = state.currentSpokenWordIndex,
                     )
-                    Button(
-                        onClick = onStart,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFD6B277)),
-                    ) {
-                        Icon(if (state.listening) Icons.Default.Pause else Icons.Default.Mic, null, tint = Color(0xFF183D33))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (state.listening) "إيقاف الجلسة" else "ابدأ التسميع", color = Color(0xFF183D33))
-                    }
-                    if (state.currentWordIndex >= 0) {
-                        OutlinedButton(
-                            onClick = if (state.correctionPlaying) onStopCorrection else onCorrection,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(if (state.correctionPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White)
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (state.correctionPlaying) "إيقاف التصحيح الصوتي" else "صحّح لي بصوت القارئ", color = Color.White)
-                        }
-                    }
-                    if (state.loadingAssets) {
-                        Text("جاري تحميل النص والتوقيتات…", color = Color(0xFFFFE1B5))
-                    }
                 }
             }
         }
@@ -420,10 +395,14 @@ private fun EngineCard(
                 color = Color(0xFF66736C),
             )
             if (state.engine == RecitationEngine.OFFLINE) {
-                Text(if (state.modelReady) "النموذج المحلي جاهز." else "النموذج المحلي غير موجود على الجهاز.", style = MaterialTheme.typography.labelMedium)
-                if (!state.modelReady) {
-                    Button(onClick = onDownloadModel, enabled = !state.modelDownloading, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (state.modelDownloading) "جاري تنزيل النموذج…" else "تنزيل نموذج Offline")
+                if (!state.offlineSupported) {
+                    Text("هذا الهاتف يعمل بنظام 32-bit، وقد تسبب تشغيل النموذج المحلي فيه بانهيار native. تم إيقاف التشغيل Offline لمنع إغلاق التطبيق.", color = Color(0xFF9B4D3C))
+                } else {
+                    Text(if (state.modelReady) "النموذج المحلي جاهز." else "النموذج المحلي غير موجود على الجهاز.", style = MaterialTheme.typography.labelMedium)
+                    if (!state.modelReady) {
+                        Button(onClick = onDownloadModel, enabled = !state.modelDownloading, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (state.modelDownloading) "جاري تنزيل النموذج…" else "تنزيل نموذج Offline")
+                        }
                     }
                 }
             }
@@ -508,6 +487,7 @@ private fun GoalCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AyahBlock(
     ayah: QuranAyah,
@@ -520,46 +500,100 @@ private fun AyahBlock(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
         Text("﴿${ayah.ayah}﴾", color = Color(0xFFB6844A), style = MaterialTheme.typography.labelMedium)
-        if (hidden) {
-            Row(
+        val wordFlow: @Composable () -> Unit = {
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ayah.words.forEachIndexed { index, _ ->
-                    val globalIndex = wordOffset + index
-                    val isCurrent = listening && globalIndex == currentSpokenWordIndex && !currentSpokenWord.isNullOrBlank()
-                    Surface(
-                        color = if (isCurrent) Color(0xFFDFF1E5) else Color.Transparent,
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text(
-                            text = if (isCurrent) currentSpokenWord.orEmpty() else "•",
-                            style = MaterialTheme.typography.headlineSmall,
-                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 2.dp),
-                        )
-                    }
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ayah.words.forEachIndexed { index, word ->
-                    val status = evaluation?.words?.getOrNull(wordOffset + index)?.status
+                    val globalIndex = wordOffset + index
+                    val wordEvaluation = evaluation?.words?.getOrNull(globalIndex)
+                    val status = wordEvaluation?.status
+                    val revealed = wordEvaluation?.observed != null
+                    val isCurrent = listening && globalIndex == currentSpokenWordIndex && !currentSpokenWord.isNullOrBlank()
                     val background = when (status) {
                         WordStatus.MATCHED -> Color(0xFFDFF1E5)
                         WordStatus.EXTRA_OR_UNEXPECTED -> Color(0xFFFFDDD8)
                         WordStatus.UNCERTAIN -> Color(0xFFFFF0C9)
                         WordStatus.MISSING -> Color(0xFFF0E6E0)
-                        null -> Color.Transparent
+                        null -> if (isCurrent) Color(0xFFDFF1E5) else Color.Transparent
+                    }
+                    val shownText = when {
+                        !hidden -> word.text
+                        revealed -> word.text
+                        isCurrent -> currentSpokenWord.orEmpty()
+                        else -> "•"
                     }
                     Surface(color = background, shape = RoundedCornerShape(8.dp)) {
-                        Text(word.text, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 3.dp, vertical = 2.dp))
+                        Text(
+                            text = shownText,
+                            color = if (hidden && !revealed && !isCurrent) Color(0xFF202A25) else Color(0xFF183D33),
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        )
                     }
                 }
+            }
+        }
+        wordFlow()
+    }
+}
+
+@Composable
+private fun RecitationCard(
+    state: com.example.quranoffline.data.QuranUiState,
+    onStart: () -> Unit,
+    onCorrection: () -> Unit,
+    onStopCorrection: () -> Unit,
+) {
+    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF183D33))) {
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("التسميع", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                if (state.listening) {
+                    if (state.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
+                    else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك…"
+                } else {
+                    if (state.engine == RecitationEngine.ONLINE) "ابدأ التلاوة؛ التعرف Online والتصحيح النصي يعملان دون حفظ صوتك."
+                    else "ابدأ التلاوة؛ التعرف Offline محلي بعد تجهيز النموذج."
+                },
+                color = Color(0xFFD7E9DF),
+            )
+            Button(
+                onClick = onStart,
+                enabled = state.engine != RecitationEngine.OFFLINE || state.offlineSupported,
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFD6B277)),
+            ) {
+                Icon(if (state.listening) Icons.Default.Pause else Icons.Default.Mic, null, tint = Color(0xFF183D33))
+                Spacer(Modifier.width(8.dp))
+                Text(if (state.listening) "إيقاف الجلسة" else "ابدأ التسميع", color = Color(0xFF183D33))
+            }
+            state.correctionMessage?.let { message ->
+                Text(message, color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
+            }
+            if (state.listening && state.currentAyahIndex >= 0) {
+                val ayahNumber = state.ayahs.getOrNull(state.currentAyahIndex)?.ayah
+                if (ayahNumber != null) {
+                    Text("الآية المتوقعة: $ayahNumber • الكلمة التالية: ${state.currentWordInAyah + 1}", color = Color(0xFFD7E9DF))
+                }
+            }
+            if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) {
+                Text("Offline غير متاح بأمان على هذا الهاتف 32-bit؛ استخدم Online أو هاتفاً 64-bit.", color = Color(0xFFFFE1B5))
+            }
+            if (state.currentWordIndex >= 0) {
+                OutlinedButton(
+                    onClick = if (state.correctionPlaying) onStopCorrection else onCorrection,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(if (state.correctionPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (state.correctionPlaying) "إيقاف التصحيح الصوتي" else "صحّح لي بصوت القارئ", color = Color.White)
+                }
+            }
+            if (state.loadingAssets) {
+                Text("جاري تحميل النص والتوقيتات…", color = Color(0xFFFFE1B5))
             }
         }
     }

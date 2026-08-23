@@ -1,6 +1,7 @@
 package com.example.quranoffline.data
 
 import android.app.Application
+import android.os.Build
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
@@ -28,7 +29,11 @@ data class QuranUiState(
     val currentWordIndex: Int = -1,
     val currentSpokenWord: String? = null,
     val currentSpokenWordIndex: Int = -1,
+    val currentAyahIndex: Int = -1,
+    val currentWordInAyah: Int = -1,
+    val recitationCursor: Int = 0,
     val correctionPlaying: Boolean = false,
+    val correctionMessage: String? = null,
     val selectedSurah: Int = 1,
     val currentPage: Int = 0,
     val totalAyahsInSurah: Int = 7,
@@ -38,6 +43,7 @@ data class QuranUiState(
     val engine: RecitationEngine = RecitationEngine.ONLINE,
     val modelReady: Boolean = false,
     val modelDownloading: Boolean = false,
+    val offlineSupported: Boolean = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
 )
 
 private data class PreparedAssets(
@@ -58,9 +64,15 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val referenceAudioPlayer = ReferenceAudioPlayer()
     private var onlineSession: OnlineSpeechSession? = null
     private var localSession: LocalRecitationSession? = null
-    private var lastCorrectionWord = -1
+    private var progressTracker: RecitationProgressTracker? = null
 
-    private val state = mutableStateOf(QuranUiState(sessions = store.list(), goal = goalStore.current()))
+    private val state = mutableStateOf(
+        QuranUiState(
+            sessions = store.list(),
+            goal = goalStore.current(),
+            offlineSupported = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
+        ),
+    )
     val uiState: State<QuranUiState> = state
 
     private val targetWords: List<QuranWord>
@@ -78,7 +90,12 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     fun setEngine(engine: RecitationEngine) {
         if (state.value.engine == engine) return
         stopListening()
-        state.value = state.value.copy(engine = engine, notice = if (engine == RecitationEngine.ONLINE) "سيستخدم التسميع SpeechRecognizer عبر الإنترنت." else "سيستخدم التسميع نموذج FastConformer المحلي؛ نزّله مرة واحدة أولاً.")
+        val notice = when {
+            engine == RecitationEngine.ONLINE -> "سيستخدم التسميع SpeechRecognizer عبر الإنترنت."
+            !state.value.offlineSupported -> offlineUnavailableMessage()
+            else -> "سيستخدم التسميع نموذج FastConformer المحلي؛ نزّله مرة واحدة أولاً."
+        }
+        state.value = state.value.copy(engine = engine, notice = notice, correctionMessage = null)
     }
 
     fun downloadOfflineModel() {
@@ -121,7 +138,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 repository = prepared.repository
                 state.value = state.value.copy(
-                    ayahs = page(prepared.ayahs, 0), selectedSurah = prepared.selectedSurah, currentPage = 0,
+                    ayahs = prepared.ayahs, selectedSurah = prepared.selectedSurah, currentPage = 0,
                     totalAyahsInSurah = prepared.totalAyahs,
                     loadingAssets = false, assetsReady = true,
                     downloadedAyahs = prepared.downloadedAyahs,
@@ -137,18 +154,18 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     fun selectSurah(surah: Int) {
         val surahAyahs = repository.ayahsForSurah(surah)
         if (surahAyahs.isEmpty()) return
-        state.value = state.value.copy(ayahs = page(surahAyahs, 0), selectedSurah = surah, currentPage = 0, totalAyahsInSurah = surahAyahs.size, downloadedAyahs = assetManager.downloadedAyahCount(surah, surahAyahs.size), hidden = false, transcript = "", evaluation = null, currentWordIndex = -1, notice = "تم اختيار السورة $surah من المستودع العام.")
+        state.value = state.value.copy(ayahs = surahAyahs, selectedSurah = surah, currentPage = 0, totalAyahsInSurah = surahAyahs.size, downloadedAyahs = assetManager.downloadedAyahCount(surah, surahAyahs.size), hidden = false, transcript = "", evaluation = null, currentWordIndex = -1, currentSpokenWord = null, currentSpokenWordIndex = -1, recitationCursor = 0, notice = "تم اختيار السورة $surah من المستودع العام.")
     }
 
     fun nextPage() {
         val next = state.value.currentPage + 1
         if (next * AYAH_PAGE_SIZE >= state.value.totalAyahsInSurah) return
-        state.value = state.value.copy(ayahs = page(repository.ayahsForSurah(state.value.selectedSurah), next), currentPage = next, hidden = false, transcript = "", evaluation = null, currentWordIndex = -1)
+        state.value = state.value.copy(ayahs = page(repository.ayahsForSurah(state.value.selectedSurah), next), currentPage = next, hidden = false, transcript = "", evaluation = null, currentWordIndex = -1, currentSpokenWord = null, currentSpokenWordIndex = -1, recitationCursor = 0)
     }
 
     fun previousPage() {
         val previous = (state.value.currentPage - 1).coerceAtLeast(0)
-        state.value = state.value.copy(ayahs = page(repository.ayahsForSurah(state.value.selectedSurah), previous), currentPage = previous, hidden = false, transcript = "", evaluation = null, currentWordIndex = -1)
+        state.value = state.value.copy(ayahs = page(repository.ayahsForSurah(state.value.selectedSurah), previous), currentPage = previous, hidden = false, transcript = "", evaluation = null, currentWordIndex = -1, currentSpokenWord = null, currentSpokenWordIndex = -1, recitationCursor = 0)
     }
 
     fun downloadCurrentSurah() {
@@ -179,10 +196,26 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startListening() {
         if (!state.value.assetsReady) { state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً."); return }
+        if (state.value.engine == RecitationEngine.OFFLINE && !state.value.offlineSupported) {
+            state.value = state.value.copy(listening = false, notice = offlineUnavailableMessage())
+            return
+        }
         if (state.value.engine == RecitationEngine.OFFLINE && !state.value.modelReady) { state.value = state.value.copy(notice = "نزّل نموذج FastConformer أولاً لتفعيل التسميع Offline."); return }
         if (state.value.listening) return
-        lastCorrectionWord = -1
-        state.value = state.value.copy(listening = true, transcript = "", evaluation = null, currentSpokenWord = null, currentSpokenWordIndex = -1, notice = if (state.value.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق." else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك.")
+        progressTracker = RecitationProgressTracker(state.value.ayahs)
+        state.value = state.value.copy(
+            listening = true,
+            transcript = "",
+            evaluation = null,
+            currentWordIndex = -1,
+            currentSpokenWord = null,
+            currentSpokenWordIndex = -1,
+            currentAyahIndex = 0,
+            currentWordInAyah = 0,
+            recitationCursor = 0,
+            correctionMessage = null,
+            notice = if (state.value.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق." else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك.",
+        )
         if (state.value.engine == RecitationEngine.ONLINE) {
             onlineSession = OnlineSpeechSession(getApplication(), ::handleRecognitionUpdate)
             onlineSession?.start()
@@ -196,41 +229,81 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         when (update) {
             RecognitionUpdate.Started -> Unit
             is RecognitionUpdate.Text -> {
-                val evaluation = RecitationMatcher.evaluate(targetWords, update.value, hasFinalResult = update.isFinal)
-                val firstProblem = evaluation.words.indexOfFirst { it.status != WordStatus.MATCHED }
-                val spokenWord = normalizeArabicForMatch(update.value).split(' ').filter(String::isNotBlank).lastOrNull()
-                val spokenWordIndex = evaluation.words.indexOfLast { it.observed != null }
-                state.value = state.value.copy(
-                    transcript = update.value,
-                    evaluation = evaluation,
-                    currentWordIndex = firstProblem,
-                    currentSpokenWord = spokenWord,
-                    currentSpokenWordIndex = spokenWordIndex,
-                    notice = if (state.value.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.",
+                val previousState = state.value
+                val tracker = progressTracker ?: RecitationProgressTracker(previousState.ayahs).also { progressTracker = it }
+                val result = tracker.update(
+                    RecitationProgressInput(
+                        transcript = update.value,
+                        isFinal = update.isFinal,
+                        segmentCompleted = update.segmentCompleted,
+                    ),
                 )
-                val problemStatus = evaluation.words.getOrNull(firstProblem)?.status
-                if (update.isFinal && firstProblem >= 0 && problemStatus in setOf(WordStatus.MISSING, WordStatus.EXTRA_OR_UNEXPECTED) && lastCorrectionWord != firstProblem) {
-                    lastCorrectionWord = firstProblem
-                    playCorrectionForCurrentWord()
+                val correction = result.correction
+                val currentTarget = correction?.let { tracker.globalWordIndex(it.ayahIndex, it.localWordIndex) }
+                    ?: result.currentGlobalWordIndex.takeIf { it < targetWords.size }
+                state.value = previousState.copy(
+                    transcript = update.value,
+                    evaluation = result.evaluation,
+                    currentWordIndex = currentTarget ?: -1,
+                    currentSpokenWord = result.spokenWord,
+                    currentSpokenWordIndex = result.spokenGlobalWordIndex,
+                    currentAyahIndex = result.currentAyahIndex,
+                    currentWordInAyah = result.currentWordInAyah,
+                    recitationCursor = result.currentGlobalWordIndex.coerceIn(0, targetWords.size),
+                    correctionMessage = correction?.let(::correctionMessage),
+                    notice = if (previousState.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.",
+                )
+                if (correction != null && (update.isFinal || update.segmentCompleted)) {
+                    playCorrection(correction)
                 }
             }
-            is RecognitionUpdate.Failed -> state.value = state.value.copy(listening = false, notice = update.message)
-            RecognitionUpdate.Stopped -> state.value = state.value.copy(listening = false, notice = "انتهت الجلسة. راجع المواضع غير المؤكدة قبل اعتماد النتيجة.")
+            is RecognitionUpdate.Failed -> {
+                progressTracker = null
+                state.value = state.value.copy(listening = false, notice = update.message)
+            }
+            RecognitionUpdate.Stopped -> {
+                progressTracker = null
+                state.value = state.value.copy(listening = false, notice = "انتهت الجلسة. راجع المواضع غير المؤكدة قبل اعتماد النتيجة.")
+            }
         }
     }
 
     fun playCorrectionForCurrentWord() {
-        val wordIndex = state.value.currentWordIndex
-        if (wordIndex < 0) return
-        val location = locateWord(wordIndex) ?: return
-        val (ayah, localWordIndex) = location
+        val globalWordIndex = state.value.currentWordIndex
+        if (globalWordIndex < 0) return
+        val location = locateWord(globalWordIndex) ?: return
+        val ayahIndex = state.value.ayahs.indexOfFirst { it.surah == location.first.surah && it.ayah == location.first.ayah }
+        if (ayahIndex < 0) return
+        playCorrection(CorrectionRequest(CorrectionKind.WRONG_WORD, ayahIndex, location.second, null, "manual:$globalWordIndex"))
+    }
+
+    private fun playCorrection(request: CorrectionRequest) {
+        val ayah = state.value.ayahs.getOrNull(request.ayahIndex) ?: return
+        val localWordIndex = request.localWordIndex
         val segment = timingRepository.forAyah(ayah.surah, ayah.ayah).firstOrNull { localWordIndex in it.wordStart until it.wordEnd } ?: return
         val localFile = assetManager.cachedAudioFile(ayah.surah, ayah.ayah)
-        if (state.value.mode == AssetMode.DOWNLOAD && localFile == null) { state.value = state.value.copy(notice = "نزّل صوت السورة الحالية أولاً، أو اختر وضع البث المباشر للتشغيل دون حفظ."); return }
-        state.value = state.value.copy(correctionPlaying = true, notice = "يُشغّل المقطع الصحيح ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…")
+        if (state.value.mode == AssetMode.DOWNLOAD && localFile == null) {
+            state.value = state.value.copy(notice = "نزّل صوت السورة الحالية أولاً، أو اختر وضع البث المباشر للتشغيل دون حفظ.")
+            return
+        }
+        state.value = state.value.copy(
+            correctionPlaying = true,
+            correctionMessage = correctionMessage(request),
+            notice = "يُشغّل المقطع الصحيح ${if (localFile != null) "من التخزين المحلي" else "بثاً دون حفظ"}…",
+        )
         val finished = { state.value = state.value.copy(correctionPlaying = false) }
         if (localFile != null) referenceAudioPlayer.playLocalFile(localFile.absolutePath, segment.startMs, segment.endMs, finished)
         else referenceAudioPlayer.playRemoteUrl(assetManager.audioUrl(ayah.surah, ayah.ayah), segment.startMs, segment.endMs, finished)
+    }
+
+    private fun correctionMessage(request: CorrectionRequest): String {
+        val ayah = state.value.ayahs.getOrNull(request.ayahIndex)
+        val word = ayah?.words?.getOrNull(request.localWordIndex)?.text.orEmpty()
+        return when (request.kind) {
+            CorrectionKind.WRONG_WORD -> "الكلمة تحتاج تصحيحاً: $word"
+            CorrectionKind.SKIPPED_WORD -> "تخطيت كلمة؛ أعد: $word"
+            CorrectionKind.FIRST_WORD_EXPECTED_AYAH -> "انتقلت إلى آية أخرى؛ ابدأ بالآية التالية من: $word"
+        }
     }
 
     private fun locateWord(globalWordIndex: Int): Pair<QuranAyah, Int>? {
@@ -247,6 +320,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     fun stopListening() {
         onlineSession?.stop(); onlineSession = null
         localSession?.stop(); localSession = null
+        progressTracker = null
         state.value = state.value.copy(listening = false)
     }
 
@@ -266,7 +340,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearSessions() { store.clear(); state.value = state.value.copy(sessions = emptyList(), notice = "حُذف سجل الجلسات المحلي.") }
 
-    override fun onCleared() { onlineSession?.stop(); localSession?.stop(); referenceAudioPlayer.stop(); super.onCleared() }
+    override fun onCleared() { onlineSession?.stop(); localSession?.stop(); progressTracker = null; referenceAudioPlayer.stop(); super.onCleared() }
+
+    private fun offlineUnavailableMessage(): String = "التسميع Offline غير متاح بأمان على هذا الهاتف؛ النظام يعمل 32-bit، وظهر انهيار native داخل محرك FastConformer. استخدم Online أو هاتفاً 64-bit."
 
     private fun page(ayahs: List<QuranAyah>, page: Int): List<QuranAyah> = ayahs.drop(page * AYAH_PAGE_SIZE).take(AYAH_PAGE_SIZE)
 }
