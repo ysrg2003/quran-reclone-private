@@ -16,7 +16,7 @@
 | الإيقاف اليدوي | `10_manual_stop.png` | عادت البطاقة إلى «ابدأ التسميع» بعد الضغط على «إيقاف الجلسة» |
 | اختيار Offline وجاهزية النموذج | `offline-after-select.png` | ظهر Offline والنموذج المحلي جاهز بعد إعادة تحميل الأصول من الوضع المحلي |
 | إعادة إنتاج إغلاق Offline في النسخة السابقة | `offline-real-start.png` + `offline-app-filtered-logcat.txt` | بدأ `AudioRecord` بنجاح، ثم حدث `SIGSEGV` داخل `libsherpa-onnx-jni.so` عند `OnlineRecognizer.decode`، وماتت العملية |
-| الحارس في APK النهائي | `offline-final-card-verified.png` | بعد تثبيت APK النهائي ذي SHA-256 `d590f246a8776aba3af183bec3e498f8810f0bc9421911f84ce3701a53f3f3d3` واختيار Offline فعلياً، ظهر تحذير 32-bit وبقي PID التطبيق `29014` دون SIGSEGV أو FATAL بعد محاولة الضغط |
+| الحارس في APK النهائي | `offline-final-card-verified.png` + `offline-final-start-after.png` | بعد تثبيت APK النهائي ذي SHA-256 `d590f246a8776aba3af183bec3e498f8810f0bc9421911f84ce3701a53f3f3d3` واختيار Offline فعلياً، ظهر تحذير 32-bit وزر «Offline غير متاح على هذا الهاتف». بعد العودة إلى بطاقة التلاوة والضغط على موضع البدء بقيت الحالة محمية، وبقي PID التطبيق `29014` دون SIGSEGV أو FATAL |
 
 ## ملاحظات
 
@@ -28,7 +28,7 @@
 
 النموذج على الهاتف مكتمل: `encoder.int8.onnx` بحجم 131,769,938 بايت، و`decoder.int8.onnx` بحجم 5,402,382 بايت، و`joiner.int8.onnx` بحجم 5,401,832 بايت، و`tokens.txt` بحجم 12,858 بايت. الهاتف يعلن `armeabi-v7a` و`zygote32` فقط. لذلك فشل `try/catch` ليس حماية كافية؛ السجل يثبت إشارة native رقم 11 من داخل مكتبة sherpa أثناء أول `decode`، وليس خطأ ملف مفقوداً أو رفض صلاحية الميكروفون.
 
-أضيف في commit `3d6414a` حارس قدرة يمنع تشغيل FastConformer على جهاز 32-bit المتسبب في الإغلاق، ويعرض للمستخدم أن Offline غير متاح بأمان على هذا الهاتف بدلاً من fallback صامت إلى Online. ثم حُسنت صياغة الحالة المرئية في APK النهائي، وبُنيت واختُبرت الوحدة وlint، وثُبت APK النهائي على الهاتف. لقطة `offline-final-card-verified.png` تثبت ظهور التحذير بعد اختيار Offline فعلياً، وبقاء العملية بعد محاولة الضغط.
+أضيف في commit `3d6414a` حارس قدرة يمنع تشغيل FastConformer على جهاز 32-bit المتسبب في الإغلاق، ويعرض للمستخدم أن Offline غير متاح بأمان على هذا الهاتف بدلاً من fallback صامت إلى Online. ثم حُسنت صياغة الحالة المرئية في APK النهائي، وبُنيت واختُبرت الوحدة وlint، وثُبت APK النهائي على الهاتف. لقطتا `offline-final-card-verified.png` و`offline-final-start-after.png` تثبتان ظهور التحذير وتعطيل بدء الجلسة بعد اختيار Offline فعلياً، وبقاء العملية بعد محاولة الضغط.
 
 ## ما بقي مؤجلاً
 
