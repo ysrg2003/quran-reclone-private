@@ -26,6 +26,8 @@ data class QuranUiState(
     val sessions: List<SessionSummary> = emptyList(),
     val goal: DailyGoal = DailyGoal(targetAyahs = 3, completedAyahs = 0, day = ""),
     val currentWordIndex: Int = -1,
+    val currentSpokenWord: String? = null,
+    val currentSpokenWordIndex: Int = -1,
     val correctionPlaying: Boolean = false,
     val selectedSurah: Int = 1,
     val currentPage: Int = 0,
@@ -153,7 +155,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         if (!state.value.assetsReady) { state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً."); return }
         if (state.value.engine == RecitationEngine.OFFLINE && !state.value.modelReady) { state.value = state.value.copy(notice = "نزّل نموذج FastConformer أولاً لتفعيل التسميع Offline."); return }
         if (state.value.listening) return
-        state.value = state.value.copy(listening = true, transcript = "", evaluation = null, notice = if (state.value.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق." else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك.")
+        lastCorrectionWord = -1
+        state.value = state.value.copy(listening = true, transcript = "", evaluation = null, currentSpokenWord = null, currentSpokenWordIndex = -1, notice = if (state.value.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق." else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك.")
         if (state.value.engine == RecitationEngine.ONLINE) {
             onlineSession = OnlineSpeechSession(getApplication(), ::handleRecognitionUpdate)
             onlineSession?.start()
@@ -167,10 +170,20 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         when (update) {
             RecognitionUpdate.Started -> Unit
             is RecognitionUpdate.Text -> {
-                val evaluation = RecitationMatcher.evaluate(targetWords, update.value)
+                val evaluation = RecitationMatcher.evaluate(targetWords, update.value, hasFinalResult = update.isFinal)
                 val firstProblem = evaluation.words.indexOfFirst { it.status != WordStatus.MATCHED }
-                state.value = state.value.copy(transcript = update.value, evaluation = evaluation, currentWordIndex = firstProblem, notice = if (state.value.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.")
-                if (firstProblem >= 0 && evaluation.words[firstProblem].status == WordStatus.EXTRA_OR_UNEXPECTED && lastCorrectionWord != firstProblem) {
+                val spokenWord = normalizeArabicForMatch(update.value).split(' ').filter(String::isNotBlank).lastOrNull()
+                val spokenWordIndex = evaluation.words.indexOfLast { it.observed != null }
+                state.value = state.value.copy(
+                    transcript = update.value,
+                    evaluation = evaluation,
+                    currentWordIndex = firstProblem,
+                    currentSpokenWord = spokenWord,
+                    currentSpokenWordIndex = spokenWordIndex,
+                    notice = if (state.value.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.",
+                )
+                val problemStatus = evaluation.words.getOrNull(firstProblem)?.status
+                if (update.isFinal && firstProblem >= 0 && problemStatus in setOf(WordStatus.MISSING, WordStatus.EXTRA_OR_UNEXPECTED) && lastCorrectionWord != firstProblem) {
                     lastCorrectionWord = firstProblem
                     playCorrectionForCurrentWord()
                 }

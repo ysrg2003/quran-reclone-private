@@ -32,46 +32,147 @@ data class RecitationEvaluation(
 }
 
 /**
- * Conservative closed-text matcher. It never invents a missing word when the
- * recognizer has not emitted enough tokens, so a partial/low-confidence stream
- * is shown as uncertain by the UI.
+ * Aligns the recognizer hypothesis with the expected Quran words instead of
+ * comparing both lists by the same index. This preserves a later correct word
+ * after a skipped word and marks the skipped expected word as missing.
+ *
+ * For a partial recognizer hypothesis, only expected words after the last
+ * observed token remain uncertain. A deletion between two observed tokens is
+ * already a real missing word and is reported immediately.
  */
 object RecitationMatcher {
+    private const val DELETE_COST = 1
+    private const val INSERT_COST = 1
+    private const val SUBSTITUTE_COST = 3
+
+    private enum class AlignmentOp { MATCH, SUBSTITUTE, DELETE, INSERT }
+
+    private data class AlignmentStep(
+        val op: AlignmentOp,
+        val expectedIndex: Int? = null,
+        val observedIndex: Int? = null,
+    )
+
+    private data class Candidate(
+        val cost: Int,
+        val priority: Int,
+        val op: AlignmentOp,
+    )
+
     fun evaluate(expected: List<QuranWord>, observedText: String, hasFinalResult: Boolean = false): RecitationEvaluation {
         val observed = normalizeArabicForMatch(observedText)
             .split(' ')
             .filter(String::isNotBlank)
-        val evaluations = ArrayList<WordEvaluation>(expected.size)
+        val expectedNormalized = expected.map { normalizeArabicForMatch(it.matchText) }
+        val observedNormalized = observed.map(::normalizeArabicForMatch)
+        val steps = align(expectedNormalized, observedNormalized)
+
+        val evaluations = arrayOfNulls<WordEvaluation>(expected.size)
         var matched = 0
         var uncertain = 0
         var missing = 0
         var unexpected = 0
 
-        expected.forEachIndexed { index, word ->
-            val observedWord = observed.getOrNull(index)
-            val expectedNormalized = normalizeArabicForMatch(word.matchText)
-            val observedNormalized = observedWord?.let(::normalizeArabicForMatch)
-            when {
-                observedWord == null && !hasFinalResult -> {
-                    evaluations += WordEvaluation(word.text, null, WordStatus.UNCERTAIN)
-                    uncertain++
-                }
-                observedWord == null -> {
-                    evaluations += WordEvaluation(word.text, null, WordStatus.MISSING)
-                    missing++
-                }
-                observedNormalized == expectedNormalized -> {
-                    evaluations += WordEvaluation(word.text, observedWord, WordStatus.MATCHED)
+        steps.forEachIndexed { stepIndex, step ->
+            when (step.op) {
+                AlignmentOp.MATCH -> {
+                    val expectedIndex = requireNotNull(step.expectedIndex)
+                    val observedIndex = requireNotNull(step.observedIndex)
+                    evaluations[expectedIndex] = WordEvaluation(
+                        expected[expectedIndex].text,
+                        observed[observedIndex],
+                        WordStatus.MATCHED,
+                    )
                     matched++
                 }
-                else -> {
-                    evaluations += WordEvaluation(word.text, observedWord, WordStatus.EXTRA_OR_UNEXPECTED)
+                AlignmentOp.SUBSTITUTE -> {
+                    val expectedIndex = requireNotNull(step.expectedIndex)
+                    val observedIndex = requireNotNull(step.observedIndex)
+                    evaluations[expectedIndex] = WordEvaluation(
+                        expected[expectedIndex].text,
+                        observed[observedIndex],
+                        WordStatus.EXTRA_OR_UNEXPECTED,
+                    )
                     unexpected++
                 }
+                AlignmentOp.DELETE -> {
+                    val expectedIndex = requireNotNull(step.expectedIndex)
+                    val hasLaterObservedToken = steps.drop(stepIndex + 1).any { it.observedIndex != null }
+                    val status = if (!hasFinalResult && !hasLaterObservedToken) {
+                        WordStatus.UNCERTAIN
+                    } else {
+                        WordStatus.MISSING
+                    }
+                    evaluations[expectedIndex] = WordEvaluation(expected[expectedIndex].text, null, status)
+                    if (status == WordStatus.UNCERTAIN) uncertain++ else missing++
+                }
+                AlignmentOp.INSERT -> unexpected++
             }
         }
 
-        if (observed.size > expected.size) unexpected += observed.size - expected.size
-        return RecitationEvaluation(evaluations, matched, uncertain, missing, unexpected)
+        expected.forEachIndexed { index, word ->
+            if (evaluations[index] == null) {
+                val status = if (hasFinalResult) WordStatus.MISSING else WordStatus.UNCERTAIN
+                evaluations[index] = WordEvaluation(word.text, null, status)
+                if (status == WordStatus.MISSING) missing++ else uncertain++
+            }
+        }
+
+        return RecitationEvaluation(evaluations.map { requireNotNull(it) }, matched, uncertain, missing, unexpected)
+    }
+
+    private fun align(expected: List<String>, observed: List<String>): List<AlignmentStep> {
+        val n = expected.size
+        val m = observed.size
+        val costs = Array(n + 1) { IntArray(m + 1) { Int.MAX_VALUE / 4 } }
+        val back = Array(n + 1) { arrayOfNulls<AlignmentOp>(m + 1) }
+        costs[0][0] = 0
+
+        for (i in 1..n) {
+            costs[i][0] = costs[i - 1][0] + DELETE_COST
+            back[i][0] = AlignmentOp.DELETE
+        }
+        for (j in 1..m) {
+            costs[0][j] = costs[0][j - 1] + INSERT_COST
+            back[0][j] = AlignmentOp.INSERT
+        }
+
+        for (i in 1..n) {
+            for (j in 1..m) {
+                val diagonalOp = if (expected[i - 1] == observed[j - 1]) AlignmentOp.MATCH else AlignmentOp.SUBSTITUTE
+                val diagonalCost = costs[i - 1][j - 1] + if (diagonalOp == AlignmentOp.MATCH) 0 else SUBSTITUTE_COST
+                val candidates = listOf(
+                    Candidate(diagonalCost, if (diagonalOp == AlignmentOp.MATCH) 0 else 3, diagonalOp),
+                    Candidate(costs[i - 1][j] + DELETE_COST, 1, AlignmentOp.DELETE),
+                    Candidate(costs[i][j - 1] + INSERT_COST, 2, AlignmentOp.INSERT),
+                )
+                val best = candidates.minWith(compareBy<Candidate> { it.cost }.thenBy { it.priority })
+                costs[i][j] = best.cost
+                back[i][j] = best.op
+            }
+        }
+
+        val reversed = mutableListOf<AlignmentStep>()
+        var i = n
+        var j = m
+        while (i > 0 || j > 0) {
+            val op = back[i][j] ?: error("Alignment backtrace is incomplete")
+            when (op) {
+                AlignmentOp.MATCH, AlignmentOp.SUBSTITUTE -> {
+                    reversed += AlignmentStep(op, i - 1, j - 1)
+                    i--
+                    j--
+                }
+                AlignmentOp.DELETE -> {
+                    reversed += AlignmentStep(op, expectedIndex = i - 1)
+                    i--
+                }
+                AlignmentOp.INSERT -> {
+                    reversed += AlignmentStep(op, observedIndex = j - 1)
+                    j--
+                }
+            }
+        }
+        return reversed.asReversed()
     }
 }

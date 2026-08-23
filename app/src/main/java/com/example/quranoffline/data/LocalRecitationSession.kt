@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface RecognitionUpdate {
     data object Started : RecognitionUpdate
-    data class Text(val value: String, val timestamps: FloatArray) : RecognitionUpdate
+    data class Text(val value: String, val timestamps: FloatArray, val isFinal: Boolean = false, val segmentCompleted: Boolean = false) : RecognitionUpdate
     data class Failed(val message: String) : RecognitionUpdate
     data object Stopped : RecognitionUpdate
 }
@@ -91,7 +91,7 @@ class LocalRecitationSession(
                 activeStream.inputFinished()
                 while (recognizer?.isReady(activeStream) == true) recognizer?.decode(activeStream)
                 recognizer?.getResult(activeStream)?.let { result ->
-                    if (result.text.isNotBlank()) emit(RecognitionUpdate.Text(result.text, result.timestamps))
+                    if (result.text.isNotBlank()) emit(RecognitionUpdate.Text(result.text, result.timestamps, isFinal = true))
                 }
             } catch (_: Throwable) { }
         }

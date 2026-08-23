@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -123,7 +122,7 @@ private fun QuranOfflineApp(
                 title = {
                     Column {
                         Text("وِرد", fontWeight = FontWeight.Bold)
-                        Text("تسميع Online مع تنزيل اختياري", style = MaterialTheme.typography.labelSmall)
+                        Text("حفظ وتسميع القرآن", style = MaterialTheme.typography.labelSmall)
                     }
                 },
                 actions = {
@@ -138,7 +137,7 @@ private fun QuranOfflineApp(
                         ) {
                             Icon(Icons.Default.PlayArrow, null, tint = Color(0xFF246B57))
                             Spacer(Modifier.width(5.dp))
-                            Text("Online / محلي", style = MaterialTheme.typography.labelMedium, color = Color(0xFF246B57))
+                            Text(if (state.engine == RecitationEngine.ONLINE) "Online" else "Offline", style = MaterialTheme.typography.labelMedium, color = Color(0xFF246B57))
                         }
                     }
                 },
@@ -233,50 +232,41 @@ private fun MemorizationScreen(
         item {
             Spacer(Modifier.height(10.dp))
             var surahMenuExpanded by remember { mutableStateOf(false) }
-            Box {
-                Button(onClick = { surahMenuExpanded = true }) {
-                    Text("السورة ${state.selectedSurah}")
-                }
-                DropdownMenu(
-                    expanded = surahMenuExpanded,
-                    onDismissRequest = { surahMenuExpanded = false },
-                ) {
-                    (1..114).forEach { surah ->
-                        DropdownMenuItem(
-                            text = { Text("سورة $surah") },
-                            onClick = {
-                                surahMenuExpanded = false
-                                onSelectSurah(surah)
-                            },
-                        )
-                    }
-                }
-            }
-            Text("آيات ${state.ayahs.firstOrNull()?.ayah ?: 0}–${state.ayahs.lastOrNull()?.ayah ?: 0} من ${state.totalAyahsInSurah}", color = Color(0xFF66736C))
-        }
-        item {
-            EngineCard(state, onSelectEngine, onDownloadModel)
-        }
-        item {
-            OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload)
-        }
-        item {
-            GoalCard(state.goal, onSetGoal)
-        }
-        item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE)),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF123F35)),
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(18.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Icon(Icons.Default.Lock, null, tint = Color(0xFF246B57))
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("مصدر الأصول Online", fontWeight = FontWeight.SemiBold)
-                        Text("النص والتوقيتات من GitHub؛ الصوت يُبث أو يُنزّل باختيارك.", style = MaterialTheme.typography.bodySmall)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("ورد اليوم", color = Color(0xFFB9D9C9), style = MaterialTheme.typography.labelLarge)
+                        Text("سورة ${state.selectedSurah}", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("آيات ${state.ayahs.firstOrNull()?.ayah ?: 0}–${state.ayahs.lastOrNull()?.ayah ?: 0} من ${state.totalAyahsInSurah}", color = Color(0xFFD7E9DF), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Box {
+                        Button(
+                            onClick = { surahMenuExpanded = true },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFE4B96F), contentColor = Color(0xFF123F35)),
+                        ) {
+                            Text("اختيار السورة", fontWeight = FontWeight.SemiBold)
+                        }
+                        DropdownMenu(
+                            expanded = surahMenuExpanded,
+                            onDismissRequest = { surahMenuExpanded = false },
+                        ) {
+                            (1..114).forEach { surah ->
+                                DropdownMenuItem(
+                                    text = { Text("سورة $surah") },
+                                    onClick = {
+                                        surahMenuExpanded = false
+                                        onSelectSurah(surah)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -287,7 +277,15 @@ private fun MemorizationScreen(
                     Text("مصحف التدريب", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     var wordOffset = 0
                     state.ayahs.forEach { ayah ->
-                        AyahBlock(ayah, state.hidden, state.evaluation, wordOffset)
+                        AyahBlock(
+                            ayah = ayah,
+                            hidden = state.hidden,
+                            evaluation = state.evaluation,
+                            wordOffset = wordOffset,
+                            listening = state.listening,
+                            currentSpokenWord = state.currentSpokenWord,
+                            currentSpokenWordIndex = state.currentSpokenWordIndex,
+                        )
                         wordOffset += ayah.words.size
                     }
                     OutlinedButton(onClick = onToggleHidden, modifier = Modifier.fillMaxWidth()) {
@@ -302,14 +300,30 @@ private fun MemorizationScreen(
                 }
             }
         }
+        if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
+            item {
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("الكلمة التي التقطها الجهاز", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+                        Text(state.currentSpokenWord ?: "", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF246B57), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+                        Text("يظهر آخر مقطع لفظي مؤكد أو جزئي أثناء إخفاء النص.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+                    }
+                }
+            }
+        }
         item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF183D33))) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                             Text("التسميع", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                     Text(
-                        if (state.listening) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
-                        else "ابدأ التلاوة؛ التعرف Online والتصحيح الصوتي يمكن بثه دون حفظ.",
+                        if (state.listening) {
+                            if (state.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
+                            else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك…"
+                        } else {
+                            if (state.engine == RecitationEngine.ONLINE) "ابدأ التلاوة؛ التعرف Online والتصحيح الصوتي يمكن بثه دون حفظ."
+                            else "ابدأ التلاوة؛ التعرف Offline محلي بعد تجهيز النموذج."
+                        },
                         color = Color(0xFFD7E9DF),
                     )
                     Button(
@@ -337,8 +351,18 @@ private fun MemorizationScreen(
                 }
             }
         }
+        item {
+            Text("الإعدادات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+        }
+        item { EngineCard(state, onSelectEngine, onDownloadModel) }
+        item { OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload) }
+        item { GoalCard(state.goal, onSetGoal) }
         if (state.notice.isNotBlank()) {
-            item { Text(state.notice, color = Color(0xFF53645B), modifier = Modifier.padding(horizontal = 4.dp)) }
+            item {
+                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
+                    Text(state.notice, color = Color(0xFF36584B), modifier = Modifier.fillMaxWidth().padding(14.dp))
+                }
+            }
         }
         state.evaluation?.let { evaluation ->
             item {
@@ -490,16 +514,33 @@ private fun AyahBlock(
     hidden: Boolean,
     evaluation: com.example.quranoffline.data.RecitationEvaluation?,
     wordOffset: Int,
+    listening: Boolean,
+    currentSpokenWord: String?,
+    currentSpokenWordIndex: Int,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
         Text("﴿${ayah.ayah}﴾", color = Color(0xFFB6844A), style = MaterialTheme.typography.labelMedium)
         if (hidden) {
-            Text(
-                text = "•  •  •  •  •  •  •",
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Right,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ayah.words.forEachIndexed { index, _ ->
+                    val globalIndex = wordOffset + index
+                    val isCurrent = listening && globalIndex == currentSpokenWordIndex && !currentSpokenWord.isNullOrBlank()
+                    Surface(
+                        color = if (isCurrent) Color(0xFFDFF1E5) else Color.Transparent,
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text(
+                            text = if (isCurrent) currentSpokenWord.orEmpty() else "•",
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
         } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
