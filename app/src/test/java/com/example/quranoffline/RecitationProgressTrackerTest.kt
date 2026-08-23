@@ -102,6 +102,32 @@ class RecitationProgressTrackerTest {
     }
 
     @Test
+    fun trackerDoesNotCorrectMalikSpellingVariant() {
+        val tracker = RecitationProgressTracker(
+            listOf(
+                QuranAyah(
+                    surah = 1,
+                    ayah = 4,
+                    text = "مَٰلِكِ يَوْمِ الدِّينِ",
+                    matchText = "ملك يوم الدين",
+                    words = listOf(
+                        QuranWord(0, "مَٰلِكِ", "ملك"),
+                        QuranWord(1, "يَوْمِ", "يوم"),
+                        QuranWord(2, "الدِّينِ", "الدين"),
+                    ),
+                ),
+            ),
+        )
+
+        val result = tracker.update(final("مالك يوم الدين"))
+
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[0].status)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[1].status)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[2].status)
+        assertNull(result.correction)
+    }
+
+    @Test
     fun trackerDoesNotCorrectAlAlaminSpellingVariant() {
         val tracker = RecitationProgressTracker(
             listOf(

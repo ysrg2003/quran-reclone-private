@@ -53,7 +53,6 @@ class RecitationProgressTracker(
     private val jumpConfirmationWords: Int = 2,
 ) {
     private val words = ayahs.flatMap { it.words }
-    private val normalizedWords = words.map { normalizeArabicForComparison(it.matchText) }
     private val ayahStarts = IntArray(ayahs.size).also { starts ->
         var offset = 0
         ayahs.forEachIndexed { index, ayah ->
@@ -158,7 +157,8 @@ class RecitationProgressTracker(
     ): CorrectionRequest? {
         if (currentAyahIndex !in ayahs.indices) return null
         val expectedAyah = ayahs[currentAyahIndex]
-        val expected = expectedAyah.words.map { normalizeArabicForComparison(it.matchText) }
+        val expectedWords = expectedAyah.words
+        val expected = expectedWords.map { it.matchText }
         if (expected.isEmpty()) {
             advanceAyah()
             return acceptStableToken(token, segment, segmentIndex)
@@ -166,7 +166,7 @@ class RecitationProgressTracker(
 
         if (awaitingResume) {
             val resumeIndex = expected.indices
-                .filter { expected[it] == token }
+                .filter { quranWordMatches(expectedWords[it], token) }
                 .minByOrNull { kotlin.math.abs(it - resumeAnchorLocalIndex) }
             if (resumeIndex != null) {
                 awaitingResume = false
@@ -183,10 +183,10 @@ class RecitationProgressTracker(
         }
 
         val current = nextWordInAyah.coerceIn(0, expected.lastIndex)
-        val exactCurrent = token == expected[current]
+        val exactCurrent = quranWordMatches(expectedWords[current], token)
         val rollbackStart = (current - rollbackWindow).coerceAtLeast(0)
-        val rollbackMatch = (rollbackStart until current).firstOrNull { expected[it] == token }
-        val laterMatch = ((current + 1)..expected.lastIndex).firstOrNull { expected[it] == token }
+        val rollbackMatch = (rollbackStart until current).firstOrNull { quranWordMatches(expectedWords[it], token) }
+        val laterMatch = ((current + 1)..expected.lastIndex).firstOrNull { quranWordMatches(expectedWords[it], token) }
 
         return when {
             exactCurrent -> {
@@ -260,13 +260,13 @@ class RecitationProgressTracker(
         if (currentAyahIndex + 1 !in ayahs.indices) return false
         val phrase = segment.subList(segmentIndex, segmentIndex + jumpConfirmationWords)
         return ayahs.drop(currentAyahIndex + 1).any { ayah ->
-            val start = ayah.words.map { normalizeArabicForComparison(it.matchText) }
-            start.size >= jumpConfirmationWords && start.take(jumpConfirmationWords) == phrase
+            val start = ayah.words.take(jumpConfirmationWords)
+            start.size >= jumpConfirmationWords && start.indices.all { quranWordMatches(start[it], phrase[it]) }
         }
     }
 
     private fun acceptedGlobalWordIndex(token: String, fallback: Int): Int {
-        val candidates = words.indices.filter { normalizedWords[it] == token }
+        val candidates = words.indices.filter { quranWordMatches(words[it], token) }
         return candidates.minByOrNull { kotlin.math.abs(it - fallback) } ?: fallback
     }
 

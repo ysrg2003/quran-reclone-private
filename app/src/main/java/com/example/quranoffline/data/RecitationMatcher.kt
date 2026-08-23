@@ -2,27 +2,46 @@ package com.example.quranoffline.data
 
 import java.text.Normalizer
 
-private val arabicMarks = Regex("[\\u0610-\\u061a\\u064b-\\u065f\\u0670\\u06d6-\\u06ed]")
+private val arabicMarks = Regex("[\\u0610-\\u061a\\u064b-\\u065f\\u06d6-\\u06ed]")
+private val smallAlif = 'ٰ'
 
 fun normalizeArabicForMatch(value: String): String {
     return Normalizer.normalize(value, Normalizer.Form.NFC)
         .replace(arabicMarks, "")
+        .replace(smallAlif.toString(), "")
         .replace('ٱ', 'ا')
-        .replace('ٰ', 'ا')
+        .replace('آ', 'ا')
         .replace(Regex("\\s+"), " ")
         .trim()
 }
 
-/**
- * Comparison-only spelling normalization. The source assets use "العلمين"
- * while Android recognizers commonly return the fully written "العالمين".
- * This narrow equivalence does not alter the Quran text shown to the user.
- */
-fun normalizeArabicForComparison(value: String): String = normalizeArabicForMatch(value)
-    .replace("العلمين", "العالمين")
+private fun normalizeArabicWithSmallAlif(value: String): String {
+    return Normalizer.normalize(value, Normalizer.Form.NFC)
+        .replace(arabicMarks, "")
+        .replace(smallAlif, 'ا')
+        .replace('ٱ', 'ا')
+        .replace('آ', 'ا')
+        .replace(Regex("\\s+"), " ")
+        .trim()
+}
 
-fun arabicWordsEquivalent(first: String, second: String): Boolean =
-    normalizeArabicForComparison(first) == normalizeArabicForComparison(second)
+/** Comparison-only spelling normalization; it never changes displayed Quran text. */
+fun normalizeArabicForComparison(value: String): String = normalizeArabicForMatch(value)
+
+/**
+ * Treats a small alif as optional only when the canonical word actually has it.
+ * This accepts both "ملك"/"مالك" and "العلمين"/"العالمين" without making
+ * every ordinary alif optional.
+ */
+fun arabicWordsEquivalent(first: String, second: String): Boolean {
+    val observed = normalizeArabicForMatch(second)
+    val firstForms = setOf(normalizeArabicForMatch(first), normalizeArabicWithSmallAlif(first))
+    val secondForms = setOf(normalizeArabicForMatch(second), normalizeArabicWithSmallAlif(second))
+    return firstForms.intersect(secondForms).isNotEmpty() || observed in firstForms
+}
+
+fun quranWordMatches(word: QuranWord, observed: String): Boolean =
+    arabicWordsEquivalent(word.text, observed) || arabicWordsEquivalent(word.matchText, observed)
 
 enum class WordStatus { MATCHED, MISSING, EXTRA_OR_UNEXPECTED, UNCERTAIN }
 
@@ -76,17 +95,16 @@ object RecitationMatcher {
             .filter(String::isNotBlank)
         if (expected.isEmpty()) return RecitationEvaluation(emptyList(), 0, 0, 0, observed.size)
 
-        val expectedNormalized = expected.map { normalizeArabicForComparison(it.matchText) }
         val observedNormalized = observed.map(::normalizeArabicForComparison)
         val preferred = preferredExpectedIndex.coerceIn(0, expected.lastIndex)
         val firstObserved = observedNormalized.firstOrNull()
-        val matchingCandidates = if (firstObserved == null) emptyList() else expectedNormalized.indices.filter { expectedNormalized[it] == firstObserved }
+        val matchingCandidates = if (firstObserved == null) emptyList() else expected.indices.filter { quranWordMatches(expected[it], firstObserved) }
         val anchor = matchingCandidates.firstOrNull { it >= preferred }
             ?: matchingCandidates.firstOrNull()
             ?: preferred
 
         val prefixSteps = (0 until anchor).map { AlignmentStep(AlignmentOp.DELETE, expectedIndex = it) }
-        val suffixSteps = alignGreedy(expectedNormalized.drop(anchor), observedNormalized).map { step ->
+        val suffixSteps = alignGreedy(expected.drop(anchor), observedNormalized).map { step ->
             step.copy(expectedIndex = step.expectedIndex?.plus(anchor))
         }
         val steps = prefixSteps + suffixSteps
@@ -162,22 +180,22 @@ object RecitationMatcher {
      * repeated Quran phrases have the same cost; this local walk cannot skip
      * over an equal current word merely to reach a later duplicate.
      */
-    private fun alignGreedy(expected: List<String>, observed: List<String>): List<AlignmentStep> {
+    private fun alignGreedy(expected: List<QuranWord>, observed: List<String>): List<AlignmentStep> {
         val steps = mutableListOf<AlignmentStep>()
         var i = 0
         var j = 0
         while (i < expected.size || j < observed.size) {
             when {
-                i < expected.size && j < observed.size && expected[i] == observed[j] -> {
+                i < expected.size && j < observed.size && quranWordMatches(expected[i], observed[j]) -> {
                     steps += AlignmentStep(AlignmentOp.MATCH, i, j)
                     i++
                     j++
                 }
-                i + 1 < expected.size && j < observed.size && expected[i + 1] == observed[j] -> {
+                i + 1 < expected.size && j < observed.size && quranWordMatches(expected[i + 1], observed[j]) -> {
                     steps += AlignmentStep(AlignmentOp.DELETE, expectedIndex = i)
                     i++
                 }
-                i < expected.size && j + 1 < observed.size && expected[i] == observed[j + 1] -> {
+                i < expected.size && j + 1 < observed.size && quranWordMatches(expected[i], observed[j + 1]) -> {
                     steps += AlignmentStep(AlignmentOp.INSERT, observedIndex = j)
                     j++
                 }
@@ -199,7 +217,7 @@ object RecitationMatcher {
         return steps
     }
 
-    private fun align(expected: List<String>, observed: List<String>): List<AlignmentStep> {
+    private fun align(expected: List<QuranWord>, observed: List<String>): List<AlignmentStep> {
         val n = expected.size
         val m = observed.size
         val costs = Array(n + 1) { IntArray(m + 1) { Int.MAX_VALUE / 4 } }
@@ -217,7 +235,7 @@ object RecitationMatcher {
 
         for (i in 1..n) {
             for (j in 1..m) {
-                val diagonalOp = if (expected[i - 1] == observed[j - 1]) AlignmentOp.MATCH else AlignmentOp.SUBSTITUTE
+                val diagonalOp = if (quranWordMatches(expected[i - 1], observed[j - 1])) AlignmentOp.MATCH else AlignmentOp.SUBSTITUTE
                 val diagonalCost = costs[i - 1][j - 1] + if (diagonalOp == AlignmentOp.MATCH) 0 else SUBSTITUTE_COST
                 val candidates = listOf(
                     Candidate(diagonalCost, if (diagonalOp == AlignmentOp.MATCH) 0 else 3, diagonalOp),
