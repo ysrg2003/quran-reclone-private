@@ -11,6 +11,7 @@ class LocalCorrectionSettingsStore(context: Context) {
         correctWrongWords = preferences.getBoolean("correctWrongWords", CorrectionSettings.DEFAULTS.correctWrongWords),
         correctSkippedWords = preferences.getBoolean("correctSkippedWords", CorrectionSettings.DEFAULTS.correctSkippedWords),
         correctAyahJumps = preferences.getBoolean("correctAyahJumps", CorrectionSettings.DEFAULTS.correctAyahJumps),
+        automaticPreviousAyah = preferences.getBoolean("automaticPreviousAyah", CorrectionSettings.DEFAULTS.automaticPreviousAyah),
         wholeAyahAfterConsecutiveErrors = preferences.getInt(
             "wholeAyahAfterConsecutiveErrors",
             CorrectionSettings.DEFAULTS.wholeAyahAfterConsecutiveErrors,
@@ -36,6 +37,7 @@ class LocalCorrectionSettingsStore(context: Context) {
             .putBoolean("correctWrongWords", normalized.correctWrongWords)
             .putBoolean("correctSkippedWords", normalized.correctSkippedWords)
             .putBoolean("correctAyahJumps", normalized.correctAyahJumps)
+            .putBoolean("automaticPreviousAyah", normalized.automaticPreviousAyah)
             .putInt("wholeAyahAfterConsecutiveErrors", normalized.wholeAyahAfterConsecutiveErrors)
             .putBoolean("playFirstErrorBeforeWholeAyah", normalized.playFirstErrorBeforeWholeAyah)
             .putInt("wordRepeatCount", normalized.wordRepeatCount)

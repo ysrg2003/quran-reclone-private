@@ -27,6 +27,7 @@ object LocalBackup {
                 put("correctWrongWords", settings.correctWrongWords)
                 put("correctSkippedWords", settings.correctSkippedWords)
                 put("correctAyahJumps", settings.correctAyahJumps)
+                put("automaticPreviousAyah", settings.automaticPreviousAyah)
                 put("wholeAyahAfterConsecutiveErrors", settings.wholeAyahAfterConsecutiveErrors)
                 put("playFirstErrorBeforeWholeAyah", settings.playFirstErrorBeforeWholeAyah)
                 put("wordRepeatCount", settings.wordRepeatCount)

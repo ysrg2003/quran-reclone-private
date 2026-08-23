@@ -12,6 +12,7 @@ data class CorrectionSettings(
     val correctWrongWords: Boolean = DEFAULT_CORRECT_WRONG_WORDS,
     val correctSkippedWords: Boolean = DEFAULT_CORRECT_SKIPPED_WORDS,
     val correctAyahJumps: Boolean = DEFAULT_CORRECT_AYAH_JUMPS,
+    val automaticPreviousAyah: Boolean = DEFAULT_AUTOMATIC_PREVIOUS_AYAH,
     val wholeAyahAfterConsecutiveErrors: Int = DEFAULT_WHOLE_AYAH_AFTER_CONSECUTIVE_ERRORS,
     val playFirstErrorBeforeWholeAyah: Boolean = DEFAULT_PLAY_FIRST_ERROR_BEFORE_WHOLE_AYAH,
     val wordRepeatCount: Int = DEFAULT_WORD_REPEAT_COUNT,
@@ -64,6 +65,7 @@ private const val DEFAULT_AUTOMATIC_CORRECTION_ENABLED = true
 private const val DEFAULT_CORRECT_WRONG_WORDS = true
 private const val DEFAULT_CORRECT_SKIPPED_WORDS = true
 private const val DEFAULT_CORRECT_AYAH_JUMPS = true
+private const val DEFAULT_AUTOMATIC_PREVIOUS_AYAH = true
 private const val DEFAULT_PLAY_FIRST_ERROR_BEFORE_WHOLE_AYAH = true
 private val DEFAULT_RESUME_POSITION = ResumePosition.FIRST_ERROR
 

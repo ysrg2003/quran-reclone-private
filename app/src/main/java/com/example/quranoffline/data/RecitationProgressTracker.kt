@@ -228,6 +228,17 @@ class RecitationProgressTracker(
             nextWordInAyah = resumeAnchorLocalIndex.coerceIn(0, expected.lastIndex)
         }
 
+        if (settings.automaticPreviousAyah && isPreviousAyahStart(segment, segmentIndex)) {
+            val previousAyahIndex = currentAyahIndex - 1
+            currentAyahIndex = previousAyahIndex
+            nextWordInAyah = 0
+            val previousWords = ayahs[previousAyahIndex].words
+            markMatched(0, token)
+            nextWordInAyah = 1
+            if (nextWordInAyah >= previousWords.size) advanceAyah()
+            return null
+        }
+
         val current = nextWordInAyah.coerceIn(0, expected.lastIndex)
         val exactCurrent = quranWordMatches(expectedWords[current], token)
         val rollbackStart = (current - rollbackWindow).coerceAtLeast(0)
@@ -302,6 +313,18 @@ class RecitationProgressTracker(
                 if (nextWordInAyah >= expected.size) advanceAyah()
                 request
             }
+        }
+    }
+
+    private fun isPreviousAyahStart(segment: List<String>, segmentIndex: Int): Boolean {
+        if (currentAyahIndex <= 0 || currentAyahIndex !in ayahs.indices || nextWordInAyah != 0) return false
+        val currentWords = ayahs[currentAyahIndex].words
+        val previousWords = ayahs[currentAyahIndex - 1].words
+        val confirmationCount = minOf(jumpConfirmationWords, previousWords.size)
+        if (confirmationCount <= 0 || segmentIndex + confirmationCount > segment.size) return false
+        if (quranWordMatches(currentWords.first(), segment[segmentIndex])) return false
+        return (0 until confirmationCount).all { offset ->
+            quranWordMatches(previousWords[offset], segment[segmentIndex + offset])
         }
     }
 

@@ -13,6 +13,7 @@ class CorrectionSettingsTest {
         val defaults = CorrectionSettings.DEFAULTS
 
         assertTrue(defaults.automaticCorrectionEnabled)
+        assertTrue(defaults.automaticPreviousAyah)
         assertEquals(3, defaults.wholeAyahAfterConsecutiveErrors)
         assertTrue(defaults.playFirstErrorBeforeWholeAyah)
         assertEquals(1, defaults.wordRepeatCount)

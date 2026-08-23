@@ -420,6 +420,13 @@ private fun CorrectionSettingsCard(
                 onCheckedChange = { checked -> onUpdate { it.copy(correctSkippedWords = checked) } },
             )
             SettingSwitchRow(
+                title = "الرجوع التلقائي إلى الآية السابقة",
+                description = "عند اكتشاف بدء الآية السابقة، يرجع إليها ويبدأ منها دون ضغط زر.",
+                checked = settings.automaticPreviousAyah,
+                enabled = controlsEnabled,
+                onCheckedChange = { checked -> onUpdate { it.copy(automaticPreviousAyah = checked) } },
+            )
+            SettingSwitchRow(
                 title = "تصحيح القفز بين الآيات",
                 description = "يثبت الآية المتوقعة ولا يتبع آية قفزت إليها.",
                 checked = settings.correctAyahJumps,

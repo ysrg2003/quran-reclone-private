@@ -259,6 +259,46 @@ class RecitationProgressTrackerTest {
     }
 
     @Test
+    fun automaticPreviousAyahStartsWhenTheReaderRepeatsPreviousAyah() {
+        val tracker = RecitationProgressTracker(
+            listOf(ayah(1, "a", "b"), ayah(2, "c", "d")),
+        )
+        tracker.update(final("a b"))
+
+        val result = tracker.update(final("a b a b"))
+
+        assertNull(result.correction)
+        assertEquals(1, result.currentAyahIndex)
+        assertEquals(0, result.currentWordInAyah)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[0].status)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[1].status)
+
+        val disabled = RecitationProgressTracker(
+            listOf(ayah(1, "a", "b"), ayah(2, "c", "d")),
+            correctionSettings = CorrectionSettings.DEFAULTS.copy(automaticPreviousAyah = false),
+        )
+        disabled.update(final("a b"))
+        val disabledResult = disabled.update(final("a b a b"))
+
+        assertEquals(CorrectionKind.WRONG_WORD, disabledResult.correction?.kind)
+        assertEquals(1, disabledResult.correction?.ayahIndex)
+    }
+
+    @Test
+    fun automaticPreviousAyahDoesNotTriggerWhenFirstWordMatchesCurrentAyah() {
+        val tracker = RecitationProgressTracker(
+            listOf(ayah(1, "a", "b"), ayah(2, "a", "c")),
+        )
+        tracker.update(final("a b"))
+
+        val result = tracker.update(final("a b a b"))
+
+        assertEquals(CorrectionKind.WRONG_WORD, result.correction?.kind)
+        assertEquals(1, result.correction?.ayahIndex)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[3].status)
+    }
+
+    @Test
     fun longWordPrefixDoesNotCreateCorrectionBeforeCompletedWordArrives() {
         val tracker = RecitationProgressTracker(
             listOf(
