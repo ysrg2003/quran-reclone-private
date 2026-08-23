@@ -551,12 +551,12 @@ private fun RecitationCard(
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("التسميع", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                if (state.listening) {
-                    if (state.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
-                    else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك…"
-                } else {
-                    if (state.engine == RecitationEngine.ONLINE) "ابدأ التلاوة؛ التعرف Online والتصحيح النصي يعملان دون حفظ صوتك."
-                    else "ابدأ التلاوة؛ التعرف Offline محلي بعد تجهيز النموذج."
+                when {
+                    state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "التسميع Offline موقوف على هذا الهاتف لحماية التطبيق من الإغلاق."
+                    state.listening && state.engine == RecitationEngine.ONLINE -> "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
+                    state.listening -> "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك…"
+                    state.engine == RecitationEngine.ONLINE -> "ابدأ التلاوة؛ التعرف Online والتصحيح النصي يعملان دون حفظ صوتك."
+                    else -> "ابدأ التلاوة؛ التعرف Offline محلي بعد تجهيز النموذج."
                 },
                 color = Color(0xFFD7E9DF),
             )
@@ -564,11 +564,22 @@ private fun RecitationCard(
                 onClick = onStart,
                 enabled = state.engine != RecitationEngine.OFFLINE || state.offlineSupported,
                 modifier = Modifier.fillMaxWidth(),
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFD6B277)),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFD6B277),
+                    disabledContainerColor = Color(0xFF355A4D),
+                    disabledContentColor = Color(0xFFC9D9D1),
+                ),
             ) {
                 Icon(if (state.listening) Icons.Default.Pause else Icons.Default.Mic, null, tint = Color(0xFF183D33))
                 Spacer(Modifier.width(8.dp))
-                Text(if (state.listening) "إيقاف الجلسة" else "ابدأ التسميع", color = Color(0xFF183D33))
+                Text(
+                    when {
+                        state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "Offline غير متاح على هذا الهاتف"
+                        state.listening -> "إيقاف الجلسة"
+                        else -> "ابدأ التسميع"
+                    },
+                    color = if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) Color(0xFFC9D9D1) else Color(0xFF183D33),
+                )
             }
             state.correctionMessage?.let { message ->
                 Text(message, color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
