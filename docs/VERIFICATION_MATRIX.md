@@ -2,11 +2,11 @@
 
 **المشروع:** `ysrg2003/quran-memorization-online`
 
-**آخر commit مرفوع:** سيُحدد بعد commit دمج metadata العربي
-**آخر APK مبني من المصدر الحالي:** سيُحدد بعد بوابة الإصدار
-**SHA-256 للنسخة الحالية:** سيُحدد بعد بوابة الإصدار
-**APK المثبت على الهاتف:** `quran-online-settings-v10.apk`؛ لم تُثبت نسخة metadata الحالية بعد
-**آخر APK مثبت على الهاتف:** `quran-online-settings-v10.apk`؛ v12 لم يُثبت بعد
+**آخر commit مرفوع:** `4e661f0`
+**آخر APK مبني من المصدر الحالي:** `app-debug.apk` بعد دمج metadata العربي
+**حجم APK:** `58,278,705` بايت
+**SHA-256:** `5f0c9f66bbb9e86e47dcc05e132bd168162ef3736c134952c759dd70e1c6e9b9`
+**آخر APK مثبت على الهاتف:** `quran-online-settings-v10.apk`؛ نسخة metadata الحالية لم تُثبت بعد
 
 ## قرار الإصدار
 
@@ -50,7 +50,7 @@
 gradle :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --offline --no-daemon --max-workers=1
 ```
 
-نجحت أدوات `scripts/analyze_quran_metadata.py` و`scripts/validate_quran_metadata_against_content.py` على الملف العربي المرفق، ومرّ `git diff --check`. أُعيدت بوابة `testDebugUnitTest :app:assembleDebug :app:lintDebug` بعد دمج metadata، ونجحت. بيانات APK الناتج موثقة في رأس هذه الوثيقة بعد تثبيت commit النهائي.
+نجحت أدوات `scripts/analyze_quran_metadata.py` و`scripts/validate_quran_metadata_against_content.py` على الملف العربي المرفق، ومرّ `git diff --check`. أُعيدت بوابة `testDebugUnitTest :app:assembleDebug :app:lintDebug` بعد دمج metadata، ونجحت. بيانات APK الناتج وحجمه وSHA-256 موثقة في رأس هذه الوثيقة، والكود مرفوع عند commit `4e661f0`.
 
 ## ملفات الأدلة
 
