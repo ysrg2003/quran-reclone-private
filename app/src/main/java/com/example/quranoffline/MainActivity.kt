@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import com.example.quranoffline.data.AssetMode
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranViewModel
+import com.example.quranoffline.data.RecitationEngine
 import com.example.quranoffline.data.WordStatus
 import java.text.DateFormat
 import java.util.Date
@@ -174,8 +175,9 @@ private fun QuranOfflineApp(
                 onToggleHidden = viewModel::toggleHidden,
                 onStart = {
                     if (state.listening) viewModel.stopListening()
-                    else if (state.assetsReady) onRequestMicrophone()
-                    else viewModel.startListening()
+                                            else if (state.assetsReady && (state.engine == RecitationEngine.ONLINE || state.modelReady)) onRequestMicrophone()
+                        else viewModel.startListening()
+
                 },
                 onSave = viewModel::saveCurrentSession,
                 onSetGoal = viewModel::setDailyGoal,
@@ -187,6 +189,8 @@ private fun QuranOfflineApp(
                 onModeChange = viewModel::setMode,
                 onDownload = viewModel::downloadCurrentSurah,
                 onDeleteDownload = viewModel::deleteCurrentSurah,
+                onSelectEngine = viewModel::setEngine,
+                onDownloadModel = viewModel::downloadOfflineModel,
                 modifier = Modifier.padding(padding),
             )
         } else {
@@ -215,6 +219,8 @@ private fun MemorizationScreen(
     onModeChange: (AssetMode) -> Unit,
     onDownload: () -> Unit,
     onDeleteDownload: () -> Unit,
+    onSelectEngine: (RecitationEngine) -> Unit,
+    onDownloadModel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -247,6 +253,9 @@ private fun MemorizationScreen(
                 }
             }
             Text("آيات ${state.ayahs.firstOrNull()?.ayah ?: 0}–${state.ayahs.lastOrNull()?.ayah ?: 0} من ${state.totalAyahsInSurah}", color = Color(0xFF66736C))
+        }
+        item {
+            EngineCard(state, onSelectEngine, onDownloadModel)
         }
         item {
             OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload)
@@ -296,7 +305,8 @@ private fun MemorizationScreen(
         item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF183D33))) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("التسميع المحلي", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                            Text("التسميع", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
                     Text(
                         if (state.listening) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
                         else "ابدأ التلاوة؛ التعرف Online والتصحيح الصوتي يمكن بثه دون حفظ.",
@@ -352,6 +362,48 @@ private fun MemorizationScreen(
             }
         }
         item { Spacer(Modifier.height(18.dp)) }
+    }
+}
+
+@Composable
+private fun EngineCard(
+    state: com.example.quranoffline.data.QuranUiState,
+    onSelectEngine: (RecitationEngine) -> Unit,
+    onDownloadModel: () -> Unit,
+) {
+    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("محرك التسميع", fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = state.engine == RecitationEngine.ONLINE,
+                    onClick = { onSelectEngine(RecitationEngine.ONLINE) },
+                    label = { Text("Online") },
+                )
+                FilterChip(
+                    selected = state.engine == RecitationEngine.OFFLINE,
+                    onClick = { onSelectEngine(RecitationEngine.OFFLINE) },
+                    label = { Text("Offline") },
+                )
+            }
+            Text(
+                if (state.engine == RecitationEngine.ONLINE) {
+                    "SpeechRecognizer من Android؛ يحتاج الإنترنت ولا يحفظ التطبيق صوتك."
+                } else {
+                    "FastConformer + sherpa-onnx؛ يعالج الصوت على الجهاز بعد تنزيل النموذج."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF66736C),
+            )
+            if (state.engine == RecitationEngine.OFFLINE) {
+                Text(if (state.modelReady) "النموذج المحلي جاهز." else "النموذج المحلي غير موجود على الجهاز.", style = MaterialTheme.typography.labelMedium)
+                if (!state.modelReady) {
+                    Button(onClick = onDownloadModel, enabled = !state.modelDownloading, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (state.modelDownloading) "جاري تنزيل النموذج…" else "تنزيل نموذج Offline")
+                    }
+                }
+            }
+        }
     }
 }
 

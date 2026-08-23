@@ -4,16 +4,19 @@ import android.content.Context
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.zip.ZipInputStream
 
 class RemoteAssetManager(context: Context) {
     private val appContext = context.applicationContext
     private val filesRoot = File(appContext.filesDir, "quran-assets")
     private val audioRoot = File(filesRoot, "audio/Alafasy_128kbps")
+    private val modelRoot = File(filesRoot, "models/fastconformer-quran-ar-onnx-int8")
 
     companion object {
         const val BASE_URL = "https://raw.githubusercontent.com/ysrg2003/quran-memorization-assets/main"
         const val TEXT_URL = "$BASE_URL/quran/quran_content.json"
         const val TIMINGS_URL = "$BASE_URL/timings/Alafasy_128kbps.json"
+        const val MODEL_ZIP_URL = "https://github.com/ysrg2003/quran-memorization-assets/releases/download/v0.1.0/fastconformer-quran-ar-onnx-int8.zip"
         private const val CONNECT_TIMEOUT_MS = 20_000
         private const val READ_TIMEOUT_MS = 120_000
     }
@@ -31,6 +34,41 @@ class RemoteAssetManager(context: Context) {
 
     fun downloadedAyahCount(surah: Int, ayahCount: Int): Int =
         (1..ayahCount).count { cachedAudioFile(surah, it) != null }
+
+    fun isModelDownloaded(): Boolean = listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt").all { File(modelRoot, it).isFile && File(modelRoot, it).length() > 0L }
+
+    fun modelDirectory(): File = modelRoot
+
+    fun downloadModel(): File {
+        if (isModelDownloaded()) return modelRoot
+        val temporaryRoot = File(filesRoot, "models/.fastconformer-download")
+        temporaryRoot.deleteRecursively()
+        temporaryRoot.mkdirs()
+        val connection = open(MODEL_ZIP_URL)
+        try {
+            ZipInputStream(connection.inputStream.buffered()).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val fileName = File(entry.name).name
+                        if (fileName in setOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")) {
+                            File(temporaryRoot, fileName).outputStream().use { output -> zip.copyTo(output, DEFAULT_BUFFER_SIZE) }
+                        }
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+        val expected = listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
+        check(expected.all { File(temporaryRoot, it).isFile && File(temporaryRoot, it).length() > 0L }) { "Downloaded model archive is incomplete" }
+        modelRoot.deleteRecursively()
+        modelRoot.parentFile?.mkdirs()
+        check(temporaryRoot.renameTo(modelRoot)) { "Could not finalize model download" }
+        return modelRoot
+    }
 
     fun deleteSurah(surah: Int, ayahCount: Int) {
         (1..ayahCount).forEach { ayah -> cachedAudioFile(surah, ayah)?.delete() }

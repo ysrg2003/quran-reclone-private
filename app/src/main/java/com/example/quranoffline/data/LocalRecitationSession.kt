@@ -15,6 +15,7 @@ import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface RecognitionUpdate {
@@ -24,18 +25,13 @@ sealed interface RecognitionUpdate {
     data object Stopped : RecognitionUpdate
 }
 
-/**
- * Entirely local microphone + sherpa-onnx session. No Android SpeechRecognizer
- * or network fallback is used by design.
- */
+/** Entirely local microphone + sherpa-onnx session using an extracted model directory. */
 class LocalRecitationSession(
     private val context: Context,
+    private val modelDirectory: File,
     private val onUpdate: (RecognitionUpdate) -> Unit,
 ) {
-    companion object {
-        private const val SAMPLE_RATE = 16_000
-        private const val MODEL_DIR = "models/fastconformer-quran-ar-onnx-int8"
-    }
+    companion object { private const val SAMPLE_RATE = 16_000 }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val running = AtomicBoolean(false)
@@ -50,22 +46,17 @@ class LocalRecitationSession(
             emit(RecognitionUpdate.Failed("يجب السماح بالميكروفون لبدء التسميع."))
             return
         }
-
         try {
-            val minBuffer = AudioRecord.getMinBufferSize(
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-            )
+            require(modelDirectory.isDirectory) { "مجلد النموذج المحلي غير موجود" }
+            val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             require(minBuffer > 0) { "تعذر تحديد حجم مخزن الصوت." }
-
             val modelConfig = OnlineModelConfig(
                 transducer = OnlineTransducerModelConfig(
-                    encoder = "$MODEL_DIR/encoder.int8.onnx",
-                    decoder = "$MODEL_DIR/decoder.int8.onnx",
-                    joiner = "$MODEL_DIR/joiner.int8.onnx",
+                    encoder = File(modelDirectory, "encoder.int8.onnx").absolutePath,
+                    decoder = File(modelDirectory, "decoder.int8.onnx").absolutePath,
+                    joiner = File(modelDirectory, "joiner.int8.onnx").absolutePath,
                 ),
-                tokens = "$MODEL_DIR/tokens.txt",
+                tokens = File(modelDirectory, "tokens.txt").absolutePath,
                 modelType = "nemo_transducer",
                 numThreads = 2,
                 provider = "cpu",
@@ -76,22 +67,14 @@ class LocalRecitationSession(
                 enableEndpoint = true,
                 decodingMethod = "greedy_search",
             )
-
-            recognizer = OnlineRecognizer(context.assets, config)
+            recognizer = OnlineRecognizer(null, config)
             stream = recognizer!!.createStream()
-            recorder = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                minBuffer * 2,
-            )
+            recorder = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuffer * 2)
             require(recorder!!.state == AudioRecord.STATE_INITIALIZED) { "تعذر تهيئة الميكروفون." }
             recorder!!.startRecording()
             running.set(true)
             emit(RecognitionUpdate.Started)
-
-            worker = Thread({ captureLoop(minBuffer) }, "quran-local-recognizer").also { it.start() }
+            worker = Thread({ captureLoop(minBuffer) }, "quran-online-local-recognizer").also { it.start() }
         } catch (error: Throwable) {
             closeResources()
             emit(RecognitionUpdate.Failed("تعذر تشغيل النموذج المحلي: ${error.message ?: "خطأ غير معروف"}"))
@@ -100,11 +83,7 @@ class LocalRecitationSession(
 
     fun stop() {
         if (!running.getAndSet(false)) return
-        try {
-            recorder?.stop()
-        } catch (_: IllegalStateException) {
-            // Recorder may already be stopped by the OS.
-        }
+        try { recorder?.stop() } catch (_: IllegalStateException) { }
         worker?.join(1_000)
         worker = null
         stream?.let { activeStream ->
@@ -114,9 +93,7 @@ class LocalRecitationSession(
                 recognizer?.getResult(activeStream)?.let { result ->
                     if (result.text.isNotBlank()) emit(RecognitionUpdate.Text(result.text, result.timestamps))
                 }
-            } catch (_: Throwable) {
-                // A final partial chunk is optional; the already emitted updates remain valid.
-            }
+            } catch (_: Throwable) { }
         }
         closeResources()
         emit(RecognitionUpdate.Stopped)
@@ -128,7 +105,6 @@ class LocalRecitationSession(
         val activeRecognizer = recognizer ?: return
         val pcm = ShortArray((minBuffer / 2).coerceAtLeast(512))
         val samples = FloatArray(pcm.size)
-
         while (running.get()) {
             val count = activeRecorder.read(pcm, 0, pcm.size)
             if (count <= 0) continue
@@ -140,25 +116,14 @@ class LocalRecitationSession(
         }
     }
 
-    private fun emit(update: RecognitionUpdate) {
-        mainHandler.post { onUpdate(update) }
-    }
+    private fun emit(update: RecognitionUpdate) { mainHandler.post { onUpdate(update) } }
 
     private fun closeResources() {
-        try {
-            recorder?.release()
-        } catch (_: Throwable) {
-        }
+        try { recorder?.release() } catch (_: Throwable) { }
         recorder = null
-        try {
-            stream?.release()
-        } catch (_: Throwable) {
-        }
+        try { stream?.release() } catch (_: Throwable) { }
         stream = null
-        try {
-            recognizer?.release()
-        } catch (_: Throwable) {
-        }
+        try { recognizer?.release() } catch (_: Throwable) { }
         recognizer = null
     }
 }
