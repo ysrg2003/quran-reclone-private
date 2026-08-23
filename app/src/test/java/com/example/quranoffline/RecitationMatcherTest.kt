@@ -1,0 +1,39 @@
+package com.example.quranoffline
+
+import com.example.quranoffline.data.QuranWord
+import com.example.quranoffline.data.RecitationMatcher
+import com.example.quranoffline.data.WordStatus
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class RecitationMatcherTest {
+    private val expected = listOf(
+        QuranWord(0, "بِسْمِ", "بسم"),
+        QuranWord(1, "اللَّهِ", "الله"),
+        QuranWord(2, "الرَّحْمَٰنِ", "الرحمن"),
+    )
+
+    @Test
+    fun partialStreamIsUncertainNotMissing() {
+        val result = RecitationMatcher.evaluate(expected, "بسم الله", hasFinalResult = false)
+        assertEquals(2, result.matched)
+        assertEquals(1, result.uncertain)
+        assertTrue(result.words.last().status == WordStatus.UNCERTAIN)
+    }
+
+    @Test
+    fun finalStreamMarksMissingWord() {
+        val result = RecitationMatcher.evaluate(expected, "بسم الله", hasFinalResult = true)
+        assertEquals(2, result.matched)
+        assertEquals(1, result.missing)
+        assertTrue(result.words.last().status == WordStatus.MISSING)
+    }
+
+    @Test
+    fun diacriticsDoNotBreakBasicMatching() {
+        val result = RecitationMatcher.evaluate(expected, "بِسْمِ اللَّهِ الرَّحْمَٰنِ", hasFinalResult = true)
+        assertEquals(3, result.matched)
+        assertEquals(0, result.unexpected)
+    }
+}
