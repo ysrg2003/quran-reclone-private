@@ -62,7 +62,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.quranoffline.data.AssetMode
 import com.example.quranoffline.data.QuranAyah
+import com.example.quranoffline.data.QuranAyahMetadata
 import com.example.quranoffline.data.QuranViewModel
+import com.example.quranoffline.data.displayArabic
 import com.example.quranoffline.data.CorrectionPhase
 import com.example.quranoffline.data.CorrectionSettings
 import com.example.quranoffline.data.ResumePosition
@@ -266,7 +268,7 @@ private fun MemorizationScreen(
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("ورد اليوم", color = Color(0xFFB9D9C9), style = MaterialTheme.typography.labelLarge)
-                        Text("سورة ${state.selectedSurah}", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("سورة ${state.metadata?.sura(state.selectedSurah)?.arabicName ?: state.selectedSurah}", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("آيات ${state.ayahs.firstOrNull()?.ayah ?: 0}–${state.ayahs.lastOrNull()?.ayah ?: 0} من ${state.totalAyahsInSurah}", color = Color(0xFFD7E9DF), style = MaterialTheme.typography.bodySmall)
                     }
                     Box {
@@ -282,7 +284,7 @@ private fun MemorizationScreen(
                         ) {
                             (1..114).forEach { surah ->
                                 DropdownMenuItem(
-                                    text = { Text("سورة $surah") },
+                                    text = { Text("$surah — ${state.metadata?.sura(surah)?.arabicName ?: "سورة $surah"}") },
                                     onClick = {
                                         surahMenuExpanded = false
                                         onSelectSurah(surah)
@@ -297,6 +299,7 @@ private fun MemorizationScreen(
         item {
             Text("مصحف التدريب — السورة كاملة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF123F35))
         }
+        item { MushafMetadataCard(state) }
         item { RecitationCard(state, onStart, onCorrection, onStopCorrection, onPreviousAyah) }
         if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
             item {
@@ -323,6 +326,13 @@ private fun MemorizationScreen(
             key = { _, ayah -> "${ayah.surah}:${ayah.ayah}" },
         ) { index, ayah ->
             val wordOffset = wordOffsets.getOrElse(index) { 0 }
+            val ayahMetadata = state.metadata?.ayah(ayah.surah, ayah.ayah)
+            val previousMetadata = if (index > 0) {
+                state.ayahs.getOrNull(index - 1)?.let { previous -> state.metadata?.ayah(previous.surah, previous.ayah) }
+            } else null
+            if (ayahMetadata != null && (previousMetadata == null || isMushafBoundary(previousMetadata, ayahMetadata))) {
+                MushafBoundaryRow(ayahMetadata)
+            }
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Column(Modifier.fillMaxWidth().padding(18.dp)) {
                     AyahBlock(
@@ -687,6 +697,71 @@ private fun GoalCard(
         }
     }
 }
+
+@Composable
+private fun MushafMetadataCard(state: com.example.quranoffline.data.QuranUiState) {
+    val metadata = state.metadata
+    val surah = metadata?.sura(state.selectedSurah)
+    val first = state.ayahs.firstOrNull()?.let { metadata?.ayah(it.surah, it.ayah) }
+    val last = state.ayahs.lastOrNull()?.let { metadata?.ayah(it.surah, it.ayah) }
+    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("تنظيم المصحف", color = Color(0xFF183D33), fontWeight = FontWeight.Bold)
+            Text(
+                buildString {
+                    append(surah?.arabicName ?: "سورة ${state.selectedSurah}")
+                    surah?.revelationType?.let { append(" • ").append(it.displayArabic()) }
+                    surah?.ayahCount?.let { append(" • $it آية") }
+                },
+                color = Color(0xFF36584B),
+            )
+            if (first != null && last != null) {
+                Text(
+                    "صفحة ${rangeLabel(first.page, last.page)} • الجزء ${rangeLabel(first.juz, last.juz)} • ${quarterRangeLabel(first.quarter, last.quarter)}",
+                    color = Color(0xFF36584B),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "المنزل ${rangeLabel(first.manzil, last.manzil)} • الركوع ${rangeLabel(first.ruku, last.ruku)}",
+                    color = Color(0xFF36584B),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MushafBoundaryRow(metadata: QuranAyahMetadata) {
+    Surface(color = Color(0xFFF4E8D2), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "صفحة ${metadata.page} • الجزء ${metadata.juz} • ${quarterLabel(metadata.quarter)} • الركوع ${metadata.ruku}",
+                color = Color(0xFF6E4B25),
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            metadata.sajda?.let { sajda ->
+                Text(sajda.displayArabic(), color = Color(0xFF8A3D2E), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+private fun isMushafBoundary(previous: QuranAyahMetadata, current: QuranAyahMetadata): Boolean =
+    previous.page != current.page || previous.juz != current.juz || previous.quarter != current.quarter ||
+        previous.manzil != current.manzil || previous.ruku != current.ruku || previous.sajda != current.sajda
+
+private fun rangeLabel(first: Int, last: Int): String = if (first == last) "$first" else "$first–$last"
+
+private fun quarterLabel(quarter: Int): String {
+    val hizb = ((quarter - 1) / 4) + 1
+    val quarterInHizb = ((quarter - 1) % 4) + 1
+    return "الحزب $hizb، الربع $quarterInHizb"
+}
+
+private fun quarterRangeLabel(first: Int, last: Int): String =
+    if (first == last) quarterLabel(first) else "${quarterLabel(first)} – ${quarterLabel(last)}"
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

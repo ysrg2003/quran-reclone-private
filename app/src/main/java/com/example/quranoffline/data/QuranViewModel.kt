@@ -17,6 +17,7 @@ enum class RecitationEngine { ONLINE, OFFLINE }
 
 data class QuranUiState(
     val ayahs: List<QuranAyah> = emptyList(),
+    val metadata: QuranMetadata? = null,
     val hidden: Boolean = false,
     val listening: Boolean = false,
     val assetsReady: Boolean = false,
@@ -52,6 +53,7 @@ data class QuranUiState(
 
 private data class PreparedAssets(
     val repository: QuranRepository,
+    val metadata: QuranMetadata,
     val ayahs: List<QuranAyah>,
     val selectedSurah: Int,
     val totalAyahs: Int,
@@ -61,6 +63,7 @@ private data class PreparedAssets(
 
 class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val assetManager = RemoteAssetManager(application)
+    private val metadataRepository = QuranMetadataRepository(application)
     private var repository = QuranRepository(application)
     private val store = LocalSessionStore(application)
     private val goalStore = LocalGoalStore(application)
@@ -132,12 +135,15 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val requestedSurah = state.value.selectedSurah
                 val prepared = withContext(Dispatchers.Default) {
                     val parsedRepository = QuranRepository(getApplication(), text)
+                    val parsedMetadata = metadataRepository.load()
+                    parsedMetadata.requireCompatible(parsedRepository.allAyahs())
                     timingRepository.update(timings)
                     val requested = parsedRepository.ayahsForSurah(requestedSurah).ifEmpty { parsedRepository.ayahsForSurah(1) }
                     val selectedSurah = requested.firstOrNull()?.surah ?: 1
                     val totalAyahs = parsedRepository.ayahsForSurah(selectedSurah).size
                     PreparedAssets(
                         repository = parsedRepository,
+                        metadata = parsedMetadata,
                         ayahs = requested,
                         selectedSurah = selectedSurah,
                         totalAyahs = totalAyahs,
@@ -147,7 +153,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 repository = prepared.repository
                 state.value = state.value.copy(
-                    ayahs = prepared.ayahs, selectedSurah = prepared.selectedSurah, currentPage = 0,
+                    ayahs = prepared.ayahs, metadata = prepared.metadata, selectedSurah = prepared.selectedSurah, currentPage = 0,
                     totalAyahsInSurah = prepared.totalAyahs,
                     loadingAssets = false, assetsReady = true,
                     downloadedAyahs = prepared.downloadedAyahs,

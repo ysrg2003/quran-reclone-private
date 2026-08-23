@@ -2,9 +2,10 @@
 
 **المشروع:** `ysrg2003/quran-memorization-online`
 
-**آخر commit مرفوع:** `b00d45a`
-**آخر APK مبني من المصدر الحالي:** `quran-online-auto-previous-ayah-v12.apk`
-**SHA-256 للنسخة المبنية:** `6ecf14a7a7feec4f1d25c74202312bf86f71307000afd82fbdf124c4493014be`
+**آخر commit مرفوع:** سيُحدد بعد commit دمج metadata العربي
+**آخر APK مبني من المصدر الحالي:** سيُحدد بعد بوابة الإصدار
+**SHA-256 للنسخة الحالية:** سيُحدد بعد بوابة الإصدار
+**APK المثبت على الهاتف:** `quran-online-settings-v10.apk`؛ لم تُثبت نسخة metadata الحالية بعد
 **آخر APK مثبت على الهاتف:** `quran-online-settings-v10.apk`؛ v12 لم يُثبت بعد
 
 ## قرار الإصدار
@@ -33,6 +34,9 @@
 | سياسة تصحيح الشيخ وإعداداتها | تثبيت APK v10 + `quran-online-settings-v10-policy-card.png` | ظهرت بطاقة الإعدادات، والافتراضي المعروض 3 أخطاء متتالية، وتكرار واحد، وفاصل فوري، وهامش صفري، وترتيب مقطع أول خطأ ثم الآية | مثبت على الهاتف كواجهة |
 | حفظ الإعدادات وإعادة الافتراضي | تفاعل ADB + `run-as` على APK v10 | تغيّرت العتبة إلى 4 وحُفظت في `quran_correction_settings.xml`، ثم أُعيدت إلى 3 بمسح الاختيارات المحفوظة | مثبت على الهاتف |
 | تغطية مصدر القرآن الكامل للمطابقة | `scripts/validate_full_quran_matching.py` | فُحصت 6236 آية و77881 كلمة؛ كل أزواج `text`/`matchText` قُبلت بالتطبيع المحافظة | مثبت كمصدر بيانات، وليس ضماناً لفهم SpeechRecognizer لكل نطق |
+| metadata العربي للسور والآيات | `scripts/analyze_quran_metadata.py` + `QuranMetadataTest` | 114 سورة، 6236 آية، 30 جزءاً، 240 ربعاً، 7 منازل، 556 ركوعاً، 604 صفحات، و15 سجدة؛ الفهارس ونقاط البداية مرتبة | مثبت كمصدر وأداة تحقق |
+| توافق metadata مع النص الكامل | `scripts/validate_quran_metadata_against_content.py` | كل بدايات السور وحدود الأجزاء والأرباع والمنازل والركوعات والصفحات والسجدات تشير إلى آيات موجودة في `quran_content.json` وبالترتيب نفسه | مثبت كمصدر بيانات |
+| عرض التنظيم العربي | بناء التطبيق + فحص الكود | تظهر أسماء السور العربية، نوع مكية/مدنية، نطاق الصفحة والجزء والحزب والربع والمنزل والركوع، وعلامة السجدة عند موضعها؛ الحقول الإنجليزية لا تُعرض | مثبت بنيوياً، فحص الهاتف مؤجل |
 | سبب إغلاق Offline السابق | logcat جهاز حقيقي | `SIGSEGV` داخل مكتبة sherpa native بعد نجاح AudioRecord ووجود ملفات النموذج على `armeabi-v7a`/`zygote32` | مثبت تشخيصياً |
 | منع الإغلاق على الهاتف الحالي | تثبيت APK + لقطتا `offline-final-card-verified.png` و`offline-final-start-after.png` + PID/logcat | ظهر تحذير 32-bit وتعطل زر بدء Offline، ثم بقي PID التطبيق `29014` موجوداً دون `FATAL` أو `SIGSEGV` بعد محاولة الضغط على موضع البدء | مثبت على الهاتف الحالي |
 | inference Offline على 64-bit | لا يوجد جهاز 64-bit في الجولة | لم يُشغّل ولم يُثبت | مؤجل |
@@ -46,7 +50,7 @@
 gradle :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --offline --no-daemon --max-workers=1
 ```
 
-نجح الأمر أعلاه بعد إضافة خيار الرجوع التلقائي الافتراضي واختباراته. كما نجح `python3 scripts/validate_full_quran_matching.py /tmp/quran_content_remote.json`، ومرّ `git diff --check`، وأصبح الفرع `main` متزامناً مع `origin/main` عند commit `b00d45a`. النسخة المبنية الحالية حجمها `58,272,438` بايت وSHA-256 هو `6ecf14a7a7feec4f1d25c74202312bf86f71307000afd82fbdf124c4493014be`، ولم تُثبت v12 على الهاتف بعد.
+نجحت أدوات `scripts/analyze_quran_metadata.py` و`scripts/validate_quran_metadata_against_content.py` على الملف العربي المرفق، ومرّ `git diff --check`. أُعيدت بوابة `testDebugUnitTest :app:assembleDebug :app:lintDebug` بعد دمج metadata، ونجحت. بيانات APK الناتج موثقة في رأس هذه الوثيقة بعد تثبيت commit النهائي.
 
 ## ملفات الأدلة
 

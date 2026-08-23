@@ -11,6 +11,14 @@ The embedded Quran text is derived from Tanzil Quran Text Version 1.1.
 
 The application keeps the canonical ayah text in `app/src/main/assets/quran/quran_content.json` and uses a derived matching form separately. The canonical text is not rewritten.
 
+## Quran metadata
+
+The Arabic Mushaf-organization metadata in `app/src/main/assets/quran/quran-meta-data.xml` is the supplied Tanzil metadata format, version 1.0, and is distributed under Creative Commons Attribution. The app uses only the Arabic structural fields (`name`, `index`, `ayas`, `start`, `type`, `order`, `rukus`, and Arabic-coordinate boundaries); the English transliteration and translation fields are intentionally ignored in the current Arabic-focused interface.
+
+- Source: https://tanzil.net/
+- License: Creative Commons Attribution 3.0 as declared by the metadata source
+- The metadata is used for organization and display only; it does not replace the canonical Quran text, audio timings, or recitation judgment.
+
 ## quran-align
 
 - Source: https://github.com/cpfair/quran-align
