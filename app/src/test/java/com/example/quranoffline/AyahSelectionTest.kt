@@ -1,6 +1,7 @@
 package com.example.quranoffline
 
 import com.example.quranoffline.data.AyahSelection
+import com.example.quranoffline.data.ayahIndicesInMushafOrder
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -25,6 +26,11 @@ class AyahSelectionTest {
 
         assertEquals(AyahSelection(1, 3), selection)
         assertEquals(3, selection.count)
+    }
+
+    @Test
+    fun selectedAyahsPlayFromTheEarliestMushafIndex() {
+        assertEquals(listOf(2, 3, 5, 7), ayahIndicesInMushafOrder(listOf(7, 3, 2, 5, 3)))
     }
 
     @Test

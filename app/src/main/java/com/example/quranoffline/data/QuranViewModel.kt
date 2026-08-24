@@ -385,7 +385,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً.")
             return
         }
-        val items = selected.distinct().sorted().mapNotNull { index ->
+        val items = ayahIndicesInMushafOrder(selected).mapNotNull { index ->
             val target = state.value.allAyahs.getOrNull(index) ?: return@mapNotNull null
             val timings = timingRepository.forAyah(target.surah, target.ayah)
             val first = timings.firstOrNull() ?: return@mapNotNull null

@@ -7,6 +7,11 @@ private val smallAlif = 'ٰ'
 
 fun normalizeArabicForMatch(value: String): String {
     return Normalizer.normalize(value, Normalizer.Form.NFC)
+        // Uthmani rasm writes the pronounced alif in words such as
+        // ٱلصَّلَوٰةَ and ٱلزَّكَوٰةَ as a superscript alif over waw.
+        // Expand that sequence before stripping marks; this is comparison-only
+        // and never mutates the canonical displayed Quran text.
+        .replace("و$smallAlif", "ا")
         .replace(arabicMarks, "")
         .replace(smallAlif.toString(), "")
         .replace('ٱ', 'ا')
@@ -17,6 +22,7 @@ fun normalizeArabicForMatch(value: String): String {
 
 private fun normalizeArabicWithSmallAlif(value: String): String {
     return Normalizer.normalize(value, Normalizer.Form.NFC)
+        .replace("و$smallAlif", "ا")
         .replace(arabicMarks, "")
         .replace(smallAlif, 'ا')
         .replace('ٱ', 'ا')
@@ -44,8 +50,8 @@ fun normalizeArabicForComparison(value: String): String = normalizeArabicForMatc
  * every ordinary alif optional.
  */
 fun arabicWordsEquivalent(first: String, second: String): Boolean {
-    val firstForms = spellingForms(first, allowSpeechTaMarbutaSubstitution = first.contains('ة'))
-    val secondForms = spellingForms(second, allowSpeechTaMarbutaSubstitution = false)
+    val firstForms = arabicSpellingForms(first, allowSpeechTaMarbutaSubstitution = first.contains('ة'))
+    val secondForms = arabicSpellingForms(second, allowSpeechTaMarbutaSubstitution = false)
     return firstForms.intersect(secondForms).isNotEmpty()
 }
 
@@ -54,7 +60,7 @@ fun arabicWordsEquivalent(first: String, second: String): Boolean {
  * Keep the Quran/reference spelling untouched and allow that substitution only
  * from a canonical word that actually contains ة; never apply it globally.
  */
-private fun spellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean): Set<String> {
+fun arabicSpellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean): Set<String> {
     val baseForms = setOf(normalizeArabicForMatch(value), normalizeArabicWithSmallAlif(value))
     return if (allowSpeechTaMarbutaSubstitution) {
         baseForms + baseForms.map { it.replace('ة', 'ه') }

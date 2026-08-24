@@ -6,8 +6,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -152,7 +154,8 @@ private fun QuranOfflineApp(
     val state = viewModel.uiState.value
     var tab by remember { mutableIntStateOf(0) }
 
-    Scaffold(
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        Scaffold(
         topBar = {
             Column {
                 TopAppBar(
@@ -302,6 +305,7 @@ private fun QuranOfflineApp(
                 modifier = Modifier.padding(padding),
             )
             }
+        }
         }
     }
 }
@@ -1440,6 +1444,40 @@ private fun ReaderScreen(
     }
 }
 
+@Composable
+private fun MushafPageMarkerStrip(
+    state: com.example.quranoffline.data.QuranUiState,
+    pageAyahs: List<QuranAyah>,
+) {
+    val first = pageAyahs.firstOrNull() ?: return
+    val firstMetadata = state.metadata?.ayah(first.surah, first.ayah) ?: return
+    val pageSajda = pageAyahs.any { state.metadata?.ayah(it.surah, it.ayah)?.sajda != null }
+    val hizb = ((firstMetadata.quarter - 1) / 4) + 1
+    val quarterInHizb = ((firstMetadata.quarter - 1) % 4) + 1
+    Surface(
+        color = Color(0xFFF8EFD9),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "۞ الحزب $hizb • الربع $quarterInHizb • الجزء ${firstMetadata.juz}",
+                color = Color(0xFF6E4B25),
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Text(
+                "ع الركوع ${firstMetadata.ruku}${if (pageSajda) "  ۩ سجدة" else ""}",
+                color = if (pageSajda) Color(0xFF8A3D2E) else Color(0xFF6E4B25),
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MushafPageSurface(
@@ -1456,6 +1494,7 @@ private fun MushafPageSurface(
     onLongPressAyah: (Int, Int) -> Unit,
 ) {
     var horizontalDrag by remember { mutableFloatStateOf(0f) }
+    val isOpeningPage = state.currentPage <= 2
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1474,11 +1513,19 @@ private fun MushafPageSurface(
                     onDragCancel = { horizontalDrag = 0f },
                 )
             },
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(if (isOpeningPage) 24.dp else 22.dp),
+        border = BorderStroke(1.dp, Color(0xFFD8C7A7)),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEF8)),
     ) {
-        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .then(if (isOpeningPage) Modifier.border(1.dp, Color(0xFFE4D4B8), RoundedCornerShape(18.dp)).padding(6.dp) else Modifier)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text("صفحة ${state.currentPage}", color = Color(0xFF76552A), fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            MushafPageMarkerStrip(state, pageAyahs)
             if (pageAyahs.isEmpty()) {
                 Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             } else {
@@ -1554,6 +1601,7 @@ private fun MushafPageSurface(
                                                 words = words,
                                                 fontSize = lineFontSize,
                                                 showAyahMarker = entries.first().second.word == 1,
+                                                showSajdaMarker = state.metadata?.ayah(ayah.surah, ayah.ayah)?.sajda != null,
                                                 active = state.readerCurrentKey == ayah.selectionKey(),
                                                 selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
                                                 onSetStart = onSetStart,
@@ -1583,6 +1631,7 @@ private fun PageAyahInline(
     words: List<QuranWord>,
     fontSize: androidx.compose.ui.unit.TextUnit,
     showAyahMarker: Boolean,
+    showSajdaMarker: Boolean,
     active: Boolean,
     selected: Boolean,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
@@ -1601,12 +1650,13 @@ private fun PageAyahInline(
     }
     val lineText = buildString {
         if (showAyahMarker) append("﴿${ayah.ayah}﴾ ")
+        if (showSajdaMarker) append("۩ ")
         append(words.joinToString(" ") { it.text })
     }
     Box(
         Modifier
             .background(backgroundColor, RoundedCornerShape(12.dp))
-            .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah); menuExpanded = true })
+            .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah) })
             .padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
         Text(
@@ -1666,7 +1716,7 @@ private fun PageAyahLine(
                     },
                     RoundedCornerShape(12.dp),
                 )
-                .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah); menuExpanded = true })
+                .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah) })
                 .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {

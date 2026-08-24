@@ -26,3 +26,9 @@ data class AyahSelection(
 }
 
 fun QuranAyah.selectionKey(): String = "$surah:$ayah"
+
+/**
+ * Playback order is always the canonical Mushaf order, independent of touch order
+ * or the order in which a UI state happened to store the selected indices.
+ */
+fun ayahIndicesInMushafOrder(indices: Iterable<Int>): List<Int> = indices.distinct().sorted()

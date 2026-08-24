@@ -156,6 +156,32 @@ class RecitationMatcherTest {
     }
 
     @Test
+    fun daggerAlifOverWawUsesTheSpokenAlifForAllEquivalentForms() {
+        val expectedWords = listOf(
+            QuranWord(0, "ٱلصَّلَوٰةَ", "الصلوة"),
+            QuranWord(1, "ٱلزَّكَوٰةَ", "الزكوة"),
+            QuranWord(2, "ٱلْحَيَوٰةِ", "الحيوة"),
+        )
+        val result = RecitationMatcher.evaluate(expectedWords, "الصلاة الزكاة الحياة", hasFinalResult = true)
+        assertEquals(3, result.matched)
+        assertEquals(0, result.unexpected)
+        assertEquals(listOf("ٱلصَّلَوٰةَ", "ٱلزَّكَوٰةَ", "ٱلْحَيَوٰةِ"), result.words.map { it.expected })
+    }
+
+    @Test
+    fun acceptedDaggerAlifSpeechIsRenderedWithCanonicalQuranSpelling() {
+        val rendered = canonicalizeRecognizedTranscript(
+            raw = "أقيموا الصلاة الزكاة",
+            evaluation = listOf(
+                WordEvaluation("أقيموا", "أقيموا", WordStatus.MATCHED),
+                WordEvaluation("ٱلصَّلَوٰةَ", "الصلاة", WordStatus.MATCHED),
+                WordEvaluation("ٱلزَّكَوٰةَ", "الزكاة", WordStatus.MATCHED),
+            ),
+        )
+        assertEquals("أقيموا ٱلصَّلَوٰةَ ٱلزَّكَوٰةَ", rendered)
+    }
+
+    @Test
     fun ordinaryHaIsNotAcceptedAsTaMarbuta() {
         val expectedWord = listOf(QuranWord(0, "الصلاة", "الصلاة"))
         val result = RecitationMatcher.evaluate(expectedWord, "الصلاح", hasFinalResult = true)

@@ -380,9 +380,9 @@ class RecitationProgressTracker(
         if (Muqattaat.isPotentialPrefix(expectedWords[targetIndex], token)) return true
         val observed = normalizeArabicForComparison(token)
         if (observed.length < 2) return false
-        return listOf(expectedWords[targetIndex].text, expectedWords[targetIndex].matchText)
-            .map(::normalizeArabicForComparison)
-            .any { it.startsWith(observed) && it.length > observed.length }
+        val expectedForms = arabicSpellingForms(expectedWords[targetIndex].text, allowSpeechTaMarbutaSubstitution = true) +
+            arabicSpellingForms(expectedWords[targetIndex].matchText, allowSpeechTaMarbutaSubstitution = false)
+        return expectedForms.any { it.startsWith(observed) && it.length > observed.length }
     }
 
     private fun consecutiveIssueCount(
