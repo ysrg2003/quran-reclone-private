@@ -8,8 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -67,6 +69,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1343,19 +1346,6 @@ private fun ReaderScreen(
 ) {
     val metadata = state.metadata
     val contentState = rememberLazyListState()
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (state.currentPage - 1).coerceAtLeast(0))
-    LaunchedEffect(listState, state.totalPages) {
-        snapshotFlow { listState.firstVisibleItemIndex }
-            .distinctUntilChanged()
-            .collect { index ->
-                val page = (index + 1).coerceIn(1, state.totalPages)
-                if (page != state.currentPage) onPageChanged(page)
-            }
-    }
-    LaunchedEffect(state.currentPage) {
-        val target = (state.currentPage - 1).coerceIn(0, (state.totalPages - 1).coerceAtLeast(0))
-        if (listState.firstVisibleItemIndex != target) listState.scrollToItem(target)
-    }
 
     LazyColumn(
         state = contentState,
@@ -1414,7 +1404,6 @@ private fun ReaderScreen(
                 onReadFromHere = onReadFromHere,
                 onReadSurahFromHere = onReadSurahFromHere,
                 onPageChanged = onPageChanged,
-                listState = listState,
             )
         }
     }
@@ -1431,43 +1420,45 @@ private fun MushafPageSurface(
     onReadFromHere: (Int, Int) -> Unit,
     onReadSurahFromHere: (Int, Int) -> Unit,
     onPageChanged: (Int) -> Unit,
-    listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
+    var horizontalDrag by remember { mutableFloatStateOf(0f) }
     Card(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 760.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 760.dp)
+            .pointerInput(state.currentPage, state.totalPages) {
+                detectHorizontalDragGestures(
+                    onDragStart = { horizontalDrag = 0f },
+                    onHorizontalDrag = { _, dragAmount -> horizontalDrag += dragAmount },
+                    onDragEnd = {
+                        when {
+                            horizontalDrag <= -80f && state.currentPage < state.totalPages -> onPageChanged(state.currentPage + 1)
+                            horizontalDrag >= 80f && state.currentPage > 1 -> onPageChanged(state.currentPage - 1)
+                        }
+                        horizontalDrag = 0f
+                    },
+                    onDragCancel = { horizontalDrag = 0f },
+                )
+            },
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEF8)),
     ) {
-        LazyRow(
-            state = listState,
-            reverseLayout = true,
-            flingBehavior = rememberSnapFlingBehavior(listState),
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items((1..state.totalPages).toList(), key = { "page-$it" }) { pageNumber ->
-                if (pageNumber == state.currentPage) {
-                    Column(Modifier.fillParentMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("صفحة $pageNumber", color = Color(0xFF76552A), fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                        if (pageAyahs.isEmpty()) {
-                            Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                        } else {
-                            pageAyahs.forEach { ayah ->
-                                PageAyahLine(
-                                    ayah = ayah,
-                                    active = state.readerCurrentKey == "${ayah.surah}:${ayah.ayah}",
-                                    onSetStart = onSetStart,
-                                    onMemorizeFromHere = onMemorizeFromHere,
-                                    onPlayAyah = onPlayAyah,
-                                    onPlayBasmala = onPlayBasmala,
-                                    onReadFromHere = onReadFromHere,
-                                    onReadSurahFromHere = onReadSurahFromHere,
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    Spacer(Modifier.fillParentMaxWidth())
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("صفحة ${state.currentPage}", color = Color(0xFF76552A), fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            if (pageAyahs.isEmpty()) {
+                Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            } else {
+                pageAyahs.forEach { ayah ->
+                    PageAyahLine(
+                        ayah = ayah,
+                        active = state.readerCurrentKey == "${ayah.surah}:${ayah.ayah}",
+                        onSetStart = onSetStart,
+                        onMemorizeFromHere = onMemorizeFromHere,
+                        onPlayAyah = onPlayAyah,
+                        onPlayBasmala = onPlayBasmala,
+                        onReadFromHere = onReadFromHere,
+                        onReadSurahFromHere = onReadSurahFromHere,
+                    )
                 }
             }
         }
