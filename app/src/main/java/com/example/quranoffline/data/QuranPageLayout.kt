@@ -19,10 +19,18 @@ data class QuranLayoutWordKey(
     }
 }
 
+data class QuranLayoutMarker(
+    val position: Int,
+    val type: String,
+    val symbol: String? = null,
+    val glyphId: Int? = null,
+)
+
 data class QuranLayoutLine(
     val number: Int,
     val type: String,
     val wordKeys: List<QuranLayoutWordKey>,
+    val markers: List<QuranLayoutMarker> = emptyList(),
 )
 
 data class QuranLayoutPage(
@@ -59,11 +67,28 @@ data class QuranLayout(
                                     }
                                 }
                             }
+                            val markers = buildList {
+                                val markersArray = lineObject.optJSONArray("markers")
+                                if (markersArray != null) {
+                                    for (markerIndex in 0 until markersArray.length()) {
+                                        val markerObject = markersArray.optJSONObject(markerIndex) ?: continue
+                                        add(
+                                            QuranLayoutMarker(
+                                                position = markerObject.optInt("position", markerIndex),
+                                                type = markerObject.optString("type", "unknown"),
+                                                symbol = markerObject.optString("symbol").takeIf { it.isNotBlank() },
+                                                glyphId = markerObject.optInt("glyphId", 0).takeIf { it > 0 },
+                                            ),
+                                        )
+                                    }
+                                }
+                            }
                             add(
                                 QuranLayoutLine(
                                     number = lineObject.getInt("number"),
                                     type = lineObject.getString("type"),
                                     wordKeys = keys,
+                                    markers = markers.sortedBy { it.position },
                                 ),
                             )
                         }

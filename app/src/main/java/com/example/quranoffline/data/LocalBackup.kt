@@ -16,7 +16,7 @@ object LocalBackup {
         correctedErrors: List<CorrectedRecitationError> = emptyList(),
     ) {
         val payload = JSONObject().apply {
-            put("format", "quran-online-backup-v3")
+            put("format", "quran-online-backup-v4")
             put("createdAt", System.currentTimeMillis())
             put("goal", JSONObject().apply {
                 put("targetAyahs", goal.targetAyahs)
@@ -76,6 +76,15 @@ object LocalBackup {
                         put("totalWords", session.totalWords)
                         put("uncertainWords", session.uncertainWords)
                         put("createdAt", session.createdAt)
+                        put("label", session.label)
+                        put("page", session.page)
+                        put("wordIndex", session.wordIndex)
+                        put("scope", session.scope)
+                        session.checkpointSurah?.let { put("checkpointSurah", it) }
+                        session.checkpointAyah?.let { put("checkpointAyah", it) }
+                        session.checkpointWordIndex?.let { put("checkpointWordIndex", it) }
+                        put("includeOpeningBasmala", session.includeOpeningBasmala)
+                        put("lastOpenedAt", session.lastOpenedAt)
                     })
                 }
             })

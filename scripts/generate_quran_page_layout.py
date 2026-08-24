@@ -37,14 +37,15 @@ for row in line_rows:
     page = int(page_text)
     line = int(line_text)
     position = int(position_text)
-    line_entry = pages[page].setdefault(line, {"number": line, "type": line_type, "positions": []})
+    line_entry = pages[page].setdefault(line, {"number": line, "type": line_type, "items": []})
     if line_entry["type"] != line_type:
         raise ValueError(f"line type changed for page={page}, line={line}")
     word = words_by_glyph.get(glyph_id)
     if word is None:
+        line_entry["items"].append({"position": position, "type": line_type, "glyphId": glyph_id})
         continue
     key = f"{word['surah']}:{word['ayah']}:{word['word']}"
-    line_entry["positions"].append((position, key))
+    line_entry["items"].append({"position": position, "type": "word", "wordKey": key})
     layout_word_keys.append(key)
     
 if len(word_rows) != 77430:
@@ -59,15 +60,28 @@ for page in range(1, 605):
     lines_output = []
     for line in sorted(pages[page]):
         entry = pages[page][line]
-        words = [key for _, key in sorted(entry["positions"])]
-        lines_output.append({"number": entry["number"], "type": entry["type"], "wordKeys": words})
+        items = sorted(entry["items"], key=lambda item: item["position"])
+        words = [item["wordKey"] for item in items if item["type"] == "word"]
+        markers = [
+            {
+                "position": item["position"],
+                "type": item["type"],
+                "glyphId": item["glyphId"],
+            }
+            for item in items
+            if item["type"] != "word"
+        ]
+        line_output = {"number": entry["number"], "type": entry["type"], "wordKeys": words}
+        if markers:
+            line_output["markers"] = markers
+        lines_output.append(line_output)
     page_output.append({"page": page, "lines": lines_output})
 
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 OUTPUT.write_text(
     json.dumps(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "source": "quran.com-images glyph_page_line + word tables",
             "sourceSql": "quran.com-images/sql/02-database.sql",
             "pageCount": 604,

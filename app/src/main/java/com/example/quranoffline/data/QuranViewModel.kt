@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
 
 enum class AssetMode { STREAM, DOWNLOAD }
 enum class RecitationEngine { ONLINE, OFFLINE }
-enum class ReaderScope { AYAH, SURAH, JUZ, PAGES, QURAN }
+enum class ReaderScope { AYAH, SURAH, JUZ, HIZB, PAGES, QURAN }
 
 data class QuranUiState(
     val ayahs: List<QuranAyah> = emptyList(),
@@ -368,6 +368,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playSurahFromHere(surah: Int, ayah: Int) = startReader(ReaderScope.SURAH, surah, ayah)
 
+    fun playReaderScopeFromHere(scope: ReaderScope, surah: Int, ayah: Int) = startReader(scope, surah, ayah)
+
     fun playReaderScope(scope: ReaderScope) {
         val checkpoint = state.value.checkpoint?.validatedAgainst(state.value.allAyahs)
         val start = checkpoint ?: MemorizationCheckpoint(1, 1, 0, false, 0L)
@@ -427,6 +429,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             ReaderScope.AYAH -> listOf(startIndex)
             ReaderScope.SURAH -> state.value.allAyahs.indices.filter { state.value.allAyahs[it].surah == surah && it >= startIndex }
             ReaderScope.JUZ -> state.value.allAyahs.indices.filter { it >= startIndex && metadata.ayah(state.value.allAyahs[it].surah, state.value.allAyahs[it].ayah)?.juz == metadata.ayah(surah, ayah)?.juz }
+            ReaderScope.HIZB -> state.value.allAyahs.indices.filter { it >= startIndex && metadata.ayah(state.value.allAyahs[it].surah, state.value.allAyahs[it].ayah)?.quarter == metadata.ayah(surah, ayah)?.quarter }
             ReaderScope.PAGES -> state.value.allAyahs.indices.filter { it >= startIndex && metadata.ayah(state.value.allAyahs[it].surah, state.value.allAyahs[it].ayah)?.page == metadata.ayah(surah, ayah)?.page }
             ReaderScope.QURAN -> state.value.allAyahs.indices.filter { it >= startIndex }
         }
@@ -461,6 +464,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         ReaderScope.AYAH -> "الآية"
         ReaderScope.SURAH -> "السورة"
         ReaderScope.JUZ -> "الجزء"
+        ReaderScope.HIZB -> "الحزب والربع"
         ReaderScope.PAGES -> "الصفحة"
         ReaderScope.QURAN -> "المصحف من الموضع المحدد"
     }
@@ -993,9 +997,87 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveCurrentSession() {
         val evaluation = state.value.evaluation ?: return
-        val summary = SessionSummary(java.util.UUID.randomUUID().toString(), state.value.ayahs.firstOrNull()?.surah ?: 1, state.value.ayahs.firstOrNull()?.ayah ?: 1, state.value.ayahs.lastOrNull()?.ayah ?: 1, evaluation.matched, evaluation.total, evaluation.uncertain, System.currentTimeMillis())
-        store.append(summary); goalStore.addCompleted(1)
-        state.value = state.value.copy(sessions = store.list(), goal = goalStore.current(), notice = "حُفظت الجلسة محلياً على الجهاز.")
+        val first = state.value.ayahs.firstOrNull() ?: return
+        val last = state.value.ayahs.lastOrNull() ?: first
+        val checkpoint = state.value.checkpoint
+        val now = System.currentTimeMillis()
+        store.append(
+            SessionSummary(
+                id = java.util.UUID.randomUUID().toString(),
+                surah = first.surah,
+                startAyah = first.ayah,
+                endAyah = last.ayah,
+                matchedWords = evaluation.matched,
+                totalWords = evaluation.total,
+                uncertainWords = evaluation.uncertain,
+                createdAt = now,
+                label = "جلسة تسميع ${first.surah}:${first.ayah}",
+                page = state.value.currentPage,
+                wordIndex = state.value.currentWordInAyah.coerceAtLeast(0),
+                scope = ReaderScope.AYAH.name,
+                checkpointSurah = checkpoint?.surah ?: first.surah,
+                checkpointAyah = checkpoint?.ayah ?: first.ayah,
+                checkpointWordIndex = checkpoint?.wordIndex ?: state.value.currentWordInAyah.coerceAtLeast(0),
+                includeOpeningBasmala = checkpoint?.includeOpeningBasmala == true,
+                lastOpenedAt = now,
+            ),
+        )
+        goalStore.addCompleted(1)
+        state.value = state.value.copy(sessions = store.list(), goal = goalStore.current(), notice = "حُفظت الجلسة محلياً على الجهاز، وستظهر أولاً عند فتح السجل.")
+    }
+
+    fun saveBookmark(surah: Int, ayah: Int) {
+        val target = state.value.allAyahs.firstOrNull { it.surah == surah && it.ayah == ayah } ?: return
+        val now = System.currentTimeMillis()
+        store.append(
+            SessionSummary(
+                id = java.util.UUID.randomUUID().toString(),
+                surah = target.surah,
+                startAyah = target.ayah,
+                endAyah = target.ayah,
+                matchedWords = 0,
+                totalWords = target.words.size,
+                uncertainWords = target.words.size,
+                createdAt = now,
+                label = "مرجع قراءة ${target.surah}:${target.ayah}",
+                page = state.value.metadata?.ayah(target.surah, target.ayah)?.page ?: state.value.currentPage,
+                wordIndex = 0,
+                scope = ReaderScope.AYAH.name,
+                checkpointSurah = target.surah,
+                checkpointAyah = target.ayah,
+                checkpointWordIndex = 0,
+                includeOpeningBasmala = target.ayah == 1 && QuranPresentation.openingBasmalaForSurah(target.surah) != null,
+                lastOpenedAt = now,
+            ),
+        )
+        state.value = state.value.copy(sessions = store.list(), notice = "حُفظ هذا الموضع كمرجع محلي.")
+    }
+
+    fun openSession(id: String) {
+        val session = store.list().firstOrNull { it.id == id } ?: return
+        val targetSurah = session.checkpointSurah ?: session.surah
+        val targetAyah = session.checkpointAyah ?: session.startAyah
+        val targetIndex = state.value.allAyahs.indexOfFirst { it.surah == targetSurah && it.ayah == targetAyah }
+        if (targetIndex < 0) {
+            state.value = state.value.copy(notice = "تعذر فتح المرجع؛ الموضع غير موجود في النص المحمّل.")
+            return
+        }
+        val checkpoint = MemorizationCheckpoint(
+            targetSurah,
+            targetAyah,
+            (session.checkpointWordIndex ?: session.wordIndex).coerceAtLeast(0),
+            session.includeOpeningBasmala,
+            System.currentTimeMillis(),
+        ).validatedAgainst(state.value.allAyahs)
+        if (checkpoint == null) {
+            state.value = state.value.copy(notice = "تعذر فتح المرجع؛ نقطة الاستئناف غير صالحة.")
+            return
+        }
+        memorizationProgressStore.save(checkpoint)
+        store.touch(session.id)
+        val pageNumber = session.page.takeIf { it > 0 } ?: pageForAyahIndex(targetIndex)
+        showPage(pageNumber, notice = "فُتح ${session.label}، ويمكنك الاستماع أو الاستئناف من موضعه.")
+        state.value = state.value.copy(checkpoint = checkpoint, sessions = store.list())
     }
 
     fun setDailyGoal(targetAyahs: Int) { goalStore.setTarget(targetAyahs); state.value = state.value.copy(goal = goalStore.current(), notice = "تم تحديث الهدف اليومي محلياً.") }

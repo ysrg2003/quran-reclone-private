@@ -55,6 +55,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -96,6 +98,7 @@ import com.example.quranoffline.data.ResumePosition
 import com.example.quranoffline.data.RecitationEngine
 import com.example.quranoffline.data.WordStatus
 import com.example.quranoffline.data.displayPause
+import com.example.quranoffline.data.QuranTextPresentation
 import java.text.DateFormat
 import java.util.Date
 
@@ -272,6 +275,7 @@ private fun QuranOfflineApp(
                 onClear = viewModel::clearSessions,
                 onClearErrors = viewModel::clearCorrectedErrors,
                 onExport = onExportBackup,
+                onOpenSession = { id -> viewModel.openSession(id); tab = 0 },
                 modifier = Modifier.padding(padding),
             )
             4 -> ReaderScreen(
@@ -281,6 +285,8 @@ private fun QuranOfflineApp(
                 onReadFromHere = viewModel::playFromHere,
                 onReadSurahFromHere = viewModel::playSurahFromHere,
                 onPlaySelected = viewModel::playSelectedAyahs,
+                onPlayScopeFromHere = viewModel::playReaderScopeFromHere,
+                onBookmark = viewModel::saveBookmark,
                 onClearSelection = viewModel::clearAyahSelection,
                 onTapAyah = viewModel::tapAyahSelection,
                 onLongPressAyah = viewModel::beginAyahSelection,
@@ -600,7 +606,7 @@ private fun MemorizationScreen(
                         Text("مطابق: ${evaluation.matched} من ${evaluation.total} • غير مؤكد: ${evaluation.uncertain} • يحتاج مراجعة: ${evaluation.missing + evaluation.unexpected}")
                         if (state.transcript.isNotBlank()) {
                             Text("الناتج المسموع بالصيغة القرآنية", fontWeight = FontWeight.SemiBold)
-                            Text(state.transcript, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                            Text(QuranTextPresentation.annotated(state.transcript), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
                         }
                         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Refresh, null)
@@ -1114,7 +1120,7 @@ private fun AyahBlock(
                     }
                     Surface(color = background, shape = RoundedCornerShape(8.dp)) {
                         Text(
-                            text = shownText,
+                            text = QuranTextPresentation.annotated(shownText),
                             color = if (hidden && !revealed && !isCurrent) Color(0xFF202A25) else Color(0xFF183D33),
                             style = MaterialTheme.typography.headlineSmall,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -1281,6 +1287,7 @@ private fun HistoryScreen(
     onClear: () -> Unit,
     onClearErrors: () -> Unit,
     onExport: () -> Unit,
+    onOpenSession: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(Color(0xFFF7F8F4)).padding(16.dp)) {
@@ -1330,10 +1337,16 @@ private fun HistoryScreen(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(state.sessions, key = { it.id }) { session ->
                     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("سورة ${session.surah} • الآية ${session.startAyah}–${session.endAyah}", fontWeight = FontWeight.SemiBold)
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(session.label, fontWeight = FontWeight.SemiBold)
+                            Text("السورة ${session.surah} • الآية ${session.startAyah}–${session.endAyah} • الصفحة ${session.page.takeIf { it > 0 } ?: "—"}")
                             Text("مطابق ${session.matchedWords}/${session.totalWords} • غير مؤكد ${session.uncertainWords}")
-                            Text(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(session.createdAt)), style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C))
+                            Text("آخر فتح: ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(session.lastOpenedAt))}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C))
+                            Button(onClick = { onOpenSession(session.id) }, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("فتح واستئناف هذا المرجع")
+                            }
                         }
                     }
                 }
@@ -1343,7 +1356,7 @@ private fun HistoryScreen(
 }
 
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ReaderScreen(
     state: com.example.quranoffline.data.QuranUiState,
@@ -1352,6 +1365,8 @@ private fun ReaderScreen(
     onReadFromHere: (Int, Int) -> Unit,
     onReadSurahFromHere: (Int, Int) -> Unit,
     onPlaySelected: () -> Unit,
+    onPlayScopeFromHere: (com.example.quranoffline.data.ReaderScope, Int, Int) -> Unit,
+    onBookmark: (Int, Int) -> Unit,
     onClearSelection: () -> Unit,
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
@@ -1368,6 +1383,11 @@ private fun ReaderScreen(
         val metadata = state.metadata
         val contentState = rememberLazyListState()
         var readerTextScale by rememberSaveable { mutableFloatStateOf(1f) }
+        var showReaderActions by rememberSaveable { mutableStateOf(false) }
+        var actionSurah by rememberSaveable { mutableIntStateOf(0) }
+        var actionAyah by rememberSaveable { mutableIntStateOf(0) }
+        val sheetAyah = state.allAyahs.firstOrNull { it.surah == actionSurah && it.ayah == actionAyah }
+            ?: state.ayahs.firstOrNull()
 
         LazyColumn(
         state = contentState,
@@ -1450,11 +1470,96 @@ private fun ReaderScreen(
                 onReadFromHere = onReadFromHere,
                 onReadSurahFromHere = onReadSurahFromHere,
                 onPageChanged = onPageChanged,
+                onBookmark = onBookmark,
+                onOpenReaderActions = {
+                    state.ayahs.firstOrNull()?.let { first ->
+                        actionSurah = first.surah
+                        actionAyah = first.ayah
+                        showReaderActions = true
+                    }
+                },
+                onOpenAyahActions = { surah, ayah -> actionSurah = surah; actionAyah = ayah; showReaderActions = true },
                 textScale = readerTextScale,
                 onTapAyah = onTapAyah,
                 onLongPressAyah = onLongPressAyah,
             )
         }
+        item { QuranMarkerLegendCard() }
+        }
+        if (showReaderActions && sheetAyah != null) {
+            val sheetMetadata = state.metadata?.ayah(sheetAyah.surah, sheetAyah.ayah)
+            ModalBottomSheet(onDismissRequest = { showReaderActions = false }) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text("الاستماع إلى", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "سورة ${state.metadata?.sura(sheetAyah.surah)?.arabicName ?: sheetAyah.surah} • الآية ${sheetAyah.ayah} • الصفحة ${sheetMetadata?.page ?: state.currentPage}",
+                        color = Color(0xFF66736C),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Right,
+                    )
+                    val actions = listOf(
+                        "الآية الحالية" to com.example.quranoffline.data.ReaderScope.AYAH,
+                        "الصفحة الحالية" to com.example.quranoffline.data.ReaderScope.PAGES,
+                        "السورة كاملة من هنا" to com.example.quranoffline.data.ReaderScope.SURAH,
+                        "الجزء الحالي" to com.example.quranoffline.data.ReaderScope.JUZ,
+                        "الحزب والربع الحالي" to com.example.quranoffline.data.ReaderScope.HIZB,
+                        "القرآن كاملاً من هنا" to com.example.quranoffline.data.ReaderScope.QURAN,
+                    )
+                    actions.forEach { (label, scope) ->
+                        ListItem(
+                            headlineContent = { Text(label) },
+                            supportingContent = { Text("يبدأ من ${sheetAyah.surah}:${sheetAyah.ayah} وبالترتيب المصحفي") },
+                            modifier = Modifier.fillMaxWidth().combinedClickable(
+                                onClick = {
+                                    showReaderActions = false
+                                    if (scope == com.example.quranoffline.data.ReaderScope.AYAH) onPlayAyah(sheetAyah.surah, sheetAyah.ayah)
+                                    else onPlayScopeFromHere(scope, sheetAyah.surah, sheetAyah.ayah)
+                                },
+                                onLongClick = {},
+                            ),
+                        )
+                    }
+                    ListItem(
+                        headlineContent = { Text("حفظ هذا الموضع كمرجع") },
+                        supportingContent = { Text("سيظهر المرجع في السجل ويمكن فتحه واستئنافه لاحقاً") },
+                        modifier = Modifier.fillMaxWidth().combinedClickable(
+                            onClick = {
+                                showReaderActions = false
+                                onBookmark(sheetAyah.surah, sheetAyah.ayah)
+                            },
+                            onLongClick = {},
+                        ),
+                    )
+                    if (state.readerPlaying) {
+                        OutlinedButton(onClick = { showReaderActions = false; onStop() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("إيقاف الاستماع")
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+                        }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuranMarkerLegendCard(
+) {
+    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBF1))) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("دليل علامات المصحف", fontWeight = FontWeight.Bold, color = Color(0xFF6E4B25))
+            Text("تظهر الهمزة وعلامات الضبط كطبقة مرئية فوق النص نفسه، ولا تدخل علامات الوقف في كلمات التسميع.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF7B6A55), textAlign = TextAlign.Right)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                QuranTextPresentation.markerLegend().forEach { (mark, label) ->
+                    Surface(color = Color(0xFFF4E8D2), shape = RoundedCornerShape(8.dp)) {
+                        Text("${mark}  $label", modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp), color = Color(0xFF6E4B25), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
         }
     }
 }
@@ -1493,7 +1598,7 @@ private fun MushafPageMarkerStrip(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun MushafPageSurface(
     pageAyahs: List<QuranAyah>,
@@ -1505,6 +1610,9 @@ private fun MushafPageSurface(
     onReadFromHere: (Int, Int) -> Unit,
     onReadSurahFromHere: (Int, Int) -> Unit,
     onPageChanged: (Int) -> Unit,
+    onBookmark: (Int, Int) -> Unit,
+    onOpenReaderActions: () -> Unit,
+    onOpenAyahActions: (Int, Int) -> Unit,
     textScale: Float,
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
@@ -1528,7 +1636,9 @@ private fun MushafPageSurface(
                     },
                     onDragCancel = { horizontalDrag = 0f },
                 )
-            },
+            }
+            .combinedClickable(onClick = onOpenReaderActions, onLongClick = {})
+        ,
         shape = RoundedCornerShape(if (isOpeningPage) 24.dp else 22.dp),
         border = BorderStroke(1.dp, Color(0xFFD8C7A7)),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEF8)),
@@ -1540,7 +1650,10 @@ private fun MushafPageSurface(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("صفحة ${state.currentPage}", color = Color(0xFF76552A), fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("صفحة ${state.currentPage}", color = Color(0xFF76552A), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                OutlinedButton(onClick = onOpenReaderActions) { Text("الاستماع") }
+            }
             MushafPageMarkerStrip(state, pageAyahs)
             if (pageAyahs.isEmpty()) {
                 Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -1556,12 +1669,15 @@ private fun MushafPageSurface(
                             textScale = textScale,
                             active = state.readerCurrentKey == ayah.selectionKey(),
                             selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
+                            hasSelection = state.selectedAyahIndices.isNotEmpty(),
                             onSetStart = onSetStart,
                             onMemorizeFromHere = onMemorizeFromHere,
                             onPlayAyah = onPlayAyah,
                             onPlayBasmala = onPlayBasmala,
                             onReadFromHere = onReadFromHere,
                             onReadSurahFromHere = onReadSurahFromHere,
+                            onBookmark = onBookmark,
+                            onOpenAyahActions = onOpenAyahActions,
                             onTapAyah = onTapAyah,
                             onLongPressAyah = onLongPressAyah,
                         )
@@ -1625,14 +1741,25 @@ private fun MushafPageSurface(
                                                 showSajdaMarker = state.metadata?.ayah(ayah.surah, ayah.ayah)?.sajda != null,
                                                 active = state.readerCurrentKey == ayah.selectionKey(),
                                                 selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
+                                                hasSelection = state.selectedAyahIndices.isNotEmpty(),
                                                 onSetStart = onSetStart,
                                                 onMemorizeFromHere = onMemorizeFromHere,
                                                 onPlayAyah = onPlayAyah,
                                                 onReadFromHere = onReadFromHere,
                                                 onReadSurahFromHere = onReadSurahFromHere,
+                                                onBookmark = onBookmark,
+                                                onOpenAyahActions = onOpenAyahActions,
                                                 onTapAyah = onTapAyah,
                                                 onLongPressAyah = onLongPressAyah,
                                             )
+                                        }
+                                    }
+                                    val visibleMarkers = line.markers.mapNotNull { it.symbol }.distinct()
+                                    if (visibleMarkers.isNotEmpty()) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {
+                                            visibleMarkers.forEach { marker ->
+                                                Text(QuranTextPresentation.annotated(marker), color = Color(0xFF6E4B25), style = MaterialTheme.typography.labelSmall)
+                                            }
                                         }
                                     }
                                 }
@@ -1655,11 +1782,14 @@ private fun PageAyahInline(
     showSajdaMarker: Boolean,
     active: Boolean,
     selected: Boolean,
+    hasSelection: Boolean,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
     onPlayAyah: (Int, Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
     onReadSurahFromHere: (Int, Int) -> Unit,
+    onBookmark: (Int, Int) -> Unit,
+    onOpenAyahActions: (Int, Int) -> Unit,
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
 ) {
@@ -1677,11 +1807,11 @@ private fun PageAyahInline(
     Box(
         Modifier
             .background(backgroundColor, RoundedCornerShape(12.dp))
-            .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah) })
+            .combinedClickable(onClick = { if (hasSelection) onTapAyah(ayah.surah, ayah.ayah) else onOpenAyahActions(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah) })
             .padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
         Text(
-            lineText,
+            QuranTextPresentation.annotated(lineText),
             color = Color(0xFF183D33),
             fontSize = fontSize,
             lineHeight = (fontSize.value * 1.45f).sp,
@@ -1690,6 +1820,7 @@ private fun PageAyahInline(
         )
         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
             DropdownMenuItem(text = { Text("تعيين بداية الحفظ من هنا") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, false) })
+            DropdownMenuItem(text = { Text("حفظ هذا الموضع كمرجع") }, onClick = { menuExpanded = false; onBookmark(ayah.surah, ayah.ayah) })
             if (ayah.ayah == 1 && com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(ayah.surah) != null) DropdownMenuItem(text = { Text("تعيين البداية مع البسملة المستقلة") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, true) })
             DropdownMenuItem(text = { Text("التسميع والحفظ من هنا") }, onClick = { menuExpanded = false; onMemorizeFromHere(ayah.surah, ayah.ayah) })
             DropdownMenuItem(text = { Text("قراءة الآية بصوت الشيخ") }, onClick = { menuExpanded = false; onPlayAyah(ayah.surah, ayah.ayah) })
@@ -1706,12 +1837,15 @@ private fun PageAyahLine(
     textScale: Float,
     active: Boolean,
     selected: Boolean,
+    hasSelection: Boolean,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
     onPlayAyah: (Int, Int) -> Unit,
     onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
     onReadSurahFromHere: (Int, Int) -> Unit,
+    onBookmark: (Int, Int) -> Unit,
+    onOpenAyahActions: (Int, Int) -> Unit,
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
 ) {
@@ -1736,7 +1870,7 @@ private fun PageAyahLine(
                     },
                     RoundedCornerShape(12.dp),
                 )
-                .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah) })
+                .combinedClickable(onClick = { if (hasSelection) onTapAyah(ayah.surah, ayah.ayah) else onOpenAyahActions(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah) })
                 .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -1752,7 +1886,7 @@ private fun PageAyahLine(
             ) {
                 ayah.words.forEach { word ->
                     Text(
-                        word.text,
+                        QuranTextPresentation.annotated(word.text),
                         color = Color(0xFF183D33),
                         style = MaterialTheme.typography.headlineSmall,
                         fontSize = (MaterialTheme.typography.headlineSmall.fontSize.value * textScale).sp,
@@ -1764,6 +1898,7 @@ private fun PageAyahLine(
             }
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 DropdownMenuItem(text = { Text("تعيين بداية الحفظ من هنا") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, false) })
+            DropdownMenuItem(text = { Text("حفظ هذا الموضع كمرجع") }, onClick = { menuExpanded = false; onBookmark(ayah.surah, ayah.ayah) })
                 if (openingBasmala != null) DropdownMenuItem(text = { Text("تعيين البداية مع البسملة المستقلة") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, true) })
                 DropdownMenuItem(text = { Text("التسميع والحفظ من هنا") }, onClick = { menuExpanded = false; onMemorizeFromHere(ayah.surah, ayah.ayah) })
                 DropdownMenuItem(text = { Text("قراءة الآية بصوت الشيخ") }, onClick = { menuExpanded = false; onPlayAyah(ayah.surah, ayah.ayah) })
@@ -1814,6 +1949,7 @@ private fun readerScopeLabel(scope: com.example.quranoffline.data.ReaderScope): 
     com.example.quranoffline.data.ReaderScope.AYAH -> "آية"
     com.example.quranoffline.data.ReaderScope.SURAH -> "سورة"
     com.example.quranoffline.data.ReaderScope.JUZ -> "جزء"
+    com.example.quranoffline.data.ReaderScope.HIZB -> "حزب/ربع"
     com.example.quranoffline.data.ReaderScope.PAGES -> "صفحات"
     com.example.quranoffline.data.ReaderScope.QURAN -> "المصحف"
 }
