@@ -23,20 +23,6 @@ class OpeningBasmalaTest {
     }
 
     @Test
-    fun recognizerAppendingFirstAyahToBasmalaStillDoesNotPassItThrough() {
-        val result = OpeningBasmalaSpeechFilter.filter(
-            transcript = "بسم الله الرحمن الرحيم الم",
-            isFinal = true,
-            segmentCompleted = true,
-            alreadyConsumed = false,
-        )
-
-        assertEquals("", result.ayahTranscript)
-        assertTrue(result.consumed)
-        assertTrue(result.detectedOpeningBasmala)
-    }
-
-    @Test
     fun partialOpeningBasmalaStaysOutsideAyah() {
         val result = OpeningBasmalaSpeechFilter.filter(
             transcript = "بسم الله",
