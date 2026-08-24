@@ -11,14 +11,15 @@ from pathlib import Path
 MARKS = re.compile(r"[\u0610-\u061a\u064b-\u065f\u06d6-\u06ed]")
 WHITESPACE = re.compile(r"\s+")
 SMALL_ALIF = "ٰ"
+EXPECTED_WORDS = 77878
 
 
 def normalize_for_match(value: str) -> str:
-    return WHITESPACE.sub(" ", MARKS.sub("", unicodedata.normalize("NFC", value)).replace(SMALL_ALIF, "").replace("ٱ", "ا").replace("آ", "ا")).strip()
+    return WHITESPACE.sub(" ", MARKS.sub("", unicodedata.normalize("NFC", value)).replace("ـ", "").replace(SMALL_ALIF, "").replace("ٱ", "ا").replace("آ", "ا")).strip()
 
 
 def normalize_with_small_alif(value: str) -> str:
-    value = MARKS.sub("", unicodedata.normalize("NFC", value))
+    value = MARKS.sub("", unicodedata.normalize("NFC", value)).replace("ـ", "")
     return WHITESPACE.sub(" ", value.replace(SMALL_ALIF, "ا").replace("ٱ", "ا").replace("آ", "ا").replace("أ", "ا").replace("إ", "ا").replace("ؤ", "و").replace("ئ", "ي").replace("ء", "")).strip()
 
 
@@ -38,8 +39,8 @@ def main() -> None:
     failures = [(word["text"], word["matchText"]) for word in words if not equivalent(word["text"], word["matchText"])]
     if len(ayahs) != 6236:
         raise SystemExit(f"expected 6236 ayahs, found {len(ayahs)}")
-    if len(words) != 77881:
-        raise SystemExit(f"expected 77881 words, found {len(words)}")
+    if len(words) != EXPECTED_WORDS:
+        raise SystemExit(f"expected {EXPECTED_WORDS} words, found {len(words)}")
     if len(set(keys)) != len(keys):
         raise SystemExit("duplicate surah/ayah key")
     if failures:

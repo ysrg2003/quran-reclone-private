@@ -16,7 +16,7 @@ class RemoteAssetManager(context: Context) {
         const val BASE_URL = "https://raw.githubusercontent.com/ysrg2003/quran-memorization-assets/main"
         const val TEXT_URL = "$BASE_URL/quran/quran_content.json"
         const val TIMINGS_URL = "$BASE_URL/timings/Alafasy_128kbps.json"
-        private const val TEXT_ASSET_VERSION = "2026.08.24.1"
+        private const val TEXT_ASSET_VERSION = "2026.08.24.2"
         const val MODEL_ZIP_URL = "https://github.com/ysrg2003/quran-memorization-assets/releases/download/v0.1.0/fastconformer-quran-ar-onnx-int8.zip"
         private const val CONNECT_TIMEOUT_MS = 20_000
         private const val READ_TIMEOUT_MS = 120_000
