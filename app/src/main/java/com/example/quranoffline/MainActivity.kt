@@ -1341,6 +1341,7 @@ private fun ReaderScreen(
     modifier: Modifier = Modifier,
 ) {
     val metadata = state.metadata
+    val contentState = rememberLazyListState()
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (state.currentPage - 1).coerceAtLeast(0))
     LaunchedEffect(listState, state.totalPages) {
         snapshotFlow { listState.firstVisibleItemIndex }
@@ -1356,6 +1357,7 @@ private fun ReaderScreen(
     }
 
     LazyColumn(
+        state = contentState,
         modifier = modifier.fillMaxSize().background(Color(0xFFF7F8F4)).padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
