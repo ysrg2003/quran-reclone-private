@@ -39,6 +39,7 @@
 | العنصر | القيمة |
 |---|---|
 | مستودع التطبيق | `ysrg2003/quran-memorization-online` |
+| آخر commit للتطبيق | `fad7d6e` — Fix source line rendering and document final verification |
 | مستودع الأصول | `ysrg2003/quran-memorization-assets` |
 | commit نص القرآن | `7e3af3e` |
 | commit تخطيط الأسطر | `fa59065` |
