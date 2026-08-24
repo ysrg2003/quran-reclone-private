@@ -78,6 +78,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1481,7 +1482,7 @@ private fun MushafPageSurface(
             if (pageAyahs.isEmpty()) {
                 Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             } else {
-                val ayahByKey = pageAyahs.associateBy { it.selectionKey() }
+                val ayahByKey = pageAyahs.associateBy { "${it.surah}:${it.ayah}" }
                 val layoutLines = state.pageLayout?.linesForPage(state.currentPage).orEmpty()
                 if (layoutLines.isEmpty()) {
                     pageAyahs.forEach { ayah ->
@@ -1525,20 +1526,33 @@ private fun MushafPageSurface(
                             }
                             else -> {
                                 val lineGroups = line.wordKeys.mapNotNull { key ->
-                                    ayahByKey[key.value]?.let { ayah -> ayah to key }
+                                    ayahByKey["${key.surah}:${key.ayah}"]?.let { ayah -> ayah to key }
                                 }.groupBy { it.first.selectionKey() }
                                 if (lineGroups.isNotEmpty()) {
-                                    FlowRow(
+                                    val lineEntries = lineGroups.values.toList()
+                                    val lineTextLength = lineEntries.sumOf { entries ->
+                                        val ayah = entries.first().first
+                                        entries.sumOf { (_, key) -> ayah.words.getOrNull(key.word - 1)?.text?.length ?: 0 } + 6
+                                    }
+                                    val lineFontSize = when {
+                                        lineTextLength >= 78 -> 13.sp
+                                        lineTextLength >= 62 -> 15.sp
+                                        lineTextLength >= 46 -> 17.sp
+                                        lineTextLength >= 32 -> 20.sp
+                                        else -> 23.sp
+                                    }
+                                    Row(
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                                         horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        lineGroups.values.forEach { entries ->
+                                        lineEntries.forEach { entries ->
                                             val ayah = entries.first().first
                                             val words = entries.mapNotNull { (_, key) -> ayah.words.getOrNull(key.word - 1) }
                                             PageAyahInline(
                                                 ayah = ayah,
                                                 words = words,
+                                                fontSize = lineFontSize,
                                                 showAyahMarker = entries.first().second.word == 1,
                                                 active = state.readerCurrentKey == ayah.selectionKey(),
                                                 selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
@@ -1567,6 +1581,7 @@ private fun MushafPageSurface(
 private fun PageAyahInline(
     ayah: QuranAyah,
     words: List<QuranWord>,
+    fontSize: androidx.compose.ui.unit.TextUnit,
     showAyahMarker: Boolean,
     active: Boolean,
     selected: Boolean,
@@ -1584,6 +1599,10 @@ private fun PageAyahInline(
         active -> Color(0xFFEAF4EE)
         else -> Color.Transparent
     }
+    val lineText = buildString {
+        if (showAyahMarker) append("﴿${ayah.ayah}﴾ ")
+        append(words.joinToString(" ") { it.text })
+    }
     Box(
         Modifier
             .background(backgroundColor, RoundedCornerShape(12.dp))
@@ -1591,13 +1610,13 @@ private fun PageAyahInline(
             .padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
         Text(
-            buildString {
-                if (showAyahMarker) append("﴿${ayah.ayah}﴾ ")
-                append(words.joinToString(" ") { it.text })
-            },
+            lineText,
             color = Color(0xFF183D33),
-            style = MaterialTheme.typography.headlineSmall,
-            lineHeight = 36.sp,
+            fontSize = fontSize,
+            lineHeight = (fontSize.value * 1.45f).sp,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
             textAlign = TextAlign.Right,
         )
         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
