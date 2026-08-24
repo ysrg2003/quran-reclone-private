@@ -16,9 +16,11 @@ class RemoteAssetManager(context: Context) {
         const val BASE_URL = "https://raw.githubusercontent.com/ysrg2003/quran-memorization-assets/main"
         const val TEXT_URL = "$BASE_URL/quran/quran_content.json"
         const val TIMINGS_URL = "$BASE_URL/timings/Alafasy_128kbps.json"
+        const val PAGE_LAYOUT_URL = "$BASE_URL/quran/quran_page_layout.json"
         // Bumped after publishing the verified 77,430-word asset so a
         // previously downloaded 77,881-word cache cannot survive an update.
         private const val TEXT_ASSET_VERSION = "2026.08.24.4"
+        private const val PAGE_LAYOUT_ASSET_VERSION = "2026.08.24.1"
         const val MODEL_ZIP_URL = "https://github.com/ysrg2003/quran-memorization-assets/releases/download/v0.1.0/fastconformer-quran-ar-onnx-int8.zip"
         private const val CONNECT_TIMEOUT_MS = 20_000
         private const val READ_TIMEOUT_MS = 120_000
@@ -80,6 +82,25 @@ class RemoteAssetManager(context: Context) {
     fun fetchText(): String = fetch(TEXT_URL)
 
     fun fetchTimings(): String = fetch(TIMINGS_URL)
+
+    fun fetchPageLayout(): String = fetch(PAGE_LAYOUT_URL)
+
+    fun loadOrDownloadPageLayout(): String {
+        val file = File(filesRoot, "quran_page_layout.json")
+        val versionFile = File(filesRoot, "quran_page_layout.version")
+        val hasUsableCache = file.isFile && file.length() > 0L
+        val cacheVersion = versionFile.takeIf { it.isFile }?.readText()?.trim()
+        if (hasUsableCache && cacheVersion == PAGE_LAYOUT_ASSET_VERSION) return file.readText()
+        return runCatching {
+            fetchPageLayout().also {
+                filesRoot.mkdirs()
+                file.writeText(it)
+                versionFile.writeText(PAGE_LAYOUT_ASSET_VERSION)
+            }
+        }.getOrElse { error ->
+            if (hasUsableCache) file.readText() else throw error
+        }
+    }
 
     fun loadOrDownloadText(): String {
         val file = File(filesRoot, "quran_content.json")

@@ -18,6 +18,7 @@ data class QuranUiState(
     val ayahs: List<QuranAyah> = emptyList(),
     val allAyahs: List<QuranAyah> = emptyList(),
     val metadata: QuranMetadata? = null,
+    val pageLayout: QuranLayout? = null,
     val hidden: Boolean = false,
     val listening: Boolean = false,
     val assetsReady: Boolean = false,
@@ -64,6 +65,7 @@ data class QuranUiState(
 private data class PreparedAssets(
     val repository: QuranRepository,
     val metadata: QuranMetadata,
+    val pageLayout: QuranLayout,
     val allAyahs: List<QuranAyah>,
     val ayahs: List<QuranAyah>,
     val pageWordOffset: Int,
@@ -153,13 +155,19 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val timings = withContext(Dispatchers.IO) {
                     if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadTimings() else assetManager.fetchTimings()
                 }
+                val pageLayout = withContext(Dispatchers.IO) {
+                    if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadPageLayout() else assetManager.fetchPageLayout()
+                }
                 val requestedSurah = state.value.selectedSurah
                 val prepared = withContext(Dispatchers.Default) {
                     val parsedRepository = QuranRepository(getApplication(), text)
                     val parsedMetadata = metadataRepository.load()
                     parsedMetadata.requireCompatible(parsedRepository.allAyahs())
                     timingRepository.update(timings)
+                    val parsedPageLayout = QuranLayout.fromJson(pageLayout)
                     val allAyahs = parsedRepository.allAyahs()
+                    check(parsedPageLayout.pageCount == parsedMetadata.pages.size) { "Page layout page count does not match Quran metadata" }
+                    check(parsedPageLayout.wordCount == allAyahs.sumOf { it.words.size }) { "Page layout word count does not match Quran text" }
                     val requestedSurahAyahs = parsedRepository.ayahsForSurah(requestedSurah).ifEmpty { parsedRepository.ayahsForSurah(1) }
                     val selectedSurah = requestedSurahAyahs.firstOrNull()?.surah ?: 1
                     val totalAyahs = parsedRepository.ayahsForSurah(selectedSurah).size
@@ -168,6 +176,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     PreparedAssets(
                         repository = parsedRepository,
                         metadata = parsedMetadata,
+                        pageLayout = parsedPageLayout,
                         allAyahs = allAyahs,
                         ayahs = visiblePage,
                         pageWordOffset = globalWordOffset(allAyahs, visiblePage.firstOrNull()),
@@ -179,7 +188,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 repository = prepared.repository
                 state.value = state.value.copy(
-                    ayahs = prepared.ayahs, allAyahs = prepared.allAyahs, metadata = prepared.metadata, selectedSurah = prepared.selectedSurah,
+                    ayahs = prepared.ayahs, allAyahs = prepared.allAyahs, metadata = prepared.metadata, pageLayout = prepared.pageLayout, selectedSurah = prepared.selectedSurah,
                     currentPage = prepared.metadata.ayah(prepared.selectedSurah, 1)?.page ?: 1,
                     totalPages = prepared.metadata.pages.size,
                     pageWordOffset = prepared.pageWordOffset,

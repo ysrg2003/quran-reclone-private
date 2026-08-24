@@ -83,6 +83,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.quranoffline.data.AssetMode
 import com.example.quranoffline.data.QuranAyah
+import com.example.quranoffline.data.QuranWord
+import com.example.quranoffline.data.selectionKey
 import com.example.quranoffline.data.QuranAyahMetadata
 import com.example.quranoffline.data.QuranViewModel
 import com.example.quranoffline.data.CorrectionPhase
@@ -1437,6 +1439,7 @@ private fun ReaderScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MushafPageSurface(
     pageAyahs: List<QuranAyah>,
@@ -1478,22 +1481,132 @@ private fun MushafPageSurface(
             if (pageAyahs.isEmpty()) {
                 Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             } else {
-                pageAyahs.forEach { ayah ->
-                    PageAyahLine(
-                        ayah = ayah,
-                        active = state.readerCurrentKey == "${ayah.surah}:${ayah.ayah}",
-                        selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
-                        onSetStart = onSetStart,
-                        onMemorizeFromHere = onMemorizeFromHere,
-                        onPlayAyah = onPlayAyah,
-                        onPlayBasmala = onPlayBasmala,
-                        onReadFromHere = onReadFromHere,
-                        onReadSurahFromHere = onReadSurahFromHere,
-                        onTapAyah = onTapAyah,
-                        onLongPressAyah = onLongPressAyah,
-                    )
+                val ayahByKey = pageAyahs.associateBy { it.selectionKey() }
+                val layoutLines = state.pageLayout?.linesForPage(state.currentPage).orEmpty()
+                if (layoutLines.isEmpty()) {
+                    pageAyahs.forEach { ayah ->
+                        PageAyahLine(
+                            ayah = ayah,
+                            active = state.readerCurrentKey == ayah.selectionKey(),
+                            selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
+                            onSetStart = onSetStart,
+                            onMemorizeFromHere = onMemorizeFromHere,
+                            onPlayAyah = onPlayAyah,
+                            onPlayBasmala = onPlayBasmala,
+                            onReadFromHere = onReadFromHere,
+                            onReadSurahFromHere = onReadSurahFromHere,
+                            onTapAyah = onTapAyah,
+                            onLongPressAyah = onLongPressAyah,
+                        )
+                    }
+                } else {
+                    layoutLines.forEach { line ->
+                        when (line.type) {
+                            "sura" -> {
+                                val surah = line.wordKeys.firstOrNull()?.surah ?: pageAyahs.first().surah
+                                Text(
+                                    "سورة ${state.metadata?.sura(surah)?.arabicName ?: surah}",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center,
+                                    color = Color(0xFF76552A),
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            "bismillah" -> {
+                                val surah = pageAyahs.first().surah
+                                com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(surah)?.let { basmala ->
+                                    Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp)) {
+                                            IconButton(onClick = { onPlayBasmala(surah) }) { Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل البسملة الافتتاحية", tint = Color(0xFF76552A)) }
+                                            Text("${basmala.text}  ·  جملة مستقلة لا تدخل في الآية", modifier = Modifier.weight(1f).padding(vertical = 8.dp), textAlign = TextAlign.Right, color = Color(0xFF76552A), style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    }
+                                }
+                            }
+                            else -> {
+                                val lineGroups = line.wordKeys.mapNotNull { key ->
+                                    ayahByKey[key.value]?.let { ayah -> ayah to key }
+                                }.groupBy { it.first.selectionKey() }
+                                if (lineGroups.isNotEmpty()) {
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    ) {
+                                        lineGroups.values.forEach { entries ->
+                                            val ayah = entries.first().first
+                                            val words = entries.mapNotNull { (_, key) -> ayah.words.getOrNull(key.word - 1) }
+                                            PageAyahInline(
+                                                ayah = ayah,
+                                                words = words,
+                                                showAyahMarker = entries.first().second.word == 1,
+                                                active = state.readerCurrentKey == ayah.selectionKey(),
+                                                selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
+                                                onSetStart = onSetStart,
+                                                onMemorizeFromHere = onMemorizeFromHere,
+                                                onPlayAyah = onPlayAyah,
+                                                onReadFromHere = onReadFromHere,
+                                                onReadSurahFromHere = onReadSurahFromHere,
+                                                onTapAyah = onTapAyah,
+                                                onLongPressAyah = onLongPressAyah,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@Composable
+private fun PageAyahInline(
+    ayah: QuranAyah,
+    words: List<QuranWord>,
+    showAyahMarker: Boolean,
+    active: Boolean,
+    selected: Boolean,
+    onSetStart: (Int, Int, Int, Boolean) -> Unit,
+    onMemorizeFromHere: (Int, Int) -> Unit,
+    onPlayAyah: (Int, Int) -> Unit,
+    onReadFromHere: (Int, Int) -> Unit,
+    onReadSurahFromHere: (Int, Int) -> Unit,
+    onTapAyah: (Int, Int) -> Unit,
+    onLongPressAyah: (Int, Int) -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val backgroundColor = when {
+        selected -> Color(0xFFFFE0A6)
+        active -> Color(0xFFEAF4EE)
+        else -> Color.Transparent
+    }
+    Box(
+        Modifier
+            .background(backgroundColor, RoundedCornerShape(12.dp))
+            .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah); menuExpanded = true })
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    ) {
+        Text(
+            buildString {
+                if (showAyahMarker) append("﴿${ayah.ayah}﴾ ")
+                append(words.joinToString(" ") { it.text })
+            },
+            color = Color(0xFF183D33),
+            style = MaterialTheme.typography.headlineSmall,
+            lineHeight = 36.sp,
+            textAlign = TextAlign.Right,
+        )
+        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+            DropdownMenuItem(text = { Text("تعيين بداية الحفظ من هنا") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, false) })
+            if (ayah.ayah == 1 && com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(ayah.surah) != null) DropdownMenuItem(text = { Text("تعيين البداية مع البسملة المستقلة") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, true) })
+            DropdownMenuItem(text = { Text("التسميع والحفظ من هنا") }, onClick = { menuExpanded = false; onMemorizeFromHere(ayah.surah, ayah.ayah) })
+            DropdownMenuItem(text = { Text("قراءة الآية بصوت الشيخ") }, onClick = { menuExpanded = false; onPlayAyah(ayah.surah, ayah.ayah) })
+            DropdownMenuItem(text = { Text("قراءة السورة من هنا") }, onClick = { menuExpanded = false; onReadSurahFromHere(ayah.surah, ayah.ayah) })
+            DropdownMenuItem(text = { Text("قراءة القرآن من هنا") }, onClick = { menuExpanded = false; onReadFromHere(ayah.surah, ayah.ayah) })
         }
     }
 }
@@ -1515,25 +1628,7 @@ private fun PageAyahLine(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val openingBasmala = if (ayah.ayah == 1) com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(ayah.surah) else null
-    Column(
-        Modifier.fillMaxWidth()
-            .background(
-                when {
-                    selected -> Color(0xFFFFE0A6)
-                    active -> Color(0xFFEAF4EE)
-                    else -> Color.Transparent
-                },
-                RoundedCornerShape(12.dp),
-            )
-            .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah); menuExpanded = true })
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("﴿${ayah.ayah}﴾", color = Color(0xFFB6844A), style = MaterialTheme.typography.labelMedium)
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, contentDescription = "خيارات الآية", tint = Color(0xFF76552A)) }
-        }
+    Column(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         openingBasmala?.let { basmala ->
             Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp)) {
@@ -1542,28 +1637,48 @@ private fun PageAyahLine(
                 }
             }
         }
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            ayah.words.forEach { word ->
-                Text(
-                    word.text,
-                    color = Color(0xFF183D33),
-                    style = MaterialTheme.typography.headlineSmall,
-                    lineHeight = 36.sp,
-                    softWrap = false,
+        Column(
+            Modifier.fillMaxWidth()
+                .background(
+                    when {
+                        selected -> Color(0xFFFFE0A6)
+                        active -> Color(0xFFEAF4EE)
+                        else -> Color.Transparent
+                    },
+                    RoundedCornerShape(12.dp),
                 )
+                .combinedClickable(onClick = { onTapAyah(ayah.surah, ayah.ayah) }, onLongClick = { onLongPressAyah(ayah.surah, ayah.ayah); menuExpanded = true })
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("﴿${ayah.ayah}﴾", color = Color(0xFFB6844A), style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, contentDescription = "خيارات الآية", tint = Color(0xFF76552A)) }
             }
-        }
-        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-            DropdownMenuItem(text = { Text("تعيين بداية الحفظ من هنا") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, false) })
-            if (openingBasmala != null) DropdownMenuItem(text = { Text("تعيين البداية مع البسملة المستقلة") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, true) })
-            DropdownMenuItem(text = { Text("التسميع والحفظ من هنا") }, onClick = { menuExpanded = false; onMemorizeFromHere(ayah.surah, ayah.ayah) })
-            DropdownMenuItem(text = { Text("قراءة الآية بصوت الشيخ") }, onClick = { menuExpanded = false; onPlayAyah(ayah.surah, ayah.ayah) })
-            DropdownMenuItem(text = { Text("قراءة السورة من هنا") }, onClick = { menuExpanded = false; onReadSurahFromHere(ayah.surah, ayah.ayah) })
-            DropdownMenuItem(text = { Text("قراءة القرآن من هنا") }, onClick = { menuExpanded = false; onReadFromHere(ayah.surah, ayah.ayah) })
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                ayah.words.forEach { word ->
+                    Text(
+                        word.text,
+                        color = Color(0xFF183D33),
+                        style = MaterialTheme.typography.headlineSmall,
+                        lineHeight = 36.sp,
+                        softWrap = false,
+                    )
+                }
+            }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                DropdownMenuItem(text = { Text("تعيين بداية الحفظ من هنا") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, false) })
+                if (openingBasmala != null) DropdownMenuItem(text = { Text("تعيين البداية مع البسملة المستقلة") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, true) })
+                DropdownMenuItem(text = { Text("التسميع والحفظ من هنا") }, onClick = { menuExpanded = false; onMemorizeFromHere(ayah.surah, ayah.ayah) })
+                DropdownMenuItem(text = { Text("قراءة الآية بصوت الشيخ") }, onClick = { menuExpanded = false; onPlayAyah(ayah.surah, ayah.ayah) })
+                DropdownMenuItem(text = { Text("قراءة السورة من هنا") }, onClick = { menuExpanded = false; onReadSurahFromHere(ayah.surah, ayah.ayah) })
+                DropdownMenuItem(text = { Text("قراءة القرآن من هنا") }, onClick = { menuExpanded = false; onReadFromHere(ayah.surah, ayah.ayah) })
+            }
         }
     }
 }
