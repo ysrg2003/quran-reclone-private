@@ -291,54 +291,32 @@ def main() -> int:
     segmentation_cases: list[dict[str, Any]] = []
     token_differences: list[dict[str, Any]] = []
     mismatch_pages: Counter[int] = Counter()
-    basmala_extra_word_count = 0
-    segmentation_extra_word_count = 0
+    expected_opening_basmala_keys = [f"{surah}:1" for surah in list(range(2, 9)) + list(range(10, 115))]
+    opening_basmala_presentations = [
+        {"surah": int(key.split(":")[0]), "ayah": 1, "countAsAyah": False}
+        for key in expected_opening_basmala_keys
+    ]
     unresolved_length_delta = 0
     spot_checks: dict[str, dict[str, Any]] = {}
     for current_key in sorted(app_words):
         app, reference, page = app_words[current_key], reference_words[current_key], page_for_ayah[current_key]
         full_exact = app == reference
         full_normalized = sequence_equivalent(app, reference)
-        has_basmala = (current_key[0] > 1 and current_key[1] == 1 and len(app) >= 4 and
-                        [normalize_with_small_alif(token) for token in app[:4]] == BASMALA_NORMALIZED)
-        app_core = app[4:] if has_basmala else app
-        core_exact = app_core == reference
-        core_normalized = sequence_equivalent(app_core, reference)
-        core_segmented = sequence_signature(app_core) == sequence_signature(reference)
         full_segmented = sequence_signature(app) == sequence_signature(reference)
         if full_exact:
             classification = "exact"
         elif full_normalized:
             classification = "normalized_only"
-        elif has_basmala and core_exact:
-            classification = "expected_basmala_omission_exact_core"
-        elif has_basmala and core_normalized:
-            classification = "expected_basmala_omission_normalized_core"
-        elif has_basmala and core_segmented:
-            classification = "expected_basmala_omission_and_segmentation"
         elif full_segmented:
             classification = "segmentation_only"
         else:
             classification = "true_text_mismatch"
         counts[classification] += 1
-        if classification.startswith("expected_basmala"):
-            basmala_extra_word_count += len(app) - len(reference)
-        if "segmentation" in classification:
-            segmentation_extra_word_count += len(app) - len(reference)
         if current_key in SPOT_CHECK_KEYS:
             spot_checks[f"{current_key[0]}:{current_key[1]}"] = {
                 "page": page, "classification": classification, "app_raw": app,
                 "reference_raw": reference, "app_word_count": len(app),
                 "reference_word_count": len(reference)}
-        if classification.startswith("expected_basmala"):
-            differences = all_differences(app_core, reference)
-            basmala_cases.append({"surah": current_key[0], "ayah": current_key[1], "page": page,
-                                  "classification": classification, "app_raw": app,
-                                  "app_core_raw": app_core, "reference_raw": reference,
-                                  "all_differences": differences})
-            token_differences.extend({"surah": current_key[0], "ayah": current_key[1], "page": page,
-                                      "scope": "ayah_core", "classification": classification, **difference}
-                                     for difference in differences)
         if classification == "normalized_only":
             differences = all_differences(app, reference)
             normalized_cases.append({"surah": current_key[0], "ayah": current_key[1], "page": page,
@@ -352,13 +330,12 @@ def main() -> int:
                                       "scope": "ayah", "classification": classification, **difference}
                                      for difference in differences)
         if "segmentation" in classification:
-            differences = all_differences(app_core if has_basmala else app, reference)
+            differences = all_differences(app, reference)
             segmentation_cases.append({"surah": current_key[0], "ayah": current_key[1], "page": page,
                                        "classification": classification, "app_raw": app,
                                        "reference_raw": reference, "all_differences": differences})
             token_differences.extend({"surah": current_key[0], "ayah": current_key[1], "page": page,
-                                      "scope": "ayah_core" if has_basmala else "ayah",
-                                      "classification": classification, **difference}
+                                      "scope": "ayah", "classification": classification, **difference}
                                      for difference in differences)
         if classification == "true_text_mismatch":
             differences = all_differences(app, reference)
@@ -382,20 +359,18 @@ def main() -> int:
         "reference_word_row_count": len(word_rows), "reference_word_arabic_count": len(word_arabic),
         "app_reference_word_delta": sum(map(len, app_words.values())) - len(word_rows),
         "word_delta_explanation": {
-            "expected_basmala_cases": len(basmala_cases),
-            "expected_basmala_extra_app_words": basmala_extra_word_count,
+            "opening_basmala_presentations": len(opening_basmala_presentations),
+            "opening_basmala_words_in_ayahs": 0,
             "segmentation_cases": len(segmentation_cases),
-            "segmentation_extra_app_words": segmentation_extra_word_count,
             "unresolved_length_delta": unresolved_length_delta,
-            "unexplained_delta": (sum(map(len, app_words.values())) - len(word_rows))
-                                  - basmala_extra_word_count - segmentation_extra_word_count
-                                  - unresolved_length_delta},
+            "unexplained_delta": (sum(map(len, app_words.values())) - len(word_rows)) - unresolved_length_delta},
         "reference_ayahs_with_word_rows": len(reference_words), "layout_page_count": len(ayahs_by_page),
         "layout_page_word_counts": structure["page_word_counts"], "classification_counts": dict(counts),
         "true_text_mismatch_count": len(true_mismatches), "true_text_mismatches": true_mismatches,
         "raw_token_difference_count": len(token_differences), "raw_token_differences": token_differences,
-        "expected_basmala_cases": basmala_cases, "normalized_only_cases": normalized_cases,
-        "segmentation_cases": segmentation_cases, "spot_checks": spot_checks,
+        "expected_basmala_cases": [], "opening_basmala_presentations": opening_basmala_presentations,
+        "normalized_only_cases": normalized_cases, "segmentation_cases": segmentation_cases,
+        "spot_checks": spot_checks,
         "true_text_mismatch_page_counts": {str(p): n for p, n in sorted(mismatch_pages.items())}}
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"app-ayahs={len(app_words)}")

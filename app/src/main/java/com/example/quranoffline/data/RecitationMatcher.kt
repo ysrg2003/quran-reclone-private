@@ -51,7 +51,9 @@ fun arabicWordsEquivalent(first: String, second: String): Boolean {
 }
 
 fun quranWordMatches(word: QuranWord, observed: String): Boolean =
-    arabicWordsEquivalent(word.text, observed) || arabicWordsEquivalent(word.matchText, observed)
+    arabicWordsEquivalent(word.text, observed) ||
+        arabicWordsEquivalent(word.matchText, observed) ||
+        Muqattaat.matches(word, observed)
 
 enum class WordStatus { MATCHED, MISSING, EXTRA_OR_UNEXPECTED, UNCERTAIN }
 
@@ -100,9 +102,9 @@ object RecitationMatcher {
         hasFinalResult: Boolean = false,
         preferredExpectedIndex: Int = 0,
     ): RecitationEvaluation {
-        val observed = normalizeArabicForMatch(observedText)
-            .split(' ')
-            .filter(String::isNotBlank)
+        val observed = Muqattaat.coalesceSpeechTokens(
+            normalizeArabicForMatch(observedText).split(' ').filter(String::isNotBlank)
+        )
         if (expected.isEmpty()) return RecitationEvaluation(emptyList(), 0, 0, 0, observed.size)
 
         val observedNormalized = observed.map(::normalizeArabicForComparison)

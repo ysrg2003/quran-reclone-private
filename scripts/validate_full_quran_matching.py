@@ -11,7 +11,7 @@ from pathlib import Path
 MARKS = re.compile(r"[\u0610-\u061a\u064b-\u065f\u06d6-\u06ed]")
 WHITESPACE = re.compile(r"\s+")
 SMALL_ALIF = "ٰ"
-EXPECTED_WORDS = 77878
+EXPECTED_WORDS = 77430
 
 
 def normalize_for_match(value: str) -> str:
@@ -48,6 +48,7 @@ def main() -> None:
     print(f"full-quran-ayahs={len(ayahs)}")
     print(f"full-quran-words={len(words)}")
     print("all-text-matchText-pairs-accepted=true")
+    print("opening-basmala-is-outside-ayah-words=true")
     print("full-quran-matcher-source-check-ok")
 
 

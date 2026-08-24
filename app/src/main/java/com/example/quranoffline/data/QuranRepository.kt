@@ -42,6 +42,9 @@ class QuranRepository(
     fun surahNumbers(): List<Int> = ayahs.map { it.surah }.distinct()
 
     companion object {
+        private val basmalaText = listOf("بِسْمِ", "ٱللَّهِ", "ٱلرَّحْمَٰنِ", "ٱلرَّحِيمِ")
+        private val basmalaMatchText = listOf("بسم", "الله", "الرحمن", "الرحيم")
+
         private fun parse(raw: String): List<QuranAyah> {
             if (raw.isBlank()) return emptyList()
             val root = JSONObject(raw)
@@ -49,8 +52,10 @@ class QuranRepository(
             return buildList(items.length()) {
                 for (i in 0 until items.length()) {
                     val item = items.getJSONObject(i)
+                    val surah = item.getInt("surah")
+                    val ayah = item.getInt("ayah")
                     val wordsJson = item.getJSONArray("words")
-                    val words = buildList(wordsJson.length()) {
+                    val rawWords = buildList(wordsJson.length()) {
                         for (j in 0 until wordsJson.length()) {
                             val word = wordsJson.getJSONObject(j)
                             add(
@@ -62,17 +67,28 @@ class QuranRepository(
                             )
                         }
                     }
+                    val wordsToKeep = if (isLegacyOpeningBasmala(surah, ayah, rawWords)) rawWords.drop(4) else rawWords
+                    val words = wordsToKeep.mapIndexed { index, word -> word.copy(index = index) }
                     add(
                         QuranAyah(
-                            surah = item.getInt("surah"),
-                            ayah = item.getInt("ayah"),
-                            text = item.getString("text"),
-                            matchText = item.getString("matchText"),
+                            surah = surah,
+                            ayah = ayah,
+                            text = words.joinToString(" ") { it.text },
+                            matchText = words.joinToString(" ") { it.matchText },
                             words = words,
                         )
                     )
                 }
             }
+        }
+
+        /** Keeps a network-fallback cache on the same contract as the migrated asset. */
+        private fun isLegacyOpeningBasmala(surah: Int, ayah: Int, words: List<QuranWord>): Boolean {
+            if (surah !in 2..114 || surah == 9 || ayah != 1 || words.size < 5) return false
+            val firstText = words.take(4).map { normalizeArabicForComparison(it.text) }
+            val firstMatch = words.take(4).map { normalizeArabicForComparison(it.matchText) }
+            return firstText == basmalaText.map(::normalizeArabicForComparison) &&
+                firstMatch == basmalaMatchText.map(::normalizeArabicForComparison)
         }
     }
 }

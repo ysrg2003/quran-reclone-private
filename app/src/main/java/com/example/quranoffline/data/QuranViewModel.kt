@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 
 enum class AssetMode { STREAM, DOWNLOAD }
 enum class RecitationEngine { ONLINE, OFFLINE }
+enum class ReaderScope { AYAH, SURAH, JUZ, PAGES, QURAN }
 
 data class QuranUiState(
     val ayahs: List<QuranAyah> = emptyList(),
@@ -26,6 +27,7 @@ data class QuranUiState(
     val notice: String = "جاري تحميل النص والتوقيتات من مستودع الأصول…",
     val sessions: List<SessionSummary> = emptyList(),
     val goal: DailyGoal = DailyGoal(targetAyahs = 3, completedAyahs = 0, day = ""),
+    val checkpoint: MemorizationCheckpoint? = null,
     val currentWordIndex: Int = -1,
     val currentSpokenWord: String? = null,
     val currentSpokenWordIndex: Int = -1,
@@ -36,6 +38,9 @@ data class QuranUiState(
     val correctionPhase: CorrectionPhase = CorrectionPhase.LISTENING,
     val correctionMessage: String? = null,
     val correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
+    val readerPlaying: Boolean = false,
+    val readerScope: ReaderScope = ReaderScope.AYAH,
+    val readerCurrentKey: String? = null,
     val correctionAyahIndex: Int = -1,
     val correctionFirstWordInAyah: Int = -1,
     val selectedSurah: Int = 1,
@@ -70,6 +75,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private var repository = QuranRepository(application)
     private val store = LocalSessionStore(application)
     private val goalStore = LocalGoalStore(application)
+    private val memorizationProgressStore = LocalMemorizationProgressStore(application)
     private val correctionSettingsStore = LocalCorrectionSettingsStore(application)
     private val timingRepository = ReferenceTimingRepository()
     private val referenceAudioPlayer = ReferenceAudioPlayer()
@@ -79,11 +85,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private var recognitionGeneration = 0L
     private var activeCorrection: CorrectionRequest? = null
     private var correctionWasListening = false
+    private var openingBasmalaConsumed = true
+    private var readerGeneration = 0L
 
     private val state = mutableStateOf(
         QuranUiState(
             sessions = store.list(),
             goal = goalStore.current(),
+            checkpoint = memorizationProgressStore.read(),
             correctionSettings = correctionSettingsStore.current(),
             offlineSupported = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
         ),
@@ -169,6 +178,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     loadingAssets = false, assetsReady = true,
                     downloadedAyahs = prepared.downloadedAyahs,
                     modelReady = prepared.modelReady,
+                    checkpoint = memorizationProgressStore.read()?.validatedAgainst(prepared.allAyahs),
                     notice = if (mode == AssetMode.STREAM) "البث المباشر فعال؛ النص والتوقيتات في الذاكرة فقط." else "وضع التنزيل فعال؛ الصوت يُحفظ فقط عندما تختار تنزيله.",
                 )
             } catch (error: Throwable) {
@@ -255,6 +265,75 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleHidden() { state.value = state.value.copy(hidden = !state.value.hidden) }
 
+    fun playAyah(surah: Int, ayah: Int) = startReader(ReaderScope.AYAH, surah, ayah)
+
+    fun playFromHere(surah: Int, ayah: Int) = startReader(ReaderScope.QURAN, surah, ayah)
+
+    fun playReaderScope(scope: ReaderScope) {
+        val checkpoint = state.value.checkpoint?.validatedAgainst(state.value.allAyahs)
+        val start = checkpoint ?: MemorizationCheckpoint(1, 1, 0, false, 0L)
+        startReader(scope, start.surah, start.ayah)
+    }
+
+    fun stopReader() {
+        readerGeneration++
+        referenceAudioPlayer.stop()
+        state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "أُوقف تشغيل القراءة.")
+    }
+
+    private fun startReader(scope: ReaderScope, surah: Int, ayah: Int) {
+        if (!state.value.assetsReady) {
+            state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً.")
+            return
+        }
+        val metadata = state.value.metadata
+        val startIndex = state.value.allAyahs.indexOfFirst { it.surah == surah && it.ayah == ayah }
+        if (metadata == null || startIndex < 0) {
+            state.value = state.value.copy(notice = "موضع القراءة غير موجود في المصحف المحمّل.")
+            return
+        }
+        val selected = when (scope) {
+            ReaderScope.AYAH -> listOf(startIndex)
+            ReaderScope.SURAH -> state.value.allAyahs.indices.filter { state.value.allAyahs[it].surah == surah && it >= startIndex }
+            ReaderScope.JUZ -> state.value.allAyahs.indices.filter { it >= startIndex && metadata.ayah(state.value.allAyahs[it].surah, state.value.allAyahs[it].ayah)?.juz == metadata.ayah(surah, ayah)?.juz }
+            ReaderScope.PAGES -> state.value.allAyahs.indices.filter { it >= startIndex && metadata.ayah(state.value.allAyahs[it].surah, state.value.allAyahs[it].ayah)?.page == metadata.ayah(surah, ayah)?.page }
+            ReaderScope.QURAN -> state.value.allAyahs.indices.filter { it >= startIndex }
+        }
+        val items = selected.mapNotNull { index ->
+            val target = state.value.allAyahs[index]
+            val timings = timingRepository.forAyah(target.surah, target.ayah)
+            val first = timings.firstOrNull() ?: return@mapNotNull null
+            val last = timings.lastOrNull() ?: first
+            val local = assetManager.cachedAudioFile(target.surah, target.ayah)
+            if (state.value.mode == AssetMode.DOWNLOAD && local == null) return@mapNotNull null
+            ReferenceAudioPlayer.QueueItem(
+                source = local?.absolutePath ?: assetManager.audioUrl(target.surah, target.ayah),
+                startMs = first.startMs,
+                endMs = last.endMs,
+                key = "${target.surah}:${target.ayah}",
+            )
+        }
+        if (items.isEmpty()) {
+            state.value = state.value.copy(notice = if (state.value.mode == AssetMode.DOWNLOAD) "نزّل صوت الموضع أولاً، أو اختر وضع البث المباشر." else "لا توجد مقاطع صوتية صالحة لهذا الموضع.")
+            return
+        }
+        val generation = ++readerGeneration
+        state.value = state.value.copy(readerPlaying = true, readerScope = scope, readerCurrentKey = items.first().key, notice = "تُقرأ ${readerScopeLabel(scope)}…")
+        referenceAudioPlayer.playQueue(
+            items = items,
+            onItemStarted = { key -> if (generation == readerGeneration) state.value = state.value.copy(readerCurrentKey = key) },
+            onFinished = { if (generation == readerGeneration) state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "اكتملت قراءة ${readerScopeLabel(scope)}.") },
+        )
+    }
+
+    private fun readerScopeLabel(scope: ReaderScope): String = when (scope) {
+        ReaderScope.AYAH -> "الآية"
+        ReaderScope.SURAH -> "السورة"
+        ReaderScope.JUZ -> "الجزء"
+        ReaderScope.PAGES -> "الصفحة"
+        ReaderScope.QURAN -> "المصحف من الموضع المحدد"
+    }
+
     fun startListening() {
         if (!state.value.assetsReady) { state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً."); return }
         if (state.value.allAyahs.isEmpty() || state.value.metadata == null) { state.value = state.value.copy(notice = "تعذر تجهيز ترتيب صفحات المصحف."); return }
@@ -269,10 +348,18 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val selectedSurahStart = state.value.allAyahs.indexOfFirst { ayah ->
             ayah.surah == state.value.selectedSurah && ayah.ayah == 1
         }
-        val startAyahIndex = (if (pageStart >= 0) pageStart else selectedSurahStart).coerceAtLeast(0)
+        val savedCheckpoint = state.value.checkpoint?.validatedAgainst(state.value.allAyahs)
+        val savedAyahIndex = savedCheckpoint?.let { checkpoint ->
+            state.value.allAyahs.indexOfFirst { it.surah == checkpoint.surah && it.ayah == checkpoint.ayah }
+                .takeIf { it >= 0 }
+        }
+        val startAyahIndex = savedAyahIndex ?: (if (pageStart >= 0) pageStart else selectedSurahStart).coerceAtLeast(0)
+        val startWordIndex = if (savedAyahIndex != null) savedCheckpoint?.wordIndex ?: 0 else 0
         val tracker = RecitationProgressTracker(state.value.allAyahs, correctionSettings = state.value.correctionSettings)
-        tracker.startFromAyah(startAyahIndex)
+        tracker.startFromPosition(startAyahIndex, startWordIndex)
         progressTracker = tracker
+        openingBasmalaConsumed = savedCheckpoint?.includeOpeningBasmala != true ||
+            state.value.allAyahs.getOrNull(startAyahIndex)?.let { it.ayah != 1 || it.surah == 1 || it.surah == 9 } == true
         val startPage = pageForAyahIndex(startAyahIndex)
         val startVisibleAyahs = page(state.value.allAyahs, state.value.metadata!!, startPage)
         activeCorrection = null
@@ -284,12 +371,12 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             listening = true,
             transcript = "",
             evaluation = null,
-            currentWordIndex = tracker.globalWordIndex(startAyahIndex, 0) ?: -1,
+            currentWordIndex = tracker.globalWordIndex(startAyahIndex, startWordIndex) ?: -1,
             currentSpokenWord = null,
             currentSpokenWordIndex = -1,
             currentAyahIndex = startAyahIndex,
-            currentWordInAyah = 0,
-            recitationCursor = tracker.globalWordIndex(startAyahIndex, 0) ?: 0,
+            currentWordInAyah = startWordIndex,
+            recitationCursor = tracker.globalWordIndex(startAyahIndex, startWordIndex) ?: 0,
             correctionPlaying = false,
             correctionPhase = CorrectionPhase.LISTENING,
             correctionMessage = null,
@@ -365,7 +452,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val tracker = progressTracker ?: RecitationProgressTracker(previousState.allAyahs, correctionSettings = previousState.correctionSettings).also { progressTracker = it }
                 val result = tracker.update(
                     RecitationProgressInput(
-                        transcript = update.value,
+                        transcript = openingBasmalaTranscript(update.value),
                         isFinal = update.isFinal,
                         segmentCompleted = update.segmentCompleted,
                     ),
@@ -393,6 +480,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     correctionFirstWordInAyah = correction?.localWordIndex ?: previousState.correctionFirstWordInAyah,
                     notice = if (previousState.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.",
                 )
+                if (update.isFinal || update.segmentCompleted) persistCheckpoint(result.currentAyahIndex, result.currentWordInAyah)
                 if (correction != null && (update.isFinal || update.segmentCompleted) && activeCorrection == null) {
                     activeCorrection = correction
                     correctionWasListening = previousState.listening
@@ -411,6 +499,25 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 state.value = state.value.copy(listening = false, notice = "انتهت الجلسة. راجع المواضع غير المؤكدة قبل اعتماد النتيجة.")
             }
         }
+    }
+
+    private fun openingBasmalaTranscript(transcript: String): String {
+        if (openingBasmalaConsumed) return transcript
+        val current = state.value.allAyahs.getOrNull(state.value.currentAyahIndex)
+        if (current == null || current.ayah != 1 || current.surah == 1 || current.surah == 9) {
+            openingBasmalaConsumed = true
+            return transcript
+        }
+        val tokens = normalizeArabicForComparison(transcript).split(' ').filter(String::isNotBlank)
+        val prefix = listOf("بسم", "الله", "الرحمن", "الرحيم")
+        val isPrefix = tokens.isNotEmpty() && tokens.size < prefix.size && tokens.indices.all { tokens[it] == prefix[it] }
+        if (isPrefix) return ""
+        if (tokens.size >= prefix.size && tokens.take(prefix.size) == prefix) {
+            openingBasmalaConsumed = true
+            return tokens.drop(prefix.size).joinToString(" ")
+        }
+        openingBasmalaConsumed = true
+        return transcript
     }
 
     private fun pauseRecognitionForCorrection(request: CorrectionRequest) {
@@ -453,13 +560,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private fun playCorrection(request: CorrectionRequest) {
         val ayah = state.value.allAyahs.getOrNull(request.ayahIndex) ?: return finishCorrectionPlayback()
         val timings = timingRepository.forAyah(ayah.surah, ayah.ayah)
-        val firstWord = timings.firstOrNull { request.localWordIndex in it.wordStart until it.wordEnd }
+        val firstWord = TimingWordMapper.forWord(ayah, timings, request.localWordIndex)
             ?: return finishCorrectionPlayback()
-        val wholeAyah = if (request.readWholeAyah) {
-            timings.firstOrNull()?.let { start ->
-                timings.lastOrNull()?.let { end -> TimingSegment(0, ayah.words.size, start.startMs, end.endMs) }
-            }
-        } else null
+        val wholeAyah = if (request.readWholeAyah) TimingWordMapper.wholeAyah(ayah, timings) else null
         val localFile = assetManager.cachedAudioFile(ayah.surah, ayah.ayah)
         if (state.value.mode == AssetMode.DOWNLOAD && localFile == null) {
             finishCorrectionPlayback()
@@ -556,14 +659,64 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopListening() {
+        persistCheckpoint(state.value.currentAyahIndex, state.value.currentWordInAyah)
         recognitionGeneration++
+        readerGeneration++
         referenceAudioPlayer.stop()
         onlineSession?.stop(); onlineSession = null
         localSession?.stop(); localSession = null
         progressTracker = null
         activeCorrection = null
         correctionWasListening = false
-        state.value = state.value.copy(listening = false, correctionPlaying = false, correctionPhase = CorrectionPhase.LISTENING)
+        openingBasmalaConsumed = true
+        state.value = state.value.copy(listening = false, correctionPlaying = false, correctionPhase = CorrectionPhase.LISTENING, readerPlaying = false, readerCurrentKey = null)
+    }
+
+    fun startMemorizationFrom(surah: Int, ayah: Int) {
+        val metadata = state.value.metadata ?: return
+        val pageNumber = metadata.ayah(surah, ayah)?.page ?: return
+        stopListening()
+        setMemorizationStart(surah, ayah)
+        showPage(pageNumber, notice = "تم تحديد بداية التسميع من السورة $surah، الآية $ayah.")
+    }
+
+    fun setMemorizationStart(surah: Int, ayah: Int, wordIndex: Int = 0, includeOpeningBasmala: Boolean = false) {
+        val target = state.value.allAyahs.firstOrNull { it.surah == surah && it.ayah == ayah }
+        val checkpoint = target?.let {
+            MemorizationCheckpoint(surah, ayah, wordIndex, includeOpeningBasmala, System.currentTimeMillis())
+                .validatedAgainst(state.value.allAyahs)
+        }
+        if (checkpoint == null) {
+            state.value = state.value.copy(notice = "تعذر تعيين موضع البداية؛ الموضع غير موجود في المصحف المحمّل.")
+            return
+        }
+        memorizationProgressStore.save(checkpoint)
+        state.value = state.value.copy(checkpoint = checkpoint, notice = "تم حفظ نقطة البداية: السورة $surah، الآية $ayah، الكلمة ${wordIndex + 1}.")
+    }
+
+    fun resumeFromCheckpoint() {
+        if (state.value.checkpoint?.validatedAgainst(state.value.allAyahs) == null) {
+            state.value = state.value.copy(notice = "لا توجد نقطة استئناف صالحة بعد؛ اختر موضعاً من الفهرس أو القارئ.")
+            return
+        }
+        startListening()
+    }
+
+    private fun persistCheckpoint(ayahIndex: Int, wordIndex: Int) {
+        val all = state.value.allAyahs
+        if (all.isEmpty()) return
+        val target = all.getOrNull(ayahIndex) ?: all.last()
+        val safeWordIndex = if (ayahIndex in all.indices) wordIndex.coerceIn(0, target.words.size) else target.words.size
+        val previous = state.value.checkpoint
+        val checkpoint = MemorizationCheckpoint(
+            surah = target.surah,
+            ayah = target.ayah,
+            wordIndex = safeWordIndex,
+            includeOpeningBasmala = previous?.includeOpeningBasmala ?: false,
+            updatedAt = System.currentTimeMillis(),
+        )
+        memorizationProgressStore.save(checkpoint)
+        state.value = state.value.copy(checkpoint = checkpoint)
     }
 
     fun saveCurrentSession() {

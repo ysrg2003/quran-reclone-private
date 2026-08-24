@@ -103,6 +103,38 @@ class ReferenceAudioPlayer {
         onFinished = onFinished,
     )
 
+    data class QueueItem(
+        val source: String,
+        val startMs: Int,
+        val endMs: Int,
+        val key: String,
+    )
+
+    /** Plays a cancellable sequence; it owns no background service and stops on stop(). */
+    fun playQueue(
+        items: List<QueueItem>,
+        pauseBetweenMs: Int = 180,
+        onItemStarted: (String) -> Unit = {},
+        onFinished: () -> Unit = {},
+    ) {
+        stop()
+        if (items.isEmpty()) { onFinished(); return }
+        var index = 0
+        fun next() {
+            if (index >= items.size) { onFinished(); return }
+            val item = items[index++]
+            onItemStarted(item.key)
+            playDataSource(item.source, item.startMs, item.endMs) {
+                if (index < items.size && pauseBetweenMs > 0) {
+                    val nextRun = Runnable { nextSequenceRunnable = null; next() }
+                    nextSequenceRunnable = nextRun
+                    mainHandler.postDelayed(nextRun, pauseBetweenMs.toLong())
+                } else next()
+            }
+        }
+        next()
+    }
+
     private data class PlaybackItem(
         val segment: TimingSegment,
         val isWholeAyah: Boolean,

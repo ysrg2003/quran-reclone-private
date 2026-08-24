@@ -106,6 +106,13 @@ class RecitationProgressTracker(
         currentAyahIndex = ayahIndex.coerceIn(0, ayahs.lastIndex.coerceAtLeast(0))
     }
 
+    /** Start a fresh session from an exact Quran word position. */
+    fun startFromPosition(ayahIndex: Int, localWordIndex: Int) {
+        reset()
+        currentAyahIndex = ayahIndex.coerceIn(0, ayahs.lastIndex.coerceAtLeast(0))
+        nextWordInAyah = localWordIndex.coerceIn(0, ayahs.getOrNull(currentAyahIndex)?.words?.size ?: 0)
+    }
+
     /** Prepare a fresh recognizer segment while preserving the current ayah and evaluations. */
     fun resumeFrom(ayahIndex: Int, localWordIndex: Int) {
         currentAyahIndex = ayahIndex.coerceIn(0, ayahs.lastIndex.coerceAtLeast(0))
@@ -132,6 +139,13 @@ class RecitationProgressTracker(
             var index = 0
             while (index < newTokens.size) {
                 var token = newTokens[index]
+                val expectedCurrent = ayahs.getOrNull(currentAyahIndex)?.words?.getOrNull(nextWordInAyah)
+                val muqattaatPhrase = newTokens.drop(index).joinToString(" ")
+                if (expectedCurrent != null && Muqattaat.isPotentialPrefix(expectedCurrent, muqattaatPhrase)) {
+                    pendingWordPrefix = muqattaatPhrase
+                    spokenGlobalWordIndex = currentGlobalWordIndex()
+                    break
+                }
                 if (pendingWordPrefix != null) {
                     val pending = pendingWordPrefix.orEmpty()
                     pendingWordPrefix = null
@@ -191,7 +205,7 @@ class RecitationProgressTracker(
 
     fun globalWordIndex(ayahIndex: Int, localWordIndex: Int): Int? {
         if (ayahIndex !in ayahs.indices) return null
-        if (localWordIndex !in ayahs[ayahIndex].words.indices) return null
+        if (localWordIndex !in 0..ayahs[ayahIndex].words.size) return null
         return ayahStarts[ayahIndex] + localWordIndex
     }
 
@@ -357,6 +371,7 @@ class RecitationProgressTracker(
         } else {
             nextWordInAyah.coerceIn(0, expectedWords.lastIndex)
         }
+        if (Muqattaat.isPotentialPrefix(expectedWords[targetIndex], token)) return true
         val observed = normalizeArabicForComparison(token)
         if (observed.length < 2) return false
         return listOf(expectedWords[targetIndex].text, expectedWords[targetIndex].matchText)
@@ -508,10 +523,9 @@ class RecitationProgressTracker(
         unexpected = unexpectedCount,
     )
 
-    private fun tokenize(text: String): List<String> = normalizeArabicForComparison(text)
-        .split(' ')
-        .filter(String::isNotBlank)
-        .map(::normalizeArabicForComparison)
+    private fun tokenize(text: String): List<String> = Muqattaat.coalesceSpeechTokens(
+        normalizeArabicForComparison(text).split(' ').filter(String::isNotBlank)
+    )
 
     private fun longestCommonPrefix(first: List<String>, second: List<String>): Int {
         val limit = minOf(first.size, second.size)
