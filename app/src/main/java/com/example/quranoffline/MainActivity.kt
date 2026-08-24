@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,6 +48,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.quranoffline.data.AssetMode
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranAyahMetadata
@@ -106,10 +113,13 @@ class MainActivity : ComponentActivity() {
 private fun QuranOfflineTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = androidx.compose.material3.lightColorScheme(
-            primary = Color(0xFF246B57),
-            secondary = Color(0xFFB6844A),
-            background = Color(0xFFF7F8F4),
+            primary = Color(0xFF673AB7),
+            onPrimary = Color.White,
+            secondary = Color(0xFFFF6F61),
+            tertiary = Color(0xFFD6B277),
+            background = Color(0xFFF6F5F8),
             surface = Color.White,
+            onSurface = Color(0xFF2B2438),
         ),
         content = content,
     )
@@ -127,59 +137,71 @@ private fun QuranOfflineApp(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("وِرد", fontWeight = FontWeight.Bold)
-                        Text("حفظ وتسميع القرآن", style = MaterialTheme.typography.labelSmall)
-                    }
-                },
-                actions = {
-                    Surface(
-                        color = Color(0xFFE4F2EA),
-                        shape = RoundedCornerShape(50),
-                        modifier = Modifier.padding(end = 12.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        ) {
-                            Icon(Icons.Default.PlayArrow, null, tint = Color(0xFF246B57))
-                            Spacer(Modifier.width(5.dp))
-                            Text(if (state.engine == RecitationEngine.ONLINE) "Online" else "Offline", style = MaterialTheme.typography.labelMedium, color = Color(0xFF246B57))
+            Column {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text("المصحف", fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("حفظ وتسميع القرآن", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE9DFFF))
                         }
+                    },
+                    actions = {
+                        Surface(
+                            color = Color(0xFF8055C9),
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.padding(end = 12.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            ) {
+                                Icon(Icons.Default.PlayArrow, null, tint = Color.White)
+                                Spacer(Modifier.width(5.dp))
+                                Text(if (state.engine == RecitationEngine.ONLINE) "عبر الإنترنت" else "بدون اتصال", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color(0xFF673AB7),
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White,
+                    ),
+                )
+                ScrollableTabRow(
+                    selectedTabIndex = tab,
+                    containerColor = Color(0xFF673AB7),
+                    contentColor = Color.White,
+                    edgePadding = 8.dp,
+                    indicator = { positions ->
+                        if (tab < positions.size) {
+                            TabRowDefaults.SecondaryIndicator(
+                                modifier = Modifier.tabIndicatorOffset(positions[tab]),
+                                height = 3.dp,
+                                color = Color(0xFFFF6F61),
+                            )
+                        }
+                    },
+                ) {
+                    listOf("الحفظ والتسميع", "السور", "الأجزاء", "السجل").forEachIndexed { index, title ->
+                        Tab(
+                            selected = tab == index,
+                            onClick = { tab = index },
+                            text = { Text(title, fontSize = 14.sp, fontWeight = if (tab == index) FontWeight.Bold else FontWeight.Normal) },
+                            selectedContentColor = Color.White,
+                            unselectedContentColor = Color(0xFFDCCBFF),
+                        )
                     }
-                },
-            )
-        },
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilterChip(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    label = { Text("التسميع") },
-                    leadingIcon = { Icon(Icons.Default.Mic, null) },
-                    modifier = Modifier.weight(1f),
-                )
-                FilterChip(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    label = { Text("السجل") },
-                    leadingIcon = { Icon(Icons.Default.History, null) },
-                    modifier = Modifier.weight(1f),
-                )
+                }
             }
         },
     ) { padding ->
-        if (tab == 0) {
-            MemorizationScreen(
+        if (state.loadingAssets && state.ayahs.isEmpty()) {
+            LoadingScreen(state.notice, Modifier.padding(padding))
+        } else {
+            when (tab) {
+            0 -> MemorizationScreen(
                 state = state,
+                focusRecitation = true,
                 onToggleHidden = viewModel::toggleHidden,
                 onStart = {
                     if (state.listening) viewModel.stopListening()
@@ -204,20 +226,163 @@ private fun QuranOfflineApp(
                 onResetCorrectionSettings = viewModel::resetCorrectionSettings,
                 modifier = Modifier.padding(padding),
             )
-        } else {
-            HistoryScreen(
+            1 -> MushafIndexScreen(
+                state = state,
+                onSelectSurah = { surah ->
+                    viewModel.selectSurah(surah)
+                    tab = 0
+                },
+                modifier = Modifier.padding(padding),
+            )
+            2 -> JuzIndexScreen(
+                state = state,
+                onSelectSurah = { surah ->
+                    viewModel.selectSurah(surah)
+                    tab = 0
+                },
+                modifier = Modifier.padding(padding),
+            )
+            3 -> HistoryScreen(
                 state = state,
                 onClear = viewModel::clearSessions,
                 onExport = onExportBackup,
                 modifier = Modifier.padding(padding),
             )
+            }
         }
+    }
+}
+
+@Composable
+private fun LoadingScreen(notice: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.fillMaxSize().background(Color(0xFFF6F5F8)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+            modifier = Modifier.padding(24.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 30.dp, vertical = 26.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                CircularProgressIndicator(color = Color(0xFF673AB7))
+                Text("جاري تجهيز ورد", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF2B2438))
+                Text(notice.ifBlank { "جاري تحميل النص والتوقيتات…" }, textAlign = TextAlign.Center, color = Color(0xFF8B8792))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MushafIndexScreen(
+    state: com.example.quranoffline.data.QuranUiState,
+    onSelectSurah: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val metadata = state.metadata
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Color(0xFFF6F5F8)).padding(horizontal = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            SectionHeader(
+                title = "السور",
+                subtitle = "اختر السورة لفتح موضع الحفظ والتسميع الحالي.",
+            )
+        }
+        items(metadata?.suras.orEmpty(), key = { it.index }) { surah ->
+            Card(
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("${surah.index}", color = Color(0xFF8B8792), style = MaterialTheme.typography.titleMedium)
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                        Text("سورة ${surah.arabicName}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("${revelationLabel(surah.revelationType)} • ${surah.ayahCount} آية • صفحة ${metadata?.ayah(surah.index, 1)?.page ?: "—"}", color = Color(0xFF8B8792), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(
+                        onClick = { onSelectSurah(surah.index) },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7)),
+                    ) {
+                        Text("فتح")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JuzIndexScreen(
+    state: com.example.quranoffline.data.QuranUiState,
+    onSelectSurah: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val metadata = state.metadata
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Color(0xFFF6F5F8)).padding(horizontal = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            SectionHeader(
+                title = "الأجزاء",
+                subtitle = "بداية كل جزء حسب ترتيب المصحف وصفحاته.",
+            )
+        }
+        items(metadata?.juzs.orEmpty(), key = { it.index }) { juz ->
+            val surah = metadata?.sura(juz.surah)
+            val ayah = metadata?.ayah(juz.surah, juz.ayah)
+            Card(
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("${juz.index}", color = Color(0xFF8B8792), style = MaterialTheme.typography.titleMedium)
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                        Text("الجزء ${juz.index}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("${surah?.arabicName ?: "السورة ${juz.surah}"} • الآية ${juz.ayah} • صفحة ${ayah?.page ?: "—"}", color = Color(0xFF8B8792), style = MaterialTheme.typography.bodySmall)
+                    }
+                    OutlinedButton(onClick = { onSelectSurah(juz.surah) }) {
+                        Text("فتح")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(title, color = Color(0xFF2B2438), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(subtitle, color = Color(0xFF8B8792), style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable
 private fun MemorizationScreen(
     state: com.example.quranoffline.data.QuranUiState,
+    focusRecitation: Boolean,
     onToggleHidden: () -> Unit,
     onStart: () -> Unit,
     onSave: () -> Unit,
@@ -253,6 +418,11 @@ private fun MemorizationScreen(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (focusRecitation) {
+            item {
+                RecitationCard(state, onStart, onCorrection, onStopCorrection, onPreviousAyah)
+            }
+        }
         item {
             Spacer(Modifier.height(10.dp))
             var surahMenuExpanded by remember { mutableStateOf(false) }
@@ -260,7 +430,7 @@ private fun MemorizationScreen(
             val visibleSurahLabel = visibleSurahLabel(state, visibleSurahNumbers)
             Card(
                 shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF123F35)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF45238A)),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(18.dp),
@@ -268,14 +438,14 @@ private fun MemorizationScreen(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("ورد اليوم", color = Color(0xFFB9D9C9), style = MaterialTheme.typography.labelLarge)
+                        Text("موضع الحفظ الحالي", color = Color(0xFFE9DFFF), style = MaterialTheme.typography.labelLarge)
                         Text(visibleSurahLabel, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("صفحة ${state.currentPage}/${state.totalPages} • آيات ${visibleAyahRangeLabel(state)}", color = Color(0xFFD7E9DF), style = MaterialTheme.typography.bodySmall)
+                        Text("صفحة ${state.currentPage}/${state.totalPages} • آيات ${visibleAyahRangeLabel(state)}", color = Color(0xFFF1EAFE), style = MaterialTheme.typography.bodySmall)
                     }
                     Box {
                         Button(
                             onClick = { surahMenuExpanded = true },
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFE4B96F), contentColor = Color(0xFF123F35)),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6F61), contentColor = Color.White),
                         ) {
                             Text("اختيار السورة", fontWeight = FontWeight.SemiBold)
                         }
@@ -302,7 +472,9 @@ private fun MemorizationScreen(
         }
         item { MushafMetadataCard(state) }
         item { MushafPageNavigationCard(state, onPreviousPage, onNextPage) }
-        item { RecitationCard(state, onStart, onCorrection, onStopCorrection, onPreviousAyah) }
+        if (!focusRecitation) {
+            item { RecitationCard(state, onStart, onCorrection, onStopCorrection, onPreviousAyah) }
+        }
         if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
             item {
                 Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
@@ -590,31 +762,31 @@ private fun EngineCard(
                 FilterChip(
                     selected = state.engine == RecitationEngine.ONLINE,
                     onClick = { onSelectEngine(RecitationEngine.ONLINE) },
-                    label = { Text("Online") },
+                    label = { Text("عبر الإنترنت") },
                 )
                 FilterChip(
                     selected = state.engine == RecitationEngine.OFFLINE,
                     onClick = { onSelectEngine(RecitationEngine.OFFLINE) },
-                    label = { Text("Offline") },
+                    label = { Text("بدون اتصال") },
                 )
             }
             Text(
                 if (state.engine == RecitationEngine.ONLINE) {
-                    "SpeechRecognizer من Android؛ يحتاج الإنترنت ولا يحفظ التطبيق صوتك."
+                    "التعرّف الصوتي من Android؛ يحتاج الإنترنت ولا يحفظ التطبيق صوتك."
                 } else {
-                    "FastConformer + sherpa-onnx؛ يعالج الصوت على الجهاز بعد تنزيل النموذج."
+                    "المحرك المحلي؛ يعالج الصوت على الجهاز بعد تنزيل النموذج."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF66736C),
             )
             if (state.engine == RecitationEngine.OFFLINE) {
                 if (!state.offlineSupported) {
-                    Text("هذا الهاتف يعمل بنظام 32-bit، وقد تسبب تشغيل النموذج المحلي فيه بانهيار native. تم إيقاف التشغيل Offline لمنع إغلاق التطبيق.", color = Color(0xFF9B4D3C))
+                    Text("هذا الهاتف يعمل بنظام 32-bit، وقد تسبب تشغيل النموذج المحلي فيه بانهيار داخلي. تم إيقاف التشغيل بدون اتصال لمنع إغلاق التطبيق.", color = Color(0xFF9B4D3C))
                 } else {
                     Text(if (state.modelReady) "النموذج المحلي جاهز." else "النموذج المحلي غير موجود على الجهاز.", style = MaterialTheme.typography.labelMedium)
                     if (!state.modelReady) {
                         Button(onClick = onDownloadModel, enabled = !state.modelDownloading, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (state.modelDownloading) "جاري تنزيل النموذج…" else "تنزيل نموذج Offline")
+                            Text(if (state.modelDownloading) "جاري تنزيل النموذج…" else "تنزيل النموذج المحلي")
                         }
                     }
                 }
@@ -880,16 +1052,34 @@ private fun RecitationCard(
     onStopCorrection: () -> Unit,
     onPreviousAyah: () -> Unit,
 ) {
-    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF183D33))) {
+    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF45238A))) {
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("التسميع", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("حفظ وتسميع القرآن", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "ابدأ من موضعك الحالي، وستظهر الكلمات السابقة بألوانها أثناء المتابعة.",
+                color = Color(0xFFE9DFFF),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("هدف اليوم", color = Color(0xFFE9DFFF), style = MaterialTheme.typography.labelMedium)
+                    Text("${state.goal.completedAyahs} من ${state.goal.targetAyahs} آيات", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                Text("${(state.goal.progress * 100).toInt()}%", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+            LinearProgressIndicator(
+                progress = { state.goal.progress },
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFFFF6F61),
+                trackColor = Color(0xFF6A4BA8),
+            )
             Text(
                 when {
-                    state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "التسميع Offline موقوف على هذا الهاتف لحماية التطبيق من الإغلاق."
-                    state.listening && state.engine == RecitationEngine.ONLINE -> "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
-                    state.listening -> "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك…"
-                    state.engine == RecitationEngine.ONLINE -> "ابدأ التلاوة؛ التعرف Online والتصحيح النصي يعملان دون حفظ صوتك."
-                    else -> "ابدأ التلاوة؛ التعرف Offline محلي بعد تجهيز النموذج."
+                    state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "التسميع بدون اتصال موقوف على هذا الهاتف لحماية التطبيق من الإغلاق."
+                    state.listening && state.engine == RecitationEngine.ONLINE -> "جارٍ التعرّف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
+                    state.listening -> "جارٍ التعرّف محلياً؛ لا يغادر الصوت جهازك…"
+                    state.engine == RecitationEngine.ONLINE -> "ابدأ التلاوة؛ التعرّف عبر الإنترنت والتصحيح النصي يعملان دون حفظ صوتك."
+                    else -> "ابدأ التلاوة؛ التعرّف بدون اتصال بعد تجهيز النموذج."
                 },
                 color = Color(0xFFD7E9DF),
             )
@@ -907,7 +1097,7 @@ private fun RecitationCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     when {
-                        state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "Offline غير متاح على هذا الهاتف"
+                        state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "بدون اتصال غير متاح على هذا الهاتف"
                         state.correctionPlaying -> "يعمل التصحيح الصوتي…"
                         state.listening -> "إيقاف الجلسة"
                         else -> "ابدأ التسميع"
@@ -932,7 +1122,7 @@ private fun RecitationCard(
                 }
             }
             if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) {
-                Text("Offline غير متاح بأمان على هذا الهاتف 32-bit؛ استخدم Online أو هاتفاً 64-bit.", color = Color(0xFFFFE1B5))
+                Text("بدون اتصال غير متاح بأمان على هذا الهاتف 32-bit؛ استخدم التعرّف عبر الإنترنت أو هاتفاً 64-bit.", color = Color(0xFFFFE1B5))
             }
             if (state.listening && !state.correctionPlaying && state.currentAyahIndex > 0) {
                 val previousAyah = state.allAyahs.getOrNull(state.currentAyahIndex - 1)

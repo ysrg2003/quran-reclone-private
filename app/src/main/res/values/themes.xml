@@ -2,9 +2,9 @@
 <resources>
     <style name="Theme.QuranOffline" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">#F7F8F4</item>
-        <item name="android:navigationBarColor">#F7F8F4</item>
-        <item name="android:colorAccent">#246B57</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#45238A</item>
+        <item name="android:navigationBarColor">#F6F5F8</item>
+        <item name="android:colorAccent">#FF6F61</item>
     </style>
 </resources>
