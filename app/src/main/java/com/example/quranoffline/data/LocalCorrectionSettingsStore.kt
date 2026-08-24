@@ -29,6 +29,7 @@ class LocalCorrectionSettingsStore(context: Context) {
         resumePosition = runCatching {
             ResumePosition.valueOf(preferences.getString("resumePosition", CorrectionSettings.DEFAULTS.resumePosition.name).orEmpty())
         }.getOrDefault(CorrectionSettings.DEFAULTS.resumePosition),
+        mushafTextScale = preferences.getFloat("mushafTextScale", CorrectionSettings.DEFAULTS.mushafTextScale),
     ).normalized()
 
     fun save(settings: CorrectionSettings) {
@@ -48,6 +49,7 @@ class LocalCorrectionSettingsStore(context: Context) {
             .putInt("clipPaddingBeforeMs", normalized.clipPaddingBeforeMs)
             .putInt("clipPaddingAfterMs", normalized.clipPaddingAfterMs)
             .putString("resumePosition", normalized.resumePosition.name)
+            .putFloat("mushafTextScale", normalized.mushafTextScale)
             .apply()
     }
 

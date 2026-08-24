@@ -6,11 +6,18 @@ private val arabicMarks = Regex("[\\u0610-\\u061a\\u064b-\\u065f\\u06d6-\\u06ed]
 private val smallAlif = 'ٰ'
 private val silentAlifMarker = '۟'
 
+/**
+ * Removes the base letter that immediately carries the small round zero.
+ * It is deliberately not an "all final alifs are silent" rule: in
+ * أُو۟لَٰٓئِكَ only the marked waw is removed and the later written alif stays.
+ */
+private fun removeSilentMarkedLetters(value: String): String =
+    Normalizer.normalize(value, Normalizer.Form.NFC)
+        .replace(Regex("\\p{L}$silentAlifMarker"), "")
+        .replace(silentAlifMarker.toString(), "")
+
 fun normalizeArabicForMatch(value: String): String {
-    return Normalizer.normalize(value, Normalizer.Form.NFC)
-        // Uthmani rasm marks a silent final alif with a small high rounded
-        // zero, e.g. كَفَرُوا۟. Remove the alif only for speech comparison.
-        .replace("ا$silentAlifMarker", "")
+    return removeSilentMarkedLetters(value)
         // Uthmani rasm writes the pronounced alif in words such as
         // ٱلصَّلَوٰةَ and ٱلزَّكَوٰةَ as a superscript alif over waw.
         // Expand that sequence before stripping marks; this is comparison-only
@@ -25,8 +32,7 @@ fun normalizeArabicForMatch(value: String): String {
 }
 
 private fun normalizeArabicWithSmallAlif(value: String): String {
-    return Normalizer.normalize(value, Normalizer.Form.NFC)
-        .replace("ا$silentAlifMarker", "")
+    return removeSilentMarkedLetters(value)
         .replace("و$smallAlif", "ا")
         .replace(arabicMarks, "")
         .replace(smallAlif, 'ا')
@@ -75,13 +81,20 @@ fun arabicSpellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean
 }
 
 fun quranWordMatches(word: QuranWord, observed: String): Boolean {
-    val hasSilentFinalAlif = word.text.contains("ا$silentAlifMarker")
-    return if (hasSilentFinalAlif) {
-        // The ASCII-like matchText intentionally omits Quranic marks, but it
-        // must not reintroduce a silent alif as a pronounced speech form.
-        arabicWordsEquivalent(word.text, observed)
+    val markerIndex = word.text.indexOf(silentAlifMarker)
+    val hasSilentMarker = markerIndex >= 0
+    val markedBase = word.text.getOrNull(markerIndex - 1)
+    val canonicalMatch = arabicWordsEquivalent(word.text, observed)
+    // ASR providers sometimes preserve an internal silent waw as an Arabic
+    // spelling carrier (أولئك), even though it is not pronounced. Do not apply
+    // that tolerance to a marked alif: كفروا۟ and لقوا۟ must reject pronounced
+    // final alif forms. The canonical clean form remains the primary path.
+    val providerSpelling = hasSilentMarker && markedBase != 'ا' &&
+        arabicWordsEquivalent(word.matchText, observed)
+    return if (hasSilentMarker) {
+        canonicalMatch || providerSpelling
     } else {
-        arabicWordsEquivalent(word.text, observed) || arabicWordsEquivalent(word.matchText, observed)
+        canonicalMatch || arabicWordsEquivalent(word.matchText, observed)
     } || Muqattaat.matches(word, observed)
 }
 

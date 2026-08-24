@@ -39,6 +39,7 @@ object LocalBackup {
                 put("clipPaddingBeforeMs", settings.clipPaddingBeforeMs)
                 put("clipPaddingAfterMs", settings.clipPaddingAfterMs)
                 put("resumePosition", settings.resumePosition.name)
+                put("mushafTextScale", settings.mushafTextScale)
             })
             checkpoint?.let { saved ->
                 put("checkpoint", JSONObject().apply {

@@ -24,6 +24,17 @@ data class QuranLayoutMarker(
     val type: String,
     val symbol: String? = null,
     val glyphId: Int? = null,
+    val glyphCode: Int? = null,
+    val fontFile: String? = null,
+)
+
+data class QuranLayoutItem(
+    val position: Int,
+    val type: String,
+    val wordKey: QuranLayoutWordKey? = null,
+    val glyphId: Int? = null,
+    val glyphCode: Int? = null,
+    val fontFile: String? = null,
 )
 
 data class QuranLayoutLine(
@@ -31,6 +42,7 @@ data class QuranLayoutLine(
     val type: String,
     val wordKeys: List<QuranLayoutWordKey>,
     val markers: List<QuranLayoutMarker> = emptyList(),
+    val items: List<QuranLayoutItem> = emptyList(),
 )
 
 data class QuranLayoutPage(
@@ -67,6 +79,24 @@ data class QuranLayout(
                                     }
                                 }
                             }
+                            val items = buildList {
+                                val itemsArray = lineObject.optJSONArray("items")
+                                if (itemsArray != null) {
+                                    for (itemIndex in 0 until itemsArray.length()) {
+                                        val itemObject = itemsArray.optJSONObject(itemIndex) ?: continue
+                                        add(
+                                            QuranLayoutItem(
+                                                position = itemObject.optInt("position", itemIndex),
+                                                type = itemObject.optString("type", "unknown"),
+                                                wordKey = QuranLayoutWordKey.parse(itemObject.optString("wordKey").takeIf { it.isNotBlank() }.orEmpty()),
+                                                glyphId = itemObject.optInt("glyphId", 0).takeIf { it > 0 },
+                                                glyphCode = itemObject.optInt("glyphCode", 0).takeIf { it > 0 },
+                                                fontFile = itemObject.optString("fontFile").takeIf { it.isNotBlank() },
+                                            ),
+                                        )
+                                    }
+                                }
+                            }
                             val markers = buildList {
                                 val markersArray = lineObject.optJSONArray("markers")
                                 if (markersArray != null) {
@@ -78,6 +108,8 @@ data class QuranLayout(
                                                 type = markerObject.optString("type", "unknown"),
                                                 symbol = markerObject.optString("symbol").takeIf { it.isNotBlank() },
                                                 glyphId = markerObject.optInt("glyphId", 0).takeIf { it > 0 },
+                                                glyphCode = markerObject.optInt("glyphCode", 0).takeIf { it > 0 },
+                                                fontFile = markerObject.optString("fontFile").takeIf { it.isNotBlank() },
                                             ),
                                         )
                                     }
@@ -89,6 +121,7 @@ data class QuranLayout(
                                     type = lineObject.getString("type"),
                                     wordKeys = keys,
                                     markers = markers.sortedBy { it.position },
+                                    items = items.sortedByDescending { it.position },
                                 ),
                             )
                         }

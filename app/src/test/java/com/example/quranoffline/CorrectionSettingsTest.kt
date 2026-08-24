@@ -21,6 +21,7 @@ class CorrectionSettingsTest {
         assertEquals(1, defaults.wholeAyahRepeatCount)
         assertEquals(0, defaults.pauseBetweenPartsMs)
         assertEquals(ResumePosition.FIRST_ERROR, defaults.resumePosition)
+        assertEquals(CorrectionSettings.DEFAULT_MUSHAF_TEXT_SCALE, defaults.mushafTextScale)
     }
 
     @Test
@@ -32,6 +33,7 @@ class CorrectionSettingsTest {
             pauseBetweenPartsMs = 999,
             clipPaddingBeforeMs = -1,
             clipPaddingAfterMs = 999,
+            mushafTextScale = 9f,
         ).normalized()
 
         assertEquals(CorrectionSettings.MAX_ERROR_THRESHOLD, normalized.wholeAyahAfterConsecutiveErrors)
@@ -40,6 +42,7 @@ class CorrectionSettingsTest {
         assertEquals(CorrectionSettings.PAUSE_OPTIONS_MS.last(), normalized.pauseBetweenPartsMs)
         assertEquals(CorrectionSettings.MIN_PADDING_MS, normalized.clipPaddingBeforeMs)
         assertEquals(CorrectionSettings.MAX_PADDING_MS, normalized.clipPaddingAfterMs)
+        assertEquals(CorrectionSettings.MAX_MUSHAF_TEXT_SCALE, normalized.mushafTextScale)
     }
 
     @Test

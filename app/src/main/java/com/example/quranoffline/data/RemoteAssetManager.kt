@@ -20,7 +20,7 @@ class RemoteAssetManager(context: Context) {
         // Bumped after publishing the verified 77,430-word asset so a
         // previously downloaded 77,881-word cache cannot survive an update.
         private const val TEXT_ASSET_VERSION = "2026.08.24.4"
-        private const val PAGE_LAYOUT_ASSET_VERSION = "2026.08.24.1"
+        private const val PAGE_LAYOUT_ASSET_VERSION = "2026.08.24.2"
         const val MODEL_ZIP_URL = "https://github.com/ysrg2003/quran-memorization-assets/releases/download/v0.1.0/fastconformer-quran-ar-onnx-int8.zip"
         private const val CONNECT_TIMEOUT_MS = 20_000
         private const val READ_TIMEOUT_MS = 120_000

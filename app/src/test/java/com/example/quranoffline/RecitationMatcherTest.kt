@@ -200,6 +200,25 @@ class RecitationMatcherTest {
     }
 
     @Test
+    fun silentWawInUlaikaDoesNotDeleteTheLaterWrittenAlif() {
+        val expectedWord = listOf(QuranWord(0, "أُو۟لَٰٓئِكَ", "أولئك"))
+        val result = RecitationMatcher.evaluate(expectedWord, "أولئك", hasFinalResult = true)
+        assertEquals(1, result.matched)
+        assertEquals(WordStatus.MATCHED, result.words.single().status)
+        assertEquals("أُو۟لَٰٓئِكَ", result.words.single().expected)
+    }
+
+    @Test
+    fun silentMarkedAlifInLaquRejectsPronouncedAlif() {
+        val expectedWord = listOf(QuranWord(0, "لَقُوا۟", "لقوا"))
+        val silent = RecitationMatcher.evaluate(expectedWord, "لقو", hasFinalResult = true)
+        val pronounced = RecitationMatcher.evaluate(expectedWord, "لقوا", hasFinalResult = true)
+        assertEquals(1, silent.matched)
+        assertEquals(0, pronounced.matched)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, pronounced.words.single().status)
+    }
+
+    @Test
     fun canonicalHamzaAboveAlifRemainsInVisibleTranscript() {
         val rendered = canonicalizeRecognizedTranscript(
             raw = "بالاخرة",

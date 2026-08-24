@@ -22,6 +22,7 @@ data class CorrectionSettings(
     val clipPaddingBeforeMs: Int = DEFAULT_CLIP_PADDING_BEFORE_MS,
     val clipPaddingAfterMs: Int = DEFAULT_CLIP_PADDING_AFTER_MS,
     val resumePosition: ResumePosition = DEFAULT_RESUME_POSITION,
+    val mushafTextScale: Float = DEFAULT_MUSHAF_TEXT_SCALE,
 ) {
     fun normalized(): CorrectionSettings {
         val safePause = PAUSE_OPTIONS_MS.minByOrNull { kotlin.math.abs(it - pauseBetweenPartsMs) }
@@ -33,6 +34,7 @@ data class CorrectionSettings(
             pauseBetweenPartsMs = safePause,
             clipPaddingBeforeMs = clipPaddingBeforeMs.coerceIn(MIN_PADDING_MS, MAX_PADDING_MS),
             clipPaddingAfterMs = clipPaddingAfterMs.coerceIn(MIN_PADDING_MS, MAX_PADDING_MS),
+            mushafTextScale = mushafTextScale.coerceIn(MIN_MUSHAF_TEXT_SCALE, MAX_MUSHAF_TEXT_SCALE),
         )
     }
 
@@ -49,6 +51,9 @@ data class CorrectionSettings(
         const val DEFAULT_CLIP_PADDING_AFTER_MS = 0
         const val MIN_PADDING_MS = 0
         const val MAX_PADDING_MS = 300
+        const val DEFAULT_MUSHAF_TEXT_SCALE = 1.0f
+        const val MIN_MUSHAF_TEXT_SCALE = 0.8f
+        const val MAX_MUSHAF_TEXT_SCALE = 1.5f
 
         val PAUSE_OPTIONS_MS = listOf(0, 250, 500, 1_000)
 

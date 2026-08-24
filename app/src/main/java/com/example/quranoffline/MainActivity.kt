@@ -275,11 +275,24 @@ private fun QuranOfflineApp(
                 onClear = viewModel::clearSessions,
                 onClearErrors = viewModel::clearCorrectedErrors,
                 onExport = onExportBackup,
-                onOpenSession = { id -> viewModel.openSession(id); tab = 0 },
+                onOpenSession = { id -> viewModel.openSession(id); tab = 4 },
                 modifier = Modifier.padding(padding),
             )
             4 -> ReaderScreen(
                 state = state,
+                onToggleHidden = viewModel::toggleHidden,
+                onStart = {
+                    if (state.listening) viewModel.stopListening()
+                    else if (state.assetsReady && (state.engine == RecitationEngine.ONLINE || state.modelReady)) onRequestMicrophone()
+                    else viewModel.startListening()
+                },
+                onSave = viewModel::saveCurrentSession,
+                onSetStart = viewModel::setMemorizationStart,
+                onMemorizeFromHere = viewModel::startMemorizationFrom,
+                onCorrection = viewModel::playCorrectionForCurrentWord,
+                onStopCorrection = viewModel::stopCorrection,
+                onPreviousAyah = viewModel::startFromPreviousAyah,
+                onResume = onRequestMicrophone,
                 onPlayAyah = viewModel::playAyah,
                 onPlayBasmala = viewModel::playOpeningBasmala,
                 onReadFromHere = viewModel::playFromHere,
@@ -290,8 +303,6 @@ private fun QuranOfflineApp(
                 onClearSelection = viewModel::clearAyahSelection,
                 onTapAyah = viewModel::tapAyahSelection,
                 onLongPressAyah = viewModel::beginAyahSelection,
-                onSetStart = viewModel::setMemorizationStart,
-                onMemorizeFromHere = viewModel::startMemorizationFrom,
                 onStop = viewModel::stopReader,
                 onScope = viewModel::playReaderScope,
                 onPageChanged = viewModel::goToPage,
@@ -1360,6 +1371,15 @@ private fun HistoryScreen(
 @Composable
 private fun ReaderScreen(
     state: com.example.quranoffline.data.QuranUiState,
+    onToggleHidden: () -> Unit,
+    onStart: () -> Unit,
+    onSave: () -> Unit,
+    onSetStart: (Int, Int, Int, Boolean) -> Unit,
+    onMemorizeFromHere: (Int, Int) -> Unit,
+    onCorrection: () -> Unit,
+    onStopCorrection: () -> Unit,
+    onPreviousAyah: () -> Unit,
+    onResume: () -> Unit,
     onPlayAyah: (Int, Int) -> Unit,
     onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
@@ -1370,8 +1390,6 @@ private fun ReaderScreen(
     onClearSelection: () -> Unit,
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
-    onSetStart: (Int, Int, Int, Boolean) -> Unit,
-    onMemorizeFromHere: (Int, Int) -> Unit,
     onStop: () -> Unit,
     onScope: (com.example.quranoffline.data.ReaderScope) -> Unit,
     onPageChanged: (Int) -> Unit,
@@ -1382,7 +1400,7 @@ private fun ReaderScreen(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         val metadata = state.metadata
         val contentState = rememberLazyListState()
-        var readerTextScale by rememberSaveable { mutableFloatStateOf(1f) }
+        val readerTextScale = state.correctionSettings.mushafTextScale
         var showReaderActions by rememberSaveable { mutableStateOf(false) }
         var actionSurah by rememberSaveable { mutableIntStateOf(0) }
         var actionAyah by rememberSaveable { mutableIntStateOf(0) }
@@ -1395,20 +1413,43 @@ private fun ReaderScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
+            RecitationCard(state, onStart, onResume, onCorrection, onStopCorrection, onPreviousAyah)
+        }
+        item {
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onToggleHidden, modifier = Modifier.weight(1f)) {
+                        Icon(if (state.hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (state.hidden) "إظهار النص" else "إخفاء النص")
+                    }
+                    OutlinedButton(onClick = onSave, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("حفظ الجلسة")
+                    }
+                }
+            }
+        }
+        if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
+            item {
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("الكلمة الحالية", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+                        Text(state.currentSpokenWord.orEmpty(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF246B57), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+                    }
+                }
+            }
+        }
+        item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF45238A))) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("قارئ المصحف", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("سورة ${state.metadata?.sura(state.selectedSurah)?.arabicName ?: state.selectedSurah} • الصفحة ${state.currentPage} من ${state.totalPages}", color = Color(0xFFE9DFFF))
-                    Text("السحب إلى اليسار يعرض الصفحة التالية، والسحب إلى اليمين يعرض الصفحة السابقة. ترتيب المصحف من الفاتحة إلى الناس RTL.", color = Color(0xFFE9DFFF), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+                    Text("السحب إلى الشمال يعرض الصفحة السابقة، والسحب إلى اليمين يعرض الصفحة التالية. ترتيب المصحف من الفاتحة إلى الناس من اليمين إلى اليسار.", color = Color(0xFFE9DFFF), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = onPreviousPage, enabled = state.currentPage > 1, modifier = Modifier.weight(1f)) { Text("السابق") }
                         Button(onClick = onNextPage, enabled = state.currentPage < state.totalPages, modifier = Modifier.weight(1f)) { Text("التالي") }
-                    }
-                    Text("حجم خط المصحف: ${(readerTextScale * 100).toInt()}%", color = Color(0xFFE9DFFF), fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { readerTextScale = (readerTextScale - 0.1f).coerceAtLeast(0.8f) }, enabled = readerTextScale > 0.8f, modifier = Modifier.weight(1f)) { Text("تصغير النص") }
-                        OutlinedButton(onClick = { readerTextScale = 1f }, enabled = readerTextScale != 1f, modifier = Modifier.weight(1f)) { Text("الحجم الافتراضي") }
-                        OutlinedButton(onClick = { readerTextScale = (readerTextScale + 0.1f).coerceAtMost(1.5f) }, enabled = readerTextScale < 1.5f, modifier = Modifier.weight(1f)) { Text("تكبير النص") }
                     }
                     Text("النطاق الصوتي: ${readerScopeLabel(state.readerScope)}${state.readerCurrentKey?.let { " • الموضع $it" } ?: ""}", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1484,7 +1525,6 @@ private fun ReaderScreen(
                 onLongPressAyah = onLongPressAyah,
             )
         }
-        item { QuranMarkerLegendCard() }
         }
         if (showReaderActions && sheetAyah != null) {
             val sheetMetadata = state.metadata?.ayah(sheetAyah.surah, sheetAyah.ayah)
@@ -1545,59 +1585,6 @@ private fun ReaderScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun QuranMarkerLegendCard(
-) {
-    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBF1))) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("دليل علامات المصحف", fontWeight = FontWeight.Bold, color = Color(0xFF6E4B25))
-            Text("تظهر الهمزة وعلامات الضبط كطبقة مرئية فوق النص نفسه، ولا تدخل علامات الوقف في كلمات التسميع.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF7B6A55), textAlign = TextAlign.Right)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                QuranTextPresentation.markerLegend().forEach { (mark, label) ->
-                    Surface(color = Color(0xFFF4E8D2), shape = RoundedCornerShape(8.dp)) {
-                        Text("${mark}  $label", modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp), color = Color(0xFF6E4B25), style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MushafPageMarkerStrip(
-    state: com.example.quranoffline.data.QuranUiState,
-    pageAyahs: List<QuranAyah>,
-) {
-    val first = pageAyahs.firstOrNull() ?: return
-    val firstMetadata = state.metadata?.ayah(first.surah, first.ayah) ?: return
-    val pageSajda = pageAyahs.any { state.metadata?.ayah(it.surah, it.ayah)?.sajda != null }
-    val hizb = ((firstMetadata.quarter - 1) / 4) + 1
-    val quarterInHizb = ((firstMetadata.quarter - 1) % 4) + 1
-    Surface(
-        color = Color(0xFFF8EFD9),
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "۞ الحزب $hizb • الربع $quarterInHizb • الجزء ${firstMetadata.juz}",
-                color = Color(0xFF6E4B25),
-                style = MaterialTheme.typography.labelSmall,
-            )
-            Text(
-                "ع الركوع ${firstMetadata.ruku}${if (pageSajda) "  ۩ سجدة" else ""}",
-                color = if (pageSajda) Color(0xFF8A3D2E) else Color(0xFF6E4B25),
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun MushafPageSurface(
@@ -1628,10 +1615,12 @@ private fun MushafPageSurface(
                     onDragStart = { horizontalDrag = 0f },
                     onHorizontalDrag = { _, dragAmount -> horizontalDrag += dragAmount },
                     onDragEnd = {
-                        when {
-                            horizontalDrag <= -80f && state.currentPage < state.totalPages -> onPageChanged(state.currentPage + 1)
-                            horizontalDrag >= 80f && state.currentPage > 1 -> onPageChanged(state.currentPage - 1)
-                        }
+                        val targetPage = com.example.quranoffline.data.pageAfterHorizontalSwipe(
+                            currentPage = state.currentPage,
+                            totalPages = state.totalPages,
+                            dragAmount = horizontalDrag,
+                        )
+                        if (targetPage != state.currentPage) onPageChanged(targetPage)
                         horizontalDrag = 0f
                     },
                     onDragCancel = { horizontalDrag = 0f },
@@ -1654,15 +1643,14 @@ private fun MushafPageSurface(
                 Text("صفحة ${state.currentPage}", color = Color(0xFF76552A), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                 OutlinedButton(onClick = onOpenReaderActions) { Text("الاستماع") }
             }
-            MushafPageMarkerStrip(state, pageAyahs)
             if (pageAyahs.isEmpty()) {
                 Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             } else {
                 val ayahByKey = pageAyahs.associateBy { "${it.surah}:${it.ayah}" }
                 val layoutLines = state.pageLayout?.linesForPage(state.currentPage).orEmpty()
-                // The measured reference lines intentionally stay single-line at the default size. At larger zoom,
-                // switch to the word-wrapping renderer so the user can enlarge text without clipping Quran text.
-                if (layoutLines.isEmpty() || textScale > 1f) {
+                // Every source line remains one ordered visual unit at every scale; zoom changes
+                // glyph size only and never switches to a reflowing per-ayah layout.
+                if (layoutLines.isEmpty()) {
                     pageAyahs.forEach { ayah ->
                         PageAyahLine(
                             ayah = ayah,
@@ -1737,7 +1725,7 @@ private fun MushafPageSurface(
                                                 ayah = ayah,
                                                 words = words,
                                                 fontSize = lineFontSize,
-                                                showAyahMarker = entries.first().second.word == 1,
+                                                showAyahMarker = entries.any { it.second.word == 1 },
                                                 showSajdaMarker = state.metadata?.ayah(ayah.surah, ayah.ayah)?.sajda != null,
                                                 active = state.readerCurrentKey == ayah.selectionKey(),
                                                 selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
@@ -1753,13 +1741,8 @@ private fun MushafPageSurface(
                                                 onLongPressAyah = onLongPressAyah,
                                             )
                                         }
-                                    }
-                                    val visibleMarkers = line.markers.mapNotNull { it.symbol }.distinct()
-                                    if (visibleMarkers.isNotEmpty()) {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {
-                                            visibleMarkers.forEach { marker ->
-                                                Text(QuranTextPresentation.annotated(marker), color = Color(0xFF6E4B25), style = MaterialTheme.typography.labelSmall)
-                                            }
+                                        line.markers.mapNotNull { it.symbol }.distinct().forEach { marker ->
+                                            Text(QuranTextPresentation.annotated(marker), color = Color(0xFF6E4B25), style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
                                 }
@@ -1911,6 +1894,39 @@ private fun PageAyahLine(
 
 
 @Composable
+private fun TypographySettingsCard(
+    settings: CorrectionSettings,
+    onUpdate: ((CorrectionSettings) -> CorrectionSettings) -> Unit,
+) {
+    val scale = settings.mushafTextScale
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("الخط والعرض", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+            Text("حجم النص محفوظ في الإعدادات ويطبّق على كتلة كل سطر كاملة، من دون إعادة ترتيب الآيات أو التفافها عند التكبير.", color = Color(0xFF66736C), textAlign = TextAlign.Right)
+            Text("الحجم الحالي: ${(scale * 100).toInt()}%", fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { onUpdate { it.copy(mushafTextScale = scale - 0.1f) } },
+                    enabled = scale > CorrectionSettings.MIN_MUSHAF_TEXT_SCALE,
+                    modifier = Modifier.weight(1f),
+                ) { Text("تصغير") }
+                Button(
+                    onClick = { onUpdate { it.copy(mushafTextScale = CorrectionSettings.DEFAULT_MUSHAF_TEXT_SCALE) } },
+                    enabled = scale != CorrectionSettings.DEFAULT_MUSHAF_TEXT_SCALE,
+                    modifier = Modifier.weight(1f),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7), contentColor = Color.White),
+                ) { Text("الافتراضي") }
+                OutlinedButton(
+                    onClick = { onUpdate { it.copy(mushafTextScale = scale + 0.1f) } },
+                    enabled = scale < CorrectionSettings.MAX_MUSHAF_TEXT_SCALE,
+                    modifier = Modifier.weight(1f),
+                ) { Text("تكبير") }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SettingsScreen(
     state: com.example.quranoffline.data.QuranUiState,
     onModeChange: (AssetMode) -> Unit,
@@ -1930,7 +1946,10 @@ private fun SettingsScreen(
             Text("الإعدادات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
             Text("تُضبط مرة واحدة وتبقى بعيدة عن واجهة الحفظ اليومية.", color = Color(0xFF66736C))
         }
+        item { TypographySettingsCard(state.correctionSettings, onUpdateCorrectionSettings) }
+        item { Text("الحفظ والتسميع والتصحيح", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
         item { CorrectionSettingsCard(state.correctionSettings, onUpdateCorrectionSettings, onResetCorrectionSettings) }
+        item { Text("المحرك والملفات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
         item { EngineCard(state, onSelectEngine, onDownloadModel) }
         item { OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload) }
         item {
