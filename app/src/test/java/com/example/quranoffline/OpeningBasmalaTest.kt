@@ -8,7 +8,22 @@ import org.junit.Test
 
 class OpeningBasmalaTest {
     @Test
-    fun completeOpeningBasmalaIsRemovedBeforeFirstAyahWord() {
+    fun completeOpeningBasmalaIsAnIndependentSentence() {
+        val result = OpeningBasmalaSpeechFilter.filter(
+            transcript = "بسم الله الرحمن الرحيم",
+            isFinal = true,
+            segmentCompleted = true,
+            alreadyConsumed = false,
+        )
+
+        assertEquals("", result.ayahTranscript)
+        assertTrue(result.consumed)
+        assertFalse(result.needsCorrection)
+        assertTrue(result.detectedOpeningBasmala)
+    }
+
+    @Test
+    fun recognizerAppendingFirstAyahToBasmalaStillDoesNotPassItThrough() {
         val result = OpeningBasmalaSpeechFilter.filter(
             transcript = "بسم الله الرحمن الرحيم الم",
             isFinal = true,
@@ -16,9 +31,9 @@ class OpeningBasmalaTest {
             alreadyConsumed = false,
         )
 
-        assertEquals("الم", result.ayahTranscript)
+        assertEquals("", result.ayahTranscript)
         assertTrue(result.consumed)
-        assertFalse(result.needsCorrection)
+        assertTrue(result.detectedOpeningBasmala)
     }
 
     @Test
@@ -38,26 +53,26 @@ class OpeningBasmalaTest {
     @Test
     fun wrongOpeningBasmalaIsNotPassedAsAnAyahWord() {
         val result = OpeningBasmalaSpeechFilter.filter(
-            transcript = "بسم الله الرحمن الرحيم الم",
+            transcript = "بسم الله الرحمن الرحيم",
             isFinal = true,
             segmentCompleted = true,
             alreadyConsumed = false,
         )
         val wrong = OpeningBasmalaSpeechFilter.filter(
-            transcript = "بسم الله الرحيم الرحيم الم",
+            transcript = "بسم الله الرحيم الرحيم",
             isFinal = true,
             segmentCompleted = true,
             alreadyConsumed = false,
         )
 
-        assertEquals("الم", result.ayahTranscript)
-        assertEquals("الم", wrong.ayahTranscript)
+        assertEquals("", result.ayahTranscript)
+        assertEquals("", wrong.ayahTranscript)
         assertTrue(wrong.needsCorrection)
         assertTrue(wrong.consumed)
     }
 
     @Test
-    fun nonOpeningFirstWordStartsAyahWithoutWaitingForBasmala() {
+    fun firstAyahIsPassedInItsOwnSentenceAfterBasmala() {
         val result = OpeningBasmalaSpeechFilter.filter(
             transcript = "الم",
             isFinal = true,
@@ -68,5 +83,6 @@ class OpeningBasmalaTest {
         assertEquals("الم", result.ayahTranscript)
         assertTrue(result.consumed)
         assertFalse(result.needsCorrection)
+        assertFalse(result.detectedOpeningBasmala)
     }
 }

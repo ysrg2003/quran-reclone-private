@@ -2,6 +2,8 @@ package com.example.quranoffline
 
 import com.example.quranoffline.data.QuranWord
 import com.example.quranoffline.data.RecitationMatcher
+import com.example.quranoffline.data.WordEvaluation
+import com.example.quranoffline.data.canonicalizeRecognizedTranscript
 import com.example.quranoffline.data.WordStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -139,6 +141,18 @@ class RecitationMatcherTest {
         assertEquals(1, result.matched)
         assertEquals("الصلاة", result.words.single().expected)
         assertEquals(WordStatus.MATCHED, result.words.single().status)
+    }
+
+    @Test
+    fun acceptedSpeechSpellingIsRenderedWithCanonicalTaMarbuta() {
+        val rendered = canonicalizeRecognizedTranscript(
+            raw = "ويقيمون الصلاه",
+            evaluation = listOf(
+                WordEvaluation("ويقيمون", "ويقيمون", WordStatus.MATCHED),
+                WordEvaluation("الصلاة", "الصلاه", WordStatus.MATCHED),
+            ),
+        )
+        assertEquals("ويقيمون الصلاة", rendered)
     }
 
     @Test

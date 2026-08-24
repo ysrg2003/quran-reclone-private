@@ -87,6 +87,31 @@ data class RecitationEvaluation(
 }
 
 /**
+ * Converts only successfully matched speech tokens to their canonical Quran
+ * spelling for the visible transcript. The raw observed token remains in the
+ * evaluation/error log; this function never performs a global ة/ه rewrite.
+ */
+fun canonicalizeRecognizedTranscript(raw: String, evaluation: List<WordEvaluation>): String {
+    val tokens = raw.trim().split(Regex("\\s+")).filter(String::isNotBlank).toMutableList()
+    if (tokens.isEmpty()) return ""
+    var searchFrom = 0
+    evaluation.forEach { word ->
+        val observed = word.observed ?: return@forEach
+        if (word.status != WordStatus.MATCHED) return@forEach
+        val matchIndex = tokens.indices.firstOrNull { index ->
+            index >= searchFrom && arabicWordsEquivalent(word.expected, tokens[index])
+        } ?: return@forEach
+        tokens[matchIndex] = word.expected
+        searchFrom = matchIndex + 1
+    }
+    return tokens.joinToString(" ")
+}
+
+/** The visible current word uses the Quran spelling once the token matched. */
+fun canonicalMatchedWord(expected: QuranWord?, observed: String?): String? =
+    if (expected != null && observed != null && quranWordMatches(expected, observed)) expected.text else observed
+
+/**
  * Aligns speech with Quran words. Repeated words are resolved from the
  * current recitation cursor first, not by an unrestricted global search.
  */

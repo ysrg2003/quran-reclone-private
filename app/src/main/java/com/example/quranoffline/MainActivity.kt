@@ -22,8 +22,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
@@ -61,11 +63,13 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -83,6 +87,7 @@ import com.example.quranoffline.data.ResumePosition
 import com.example.quranoffline.data.RecitationEngine
 import com.example.quranoffline.data.WordStatus
 import com.example.quranoffline.data.displayPause
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.text.DateFormat
 import java.util.Date
 
@@ -241,7 +246,7 @@ private fun QuranOfflineApp(
                 state = state,
                 onSelectSurah = { surah ->
                     viewModel.selectSurah(surah)
-                    tab = 0
+                    tab = 4
                 },
                 modifier = Modifier.padding(padding),
             )
@@ -249,7 +254,7 @@ private fun QuranOfflineApp(
                 state = state,
                 onSelectSurah = { surah ->
                     viewModel.selectSurah(surah)
-                    tab = 0
+                    tab = 4
                 },
                 modifier = Modifier.padding(padding),
             )
@@ -265,10 +270,14 @@ private fun QuranOfflineApp(
                 onPlayAyah = viewModel::playAyah,
                 onPlayBasmala = viewModel::playOpeningBasmala,
                 onReadFromHere = viewModel::playFromHere,
+                onReadSurahFromHere = viewModel::playSurahFromHere,
                 onSetStart = viewModel::setMemorizationStart,
                 onMemorizeFromHere = viewModel::startMemorizationFrom,
                 onStop = viewModel::stopReader,
                 onScope = viewModel::playReaderScope,
+                onPageChanged = viewModel::goToPage,
+                onPreviousPage = viewModel::previousPage,
+                onNextPage = viewModel::nextPage,
                 modifier = Modifier.padding(padding),
             )
             5 -> SettingsScreen(
@@ -576,7 +585,7 @@ private fun MemorizationScreen(
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                         Text("مطابق: ${evaluation.matched} من ${evaluation.total} • غير مؤكد: ${evaluation.uncertain} • يحتاج مراجعة: ${evaluation.missing + evaluation.unexpected}")
                         if (state.transcript.isNotBlank()) {
-                            Text("الناتج المسموع", fontWeight = FontWeight.SemiBold)
+                            Text("الناتج المسموع بالصيغة القرآنية", fontWeight = FontWeight.SemiBold)
                             Text(state.transcript, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
                         }
                         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
@@ -1133,6 +1142,13 @@ private fun RecitationCard(
                 color = Color(0xFFE9DFFF),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (state.openingBasmalaActive) {
+                Text(
+                    "جلسة البسملة الافتتاحية مستقلة: تُسمع وتُصحح وحدها، ولا تُحسب آية ولا كلمة. بعد انتهائها تبدأ الآية الأولى مباشرة.",
+                    color = Color(0xFFFFE1B5),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             state.checkpoint?.let { checkpoint ->
                 Text("آخر موضع محفوظ: السورة ${checkpoint.surah}، الآية ${checkpoint.ayah}، الكلمة ${checkpoint.wordIndex + 1}", color = Color(0xFFFFE1B5), style = MaterialTheme.typography.bodySmall)
                 if (!state.listening) {
@@ -1313,29 +1329,49 @@ private fun ReaderScreen(
     onPlayAyah: (Int, Int) -> Unit,
     onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
+    onReadSurahFromHere: (Int, Int) -> Unit,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
     onStop: () -> Unit,
     onScope: (com.example.quranoffline.data.ReaderScope) -> Unit,
+    onPageChanged: (Int) -> Unit,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val metadata = state.metadata
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (state.currentPage - 1).coerceAtLeast(0))
+    LaunchedEffect(listState, state.totalPages) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .collect { index ->
+                val page = (index + 1).coerceIn(1, state.totalPages)
+                if (page != state.currentPage) onPageChanged(page)
+            }
+    }
+    LaunchedEffect(state.currentPage) {
+        val target = (state.currentPage - 1).coerceIn(0, (state.totalPages - 1).coerceAtLeast(0))
+        if (listState.firstVisibleItemIndex != target) listState.scrollToItem(target)
+    }
+
     LazyColumn(
-        modifier = modifier.fillMaxSize().background(Color(0xFFF7F8F4)).padding(horizontal = 16.dp),
+        modifier = modifier.fillMaxSize().background(Color(0xFFF7F8F4)).padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF45238A))) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("القراءة والاستماع", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("اقرأ من الفاتحة أو من نقطة الحفظ، واستمع إلى آية أو سورة أو جزء أو صفحات أو المصحف.", color = Color(0xFFE9DFFF))
-                    Text("النطاق: ${readerScopeLabel(state.readerScope)}${state.readerCurrentKey?.let { " • الموضع $it" } ?: ""}", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
+                    Text("قارئ المصحف", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("سورة ${state.metadata?.sura(state.selectedSurah)?.arabicName ?: state.selectedSurah} • الصفحة ${state.currentPage} من ${state.totalPages}", color = Color(0xFFE9DFFF))
+                    Text("اسحب الصفحة يميناً أو شمالاً للتنقل. الآيات مرتبة داخل صفحة المصحف، وليست أسطراً منفصلة خارج سياقها.", color = Color(0xFFE9DFFF))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = onPreviousPage, enabled = state.currentPage > 1, modifier = Modifier.weight(1f)) { Text("السابق") }
+                        Button(onClick = onNextPage, enabled = state.currentPage < state.totalPages, modifier = Modifier.weight(1f)) { Text("التالي") }
+                    }
+                    Text("النطاق الصوتي: ${readerScopeLabel(state.readerScope)}${state.readerCurrentKey?.let { " • الموضع $it" } ?: ""}", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         com.example.quranoffline.data.ReaderScope.values().forEach { scope ->
-                            FilterChip(
-                                selected = state.readerScope == scope,
-                                onClick = { onScope(scope) },
-                                label = { Text(readerScopeLabel(scope)) },
-                            )
+                            FilterChip(selected = state.readerScope == scope, onClick = { onScope(scope) }, label = { Text(readerScopeLabel(scope)) })
                         }
                     }
                     if (state.readerPlaying) {
@@ -1357,33 +1393,124 @@ private fun ReaderScreen(
         item {
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("طريقة التشغيل", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
-                    Text(if (state.mode == AssetMode.DOWNLOAD) "وضع التنزيل: تُشغّل المقاطع المتوفرة محلياً فقط." else "وضع البث: تُجلب المقاطع عند التشغيل ولا تُحفظ تلقائياً.", color = Color(0xFF66736C))
-                    Text("اضغط مطولاً على أي آية لاختيار بداية الحفظ أو التسميع أو تشغيلها.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+                    Text("صفحة المصحف الحالية", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+                    Text("تمثيل نصي منظم يعتمد حدود الصفحة وتسلسل الآيات في metadata المرجعية، من دون إدراج صور أو خطوط خارجية.", color = Color(0xFF66736C))
+                    Text("لخيارات الآية: اضغط مطولاً على أي آية أو استخدم زر النقاط الثلاث.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
                 }
             }
         }
-        items(state.ayahs, key = { "reader-${it.surah}:${it.ayah}" }) { ayah ->
-            val active = state.readerCurrentKey == "${ayah.surah}:${ayah.ayah}"
-            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (active) Color(0xFFEAF4EE) else Color.White)) {
-                AyahBlock(
-                    ayah = ayah,
-                    hidden = false,
-                    evaluation = null,
-                    wordOffset = 0,
-                    listening = false,
-                    currentSpokenWord = null,
-                    currentSpokenWordIndex = -1,
-                    onSetStart = onSetStart,
-                    onMemorizeFromHere = onMemorizeFromHere,
-                    onPlayAyah = onPlayAyah,
-                    onPlayBasmala = onPlayBasmala,
-                    onReadFromHere = onReadFromHere,
-                )
+        item {
+            MushafPageSurface(
+                pageAyahs = if (metadata == null) emptyList() else state.allAyahs.filter { metadata.ayah(it.surah, it.ayah)?.page == state.currentPage },
+                state = state,
+                onSetStart = onSetStart,
+                onMemorizeFromHere = onMemorizeFromHere,
+                onPlayAyah = onPlayAyah,
+                onPlayBasmala = onPlayBasmala,
+                onReadFromHere = onReadFromHere,
+                onReadSurahFromHere = onReadSurahFromHere,
+                onPageChanged = onPageChanged,
+                listState = listState,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MushafPageSurface(
+    pageAyahs: List<QuranAyah>,
+    state: com.example.quranoffline.data.QuranUiState,
+    onSetStart: (Int, Int, Int, Boolean) -> Unit,
+    onMemorizeFromHere: (Int, Int) -> Unit,
+    onPlayAyah: (Int, Int) -> Unit,
+    onPlayBasmala: (Int) -> Unit,
+    onReadFromHere: (Int, Int) -> Unit,
+    onReadSurahFromHere: (Int, Int) -> Unit,
+    onPageChanged: (Int) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+) {
+    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEF8))) {
+        LazyRow(
+            state = listState,
+            reverseLayout = true,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items((1..state.totalPages).toList(), key = { "page-$it" }) { pageNumber ->
+                if (pageNumber == state.currentPage) {
+                    Column(Modifier.fillParentMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("صفحة $pageNumber", color = Color(0xFF76552A), fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                        if (pageAyahs.isEmpty()) {
+                            Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                        } else {
+                            pageAyahs.forEach { ayah ->
+                                PageAyahLine(
+                                    ayah = ayah,
+                                    active = state.readerCurrentKey == "${ayah.surah}:${ayah.ayah}",
+                                    onSetStart = onSetStart,
+                                    onMemorizeFromHere = onMemorizeFromHere,
+                                    onPlayAyah = onPlayAyah,
+                                    onPlayBasmala = onPlayBasmala,
+                                    onReadFromHere = onReadFromHere,
+                                    onReadSurahFromHere = onReadSurahFromHere,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.fillParentMaxWidth())
+                }
             }
         }
     }
 }
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PageAyahLine(
+    ayah: QuranAyah,
+    active: Boolean,
+    onSetStart: (Int, Int, Int, Boolean) -> Unit,
+    onMemorizeFromHere: (Int, Int) -> Unit,
+    onPlayAyah: (Int, Int) -> Unit,
+    onPlayBasmala: (Int) -> Unit,
+    onReadFromHere: (Int, Int) -> Unit,
+    onReadSurahFromHere: (Int, Int) -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val openingBasmala = if (ayah.ayah == 1) com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(ayah.surah) else null
+    Column(
+        Modifier.fillMaxWidth()
+            .background(if (active) Color(0xFFEAF4EE) else Color.Transparent, RoundedCornerShape(12.dp))
+            .combinedClickable(onClick = {}, onLongClick = { menuExpanded = true })
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("﴿${ayah.ayah}﴾", color = Color(0xFFB6844A), style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, contentDescription = "خيارات الآية", tint = Color(0xFF76552A)) }
+        }
+        openingBasmala?.let { basmala ->
+            Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp)) {
+                    IconButton(onClick = { onPlayBasmala(ayah.surah) }) { Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل البسملة الافتتاحية", tint = Color(0xFF76552A)) }
+                    Text("${basmala.text}  ·  جملة مستقلة لا تدخل في الآية", modifier = Modifier.weight(1f).padding(vertical = 8.dp), textAlign = TextAlign.Right, color = Color(0xFF76552A), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        Text(ayah.text, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right, color = Color(0xFF183D33), style = MaterialTheme.typography.headlineSmall, lineHeight = 36.sp)
+        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+            DropdownMenuItem(text = { Text("تعيين بداية الحفظ من هنا") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, false) })
+            if (openingBasmala != null) DropdownMenuItem(text = { Text("تعيين البداية مع البسملة المستقلة") }, onClick = { menuExpanded = false; onSetStart(ayah.surah, ayah.ayah, 0, true) })
+            DropdownMenuItem(text = { Text("التسميع والحفظ من هنا") }, onClick = { menuExpanded = false; onMemorizeFromHere(ayah.surah, ayah.ayah) })
+            DropdownMenuItem(text = { Text("قراءة الآية بصوت الشيخ") }, onClick = { menuExpanded = false; onPlayAyah(ayah.surah, ayah.ayah) })
+            DropdownMenuItem(text = { Text("قراءة السورة من هنا") }, onClick = { menuExpanded = false; onReadSurahFromHere(ayah.surah, ayah.ayah) })
+            DropdownMenuItem(text = { Text("قراءة القرآن من هنا") }, onClick = { menuExpanded = false; onReadFromHere(ayah.surah, ayah.ayah) })
+        }
+    }
+}
+
 
 @Composable
 private fun SettingsScreen(

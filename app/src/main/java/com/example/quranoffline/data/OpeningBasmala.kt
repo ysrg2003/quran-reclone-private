@@ -12,13 +12,15 @@ data class OpeningBasmalaSpeechResult(
     val ayahTranscript: String,
     val consumed: Boolean,
     val needsCorrection: Boolean,
+    val detectedOpeningBasmala: Boolean = false,
 )
 
 /**
- * Keeps an optional opening basmala outside QuranAyah. It is deliberately
- * conservative: a partial "ب"/"بس" remains outside the ayah, a recognized
- * four-word opening is removed, and an incomplete/wrong opening is consumed
- * without poisoning the first Quran word.
+ * Recognizes one optional opening-basmala sentence independently from the
+ * Quran ayah stream. The input to this filter is the recognizer's current
+ * sentence only; the Quran first ayah is sent in a later recognizer segment.
+ * A direct first-ayah start is explicitly allowed and is never treated as a
+ * malformed basmala.
  */
 object OpeningBasmalaSpeechFilter {
     private const val FIRST_WORD = "بسم"
@@ -29,22 +31,40 @@ object OpeningBasmalaSpeechFilter {
         val tokens = normalizeArabicForComparison(transcript).split(' ').filter(String::isNotBlank)
         if (tokens.isEmpty()) return OpeningBasmalaSpeechResult("", consumed = false, needsCorrection = false)
         val first = tokens.first()
-        if (FIRST_WORD.startsWith(first)) {
-            if (tokens.size == 1 && first != FIRST_WORD) return OpeningBasmalaSpeechResult("", consumed = false, needsCorrection = false)
-            if (tokens.size < canonicalWords.size && !(isFinal || segmentCompleted)) {
-                return OpeningBasmalaSpeechResult("", consumed = false, needsCorrection = false)
-            }
-        } else {
+        if (!FIRST_WORD.startsWith(first)) {
+            // The reader started directly with the actual first Quran ayah.
             return OpeningBasmalaSpeechResult(transcript, consumed = true, needsCorrection = false)
         }
+        if (tokens.size == 1 && first != FIRST_WORD) {
+            // Keep a partial "ب"/"بس" outside the ayah until the sentence is
+            // either completed or finalized as an incorrect basmala.
+            return OpeningBasmalaSpeechResult("", consumed = false, needsCorrection = false, detectedOpeningBasmala = true)
+        }
+        if (!(isFinal || segmentCompleted)) {
+            // Never start the Quran stream from a partial basmala callback;
+            // wait for the recognizer to close this standalone sentence.
+            return OpeningBasmalaSpeechResult("", consumed = false, needsCorrection = false, detectedOpeningBasmala = true)
+        }
+
+        // This is a standalone sentence. If the provider appends words from
+        // the next ayah in the same callback, the whole callback is discarded;
+        // the recognizer is restarted and the next ayah must arrive in a new
+        // sentence/segment.
         val openingWords = tokens.take(canonicalWords.size)
         val correct = openingWords == canonicalWords
-        val rest = tokens.drop(canonicalWords.size).joinToString(" ")
-        val complete = tokens.size >= canonicalWords.size || isFinal || segmentCompleted
+        val complete = isFinal || segmentCompleted
         return if (complete) {
-            OpeningBasmalaSpeechResult(rest, consumed = true, needsCorrection = !correct)
+            // The sentence is intentionally closed before Quran recognition
+            // starts again. Even if the provider appends "الم" in this same
+            // callback, it is not passed through this basmala result.
+            OpeningBasmalaSpeechResult(
+                ayahTranscript = "",
+                consumed = true,
+                needsCorrection = !correct,
+                detectedOpeningBasmala = true,
+            )
         } else {
-            OpeningBasmalaSpeechResult("", consumed = false, needsCorrection = false)
+            OpeningBasmalaSpeechResult("", consumed = false, needsCorrection = false, detectedOpeningBasmala = true)
         }
     }
 }
