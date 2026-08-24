@@ -74,13 +74,13 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -658,6 +658,13 @@ private fun CorrectionSettingsCard(
                 checked = settings.automaticPreviousAyah,
                 enabled = controlsEnabled,
                 onCheckedChange = { checked -> onUpdate { it.copy(automaticPreviousAyah = checked) } },
+            )
+            SettingSwitchRow(
+                title = "الاستماع إلى البسملة الافتتاحية تلقائياً",
+                description = "عند بداية سورة مؤهلة: ابدأ بالآية مباشرة أو قل البسملة ثم الآية؛ سيتعرف النظام على الخيارين دون احتساب البسملة آية.",
+                checked = settings.listenForOpeningBasmala,
+                enabled = true,
+                onCheckedChange = { checked -> onUpdate { it.copy(listenForOpeningBasmala = checked) } },
             )
             SettingSwitchRow(
                 title = "تصحيح القفز بين الآيات",
@@ -1360,6 +1367,7 @@ private fun ReaderScreen(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         val metadata = state.metadata
         val contentState = rememberLazyListState()
+        var readerTextScale by rememberSaveable { mutableFloatStateOf(1f) }
 
         LazyColumn(
         state = contentState,
@@ -1371,10 +1379,16 @@ private fun ReaderScreen(
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("قارئ المصحف", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("سورة ${state.metadata?.sura(state.selectedSurah)?.arabicName ?: state.selectedSurah} • الصفحة ${state.currentPage} من ${state.totalPages}", color = Color(0xFFE9DFFF))
-                    Text("اسحب الصفحة يميناً أو شمالاً للتنقل. الآيات مرتبة داخل صفحة المصحف، وليست أسطراً منفصلة خارج سياقها.", color = Color(0xFFE9DFFF))
+                    Text("السحب إلى اليسار يعرض الصفحة التالية، والسحب إلى اليمين يعرض الصفحة السابقة. ترتيب المصحف من الفاتحة إلى الناس RTL.", color = Color(0xFFE9DFFF), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = onPreviousPage, enabled = state.currentPage > 1, modifier = Modifier.weight(1f)) { Text("السابق") }
                         Button(onClick = onNextPage, enabled = state.currentPage < state.totalPages, modifier = Modifier.weight(1f)) { Text("التالي") }
+                    }
+                    Text("حجم خط المصحف: ${(readerTextScale * 100).toInt()}%", color = Color(0xFFE9DFFF), fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { readerTextScale = (readerTextScale - 0.1f).coerceAtLeast(0.8f) }, enabled = readerTextScale > 0.8f, modifier = Modifier.weight(1f)) { Text("تصغير النص") }
+                        OutlinedButton(onClick = { readerTextScale = 1f }, enabled = readerTextScale != 1f, modifier = Modifier.weight(1f)) { Text("الحجم الافتراضي") }
+                        OutlinedButton(onClick = { readerTextScale = (readerTextScale + 0.1f).coerceAtMost(1.5f) }, enabled = readerTextScale < 1.5f, modifier = Modifier.weight(1f)) { Text("تكبير النص") }
                     }
                     Text("النطاق الصوتي: ${readerScopeLabel(state.readerScope)}${state.readerCurrentKey?.let { " • الموضع $it" } ?: ""}", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1436,6 +1450,7 @@ private fun ReaderScreen(
                 onReadFromHere = onReadFromHere,
                 onReadSurahFromHere = onReadSurahFromHere,
                 onPageChanged = onPageChanged,
+                textScale = readerTextScale,
                 onTapAyah = onTapAyah,
                 onLongPressAyah = onLongPressAyah,
             )
@@ -1490,6 +1505,7 @@ private fun MushafPageSurface(
     onReadFromHere: (Int, Int) -> Unit,
     onReadSurahFromHere: (Int, Int) -> Unit,
     onPageChanged: (Int) -> Unit,
+    textScale: Float,
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
 ) {
@@ -1531,10 +1547,13 @@ private fun MushafPageSurface(
             } else {
                 val ayahByKey = pageAyahs.associateBy { "${it.surah}:${it.ayah}" }
                 val layoutLines = state.pageLayout?.linesForPage(state.currentPage).orEmpty()
-                if (layoutLines.isEmpty()) {
+                // The measured reference lines intentionally stay single-line at the default size. At larger zoom,
+                // switch to the word-wrapping renderer so the user can enlarge text without clipping Quran text.
+                if (layoutLines.isEmpty() || textScale > 1f) {
                     pageAyahs.forEach { ayah ->
                         PageAyahLine(
                             ayah = ayah,
+                            textScale = textScale,
                             active = state.readerCurrentKey == ayah.selectionKey(),
                             selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
                             onSetStart = onSetStart,
@@ -1581,13 +1600,15 @@ private fun MushafPageSurface(
                                         val ayah = entries.first().first
                                         entries.sumOf { (_, key) -> ayah.words.getOrNull(key.word - 1)?.text?.length ?: 0 } + 6
                                     }
-                                    val lineFontSize = when {
+                                    val baseLineFontSize = when {
                                         lineTextLength >= 78 -> 13.sp
                                         lineTextLength >= 62 -> 15.sp
                                         lineTextLength >= 46 -> 17.sp
                                         lineTextLength >= 32 -> 20.sp
                                         else -> 23.sp
                                     }
+                                    val lineFontSize = (baseLineFontSize.value * textScale).sp
+
                                     Row(
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                                         horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
@@ -1664,9 +1685,7 @@ private fun PageAyahInline(
             color = Color(0xFF183D33),
             fontSize = fontSize,
             lineHeight = (fontSize.value * 1.45f).sp,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Clip,
+            softWrap = true,
             textAlign = TextAlign.Right,
         )
         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
@@ -1684,6 +1703,7 @@ private fun PageAyahInline(
 @Composable
 private fun PageAyahLine(
     ayah: QuranAyah,
+    textScale: Float,
     active: Boolean,
     selected: Boolean,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
@@ -1735,8 +1755,10 @@ private fun PageAyahLine(
                         word.text,
                         color = Color(0xFF183D33),
                         style = MaterialTheme.typography.headlineSmall,
-                        lineHeight = 36.sp,
+                        fontSize = (MaterialTheme.typography.headlineSmall.fontSize.value * textScale).sp,
+                        lineHeight = (36f * textScale).sp,
                         softWrap = false,
+                        textAlign = TextAlign.Right,
                     )
                 }
             }

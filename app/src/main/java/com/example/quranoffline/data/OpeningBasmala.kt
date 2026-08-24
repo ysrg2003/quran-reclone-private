@@ -46,19 +46,17 @@ object OpeningBasmalaSpeechFilter {
             return OpeningBasmalaSpeechResult("", consumed = false, needsCorrection = false, detectedOpeningBasmala = true)
         }
 
-        // This is a standalone sentence. If the provider appends words from
-        // the next ayah in the same callback, the whole callback is discarded;
-        // the recognizer is restarted and the next ayah must arrive in a new
-        // sentence/segment.
+        // The basmala remains an independent progress item. If the provider
+        // appends first-ayah words in the same callback, preserve only those
+        // trailing words for the Quran tracker after the basmala decision.
         val openingWords = tokens.take(canonicalWords.size)
         val correct = openingWords == canonicalWords
         val complete = isFinal || segmentCompleted
         return if (complete) {
-            // The sentence is intentionally closed before Quran recognition
-            // starts again. Even if the provider appends "الم" in this same
-            // callback, it is not passed through this basmala result.
+            // The basmala is closed as a separate item; any trailing words
+            // remain available for the Quran tracker in this same callback.
             OpeningBasmalaSpeechResult(
-                ayahTranscript = "",
+                ayahTranscript = tokens.drop(canonicalWords.size).joinToString(" "),
                 consumed = true,
                 needsCorrection = !correct,
                 detectedOpeningBasmala = true,

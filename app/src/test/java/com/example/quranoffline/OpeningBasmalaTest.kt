@@ -58,6 +58,21 @@ class OpeningBasmalaTest {
     }
 
     @Test
+    fun correctBasmalaAndFirstAyahCanArriveInOneRecognizerResult() {
+        val result = OpeningBasmalaSpeechFilter.filter(
+            transcript = "بسم الله الرحمن الرحيم الم ذلك",
+            isFinal = true,
+            segmentCompleted = true,
+            alreadyConsumed = false,
+        )
+
+        assertEquals("الم ذلك", result.ayahTranscript)
+        assertTrue(result.consumed)
+        assertFalse(result.needsCorrection)
+        assertTrue(result.detectedOpeningBasmala)
+    }
+
+    @Test
     fun firstAyahIsPassedInItsOwnSentenceAfterBasmala() {
         val result = OpeningBasmalaSpeechFilter.filter(
             transcript = "الم",

@@ -83,6 +83,13 @@ class RecitationProgressTracker(
     private var lastTranscriptTokens: List<String> = emptyList()
     private var pendingWordPrefix: String? = null
     private var stopProcessingSegment = false
+    private var cachedEvaluation = RecitationEvaluation(
+        words = evaluationWords.toList(),
+        matched = 0,
+        uncertain = evaluationWords.size,
+        missing = 0,
+        unexpected = 0,
+    )
 
     fun updateSettings(newSettings: CorrectionSettings) {
         settings = newSettings.normalized()
@@ -108,6 +115,13 @@ class RecitationProgressTracker(
         lastTranscriptTokens = emptyList()
         pendingWordPrefix = null
         stopProcessingSegment = false
+        cachedEvaluation = RecitationEvaluation(
+            words = evaluationWords.toList(),
+            matched = 0,
+            uncertain = evaluationWords.size,
+            missing = 0,
+            unexpected = 0,
+        )
     }
 
     /** Start a new recitation session from a chosen ayah and discard the prior session judgement. */
@@ -199,6 +213,7 @@ class RecitationProgressTracker(
             }
             committedTokens.clear()
             committedTokens.addAll(tokens)
+            cachedEvaluation = buildEvaluation()
         }
 
         val spokenWord = tokens.lastOrNull()
@@ -206,7 +221,7 @@ class RecitationProgressTracker(
         val resolvedErrors = correctedErrors.toList()
         correctedErrors.clear()
         return RecitationProgressResult(
-            evaluation = buildEvaluation(),
+            evaluation = cachedEvaluation,
             currentAyahIndex = currentAyahIndex,
             currentWordInAyah = nextWordInAyah,
             currentGlobalWordIndex = currentGlobal,
@@ -301,25 +316,27 @@ class RecitationProgressTracker(
                 null
             }
             laterMatch != null -> {
-                for (missing in current until laterMatch) markMissing(missing)
-                val request = correctionForIfEnabled(
+                // A later token never validates the words after the first gap.
+                // Keep this ayah locked and return all following words to the
+                // default state until the missing word is repaired.
+                resetFollowingWordsToUncertain(current)
+                markMissing(current)
+                stopProcessingSegment = true
+                correctionForIfEnabled(
                     kind = CorrectionKind.SKIPPED_WORD,
                     ayahIndex = currentAyahIndex,
                     localWordIndex = current,
                     observed = token,
                     readWholeAyah = shouldReadWholeAyah(consecutiveIssueCount(expectedWords, current, segment, segmentIndex)),
+                    stopProcessingSegment = true,
                 )
-                markMatched(laterMatch, token)
-                nextWordInAyah = laterMatch + 1
-                clearCorrectionIfResolved(globalWordIndex(currentAyahIndex, laterMatch))
-                if (nextWordInAyah >= expected.size) advanceAyah()
-                request
             }
             isClearJump(segment, segmentIndex) -> {
                 stopProcessingSegment = true
                 // A future ayah is never evaluated while this ayah has an
                 // unresolved word. Mark only the current ayah and stop this
                 // recognizer segment; the next segment must repair it first.
+                resetFollowingWordsToUncertain(current - 1)
                 for (missing in current until expected.size) markMissing(missing)
                 correctionForIfEnabled(
                     kind = CorrectionKind.SKIPPED_WORD,
@@ -331,16 +348,18 @@ class RecitationProgressTracker(
                 )
             }
             else -> {
+                resetFollowingWordsToUncertain(current)
                 markWrong(current, token)
+                stopProcessingSegment = true
                 val request = correctionForIfEnabled(
                     kind = CorrectionKind.WRONG_WORD,
                     ayahIndex = currentAyahIndex,
                     localWordIndex = current,
                     observed = token,
                     readWholeAyah = shouldReadWholeAyah(consecutiveIssueCount(expectedWords, current, segment, segmentIndex)),
+                    stopProcessingSegment = true,
                 )
-                nextWordInAyah = current + 1
-                if (nextWordInAyah >= expected.size) advanceAyah()
+                nextWordInAyah = current
                 request
             }
         }
@@ -457,6 +476,17 @@ class RecitationProgressTracker(
         val global = globalWordIndex(currentAyahIndex, localIndex) ?: return
         openErrorKinds.putIfAbsent(global, CorrectionKind.SKIPPED_WORD)
         setEvaluation(global, WordEvaluation(ayahs[currentAyahIndex].words[localIndex].text, null, WordStatus.MISSING))
+    }
+
+    private fun resetFollowingWordsToUncertain(localIndex: Int) {
+        if (currentAyahIndex !in ayahs.indices) return
+        val start = ayahStarts[currentAyahIndex]
+        val endExclusive = start + ayahs[currentAyahIndex].words.size
+        for (global in (start + localIndex + 1).coerceAtLeast(start) until endExclusive) {
+            openErrorKinds.remove(global)
+            val word = words[global]
+            setEvaluation(global, WordEvaluation(word.text, null, WordStatus.UNCERTAIN))
+        }
     }
 
     private fun markWrong(localIndex: Int, observed: String) {

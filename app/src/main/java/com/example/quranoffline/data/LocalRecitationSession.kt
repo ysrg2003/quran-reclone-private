@@ -8,6 +8,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
@@ -35,6 +36,7 @@ class LocalRecitationSession(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val running = AtomicBoolean(false)
+    private val cleanupInProgress = AtomicBoolean(false)
     private var recorder: AudioRecord? = null
     private var worker: Thread? = null
     private var recognizer: OnlineRecognizer? = null
@@ -42,6 +44,10 @@ class LocalRecitationSession(
 
     fun start() {
         if (running.get()) return
+        if (cleanupInProgress.get()) {
+            mainHandler.postDelayed({ start() }, 120L)
+            return
+        }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             emit(RecognitionUpdate.Failed("يجب السماح بالميكروفون لبدء التسميع."))
             return
@@ -83,20 +89,28 @@ class LocalRecitationSession(
 
     fun stop() {
         if (!running.getAndSet(false)) return
+        cleanupInProgress.set(true)
         try { recorder?.stop() } catch (_: IllegalStateException) { }
-        worker?.join(1_000)
+        val workerToJoin = worker
         worker = null
-        stream?.let { activeStream ->
+        Thread({
             try {
-                activeStream.inputFinished()
-                while (recognizer?.isReady(activeStream) == true) recognizer?.decode(activeStream)
-                recognizer?.getResult(activeStream)?.let { result ->
-                    if (result.text.isNotBlank()) emit(RecognitionUpdate.Text(result.text, result.timestamps, isFinal = true))
+                workerToJoin?.join(1_000)
+                stream?.let { activeStream ->
+                    try {
+                        activeStream.inputFinished()
+                        while (recognizer?.isReady(activeStream) == true) recognizer?.decode(activeStream)
+                        recognizer?.getResult(activeStream)?.let { result ->
+                            if (result.text.isNotBlank()) emit(RecognitionUpdate.Text(result.text, result.timestamps, isFinal = true))
+                        }
+                    } catch (_: Throwable) { }
                 }
-            } catch (_: Throwable) { }
-        }
-        closeResources()
-        emit(RecognitionUpdate.Stopped)
+                closeResources()
+                emit(RecognitionUpdate.Stopped)
+            } finally {
+                cleanupInProgress.set(false)
+            }
+        }, "quran-local-recognizer-cleanup").start()
     }
 
     private fun captureLoop(minBuffer: Int) {
@@ -105,6 +119,8 @@ class LocalRecitationSession(
         val activeRecognizer = recognizer ?: return
         val pcm = ShortArray((minBuffer / 2).coerceAtLeast(512))
         val samples = FloatArray(pcm.size)
+        var lastEmittedText = ""
+        var lastEmittedAt = 0L
         while (running.get()) {
             val count = activeRecorder.read(pcm, 0, pcm.size)
             if (count <= 0) continue
@@ -112,7 +128,13 @@ class LocalRecitationSession(
             activeStream.acceptWaveform(samples.copyOf(count), SAMPLE_RATE)
             while (activeRecognizer.isReady(activeStream)) activeRecognizer.decode(activeStream)
             val result = activeRecognizer.getResult(activeStream)
-            if (result.text.isNotBlank()) emit(RecognitionUpdate.Text(result.text, result.timestamps))
+            val text = result.text
+            val now = SystemClock.uptimeMillis()
+            if (text.isNotBlank() && (text != lastEmittedText || now - lastEmittedAt >= 250L)) {
+                lastEmittedText = text
+                lastEmittedAt = now
+                emit(RecognitionUpdate.Text(text, result.timestamps))
+            }
         }
     }
 

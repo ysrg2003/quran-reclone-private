@@ -575,7 +575,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentAyahLocked = false,
             recitationCursor = tracker.globalWordIndex(previousAyahIndex, 0) ?: 0,
             correctionPlaying = false,
-            openingBasmalaActive = false,
+            openingBasmalaActive = !openingBasmalaConsumed,
             correctionPhase = CorrectionPhase.LISTENING,
             correctionMessage = null,
             correctionAyahIndex = -1,
@@ -613,10 +613,13 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     if (openingBasmalaNeedsCorrection) {
                         pauseRecognitionForOpeningBasmala()
                         playOpeningBasmalaCorrection()
-                    } else {
-                        restartRecognitionAfterOpeningBasmala()
+                        return
                     }
-                    return
+                    restartRecognitionAfterOpeningBasmala()
+                    if (filteredTranscript.isBlank()) return
+                    // A correct basmala may share a recognizer callback with
+                    // the first ayah. The basmala is consumed independently,
+                    // while the trailing ayah words continue below.
                 }
 
                 val tracker = progressTracker ?: RecitationProgressTracker(previousState.allAyahs, correctionSettings = previousState.correctionSettings).also { progressTracker = it }
@@ -981,7 +984,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             surah = target.surah,
             ayah = target.ayah,
             wordIndex = safeWordIndex,
-            includeOpeningBasmala = previous?.includeOpeningBasmala ?: false,
+            includeOpeningBasmala = previous?.includeOpeningBasmala ?: state.value.correctionSettings.listenForOpeningBasmala,
             updatedAt = System.currentTimeMillis(),
         )
         memorizationProgressStore.save(checkpoint)
@@ -1045,7 +1048,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun shouldListenForOpeningBasmala(ayahIndex: Int): Boolean {
         val ayah = state.value.allAyahs.getOrNull(ayahIndex) ?: return false
-        return ayah.ayah == 1 && QuranPresentation.openingBasmalaForSurah(ayah.surah) != null
+        val eligible = ayah.ayah == 1 && QuranPresentation.openingBasmalaForSurah(ayah.surah) != null
+        val checkpointOverride = state.value.checkpoint?.includeOpeningBasmala == true
+        return eligible && (state.value.correctionSettings.listenForOpeningBasmala || checkpointOverride)
     }
 
     private fun pageForAyahIndex(index: Int): Int {

@@ -33,7 +33,7 @@ class RecitationProgressTrackerTest {
         assertEquals(0, result.correction?.ayahIndex)
         assertEquals(0, result.correction?.localWordIndex)
         assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[0].status)
-        assertEquals(1, result.currentWordInAyah)
+        assertEquals(0, result.currentWordInAyah)
     }
 
     @Test
@@ -53,7 +53,7 @@ class RecitationProgressTrackerTest {
 
         assertEquals(false, result.correction?.readWholeAyah)
         assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[0].status)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[1].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[1].status)
     }
 
     @Test
@@ -64,8 +64,8 @@ class RecitationProgressTrackerTest {
 
         assertEquals(true, result.correction?.readWholeAyah)
         assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[0].status)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[1].status)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[2].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[1].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[2].status)
     }
 
     @Test
@@ -77,7 +77,22 @@ class RecitationProgressTrackerTest {
         assertEquals(CorrectionKind.SKIPPED_WORD, result.correction?.kind)
         assertEquals(1, result.correction?.localWordIndex)
         assertEquals(WordStatus.MISSING, result.evaluation.words[1].status)
-        assertEquals(WordStatus.MATCHED, result.evaluation.words[2].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[2].status)
+    }
+
+    @Test
+    fun wordsAfterAnErrorReturnToDefaultEvenIfTheyWerePreviouslyMatched() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d"), ayah(2, "e")))
+        tracker.update(final("a b c"))
+
+        val result = tracker.update(final("a x c"))
+
+        assertEquals(CorrectionKind.WRONG_WORD, result.correction?.kind)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[1].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[2].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[3].status)
+        assertEquals(0, result.currentAyahIndex)
+        assertEquals(1, result.currentWordInAyah)
     }
 
     @Test
@@ -209,8 +224,8 @@ class RecitationProgressTrackerTest {
         assertEquals(CorrectionKind.WRONG_WORD, result.correction?.kind)
         assertEquals(0, result.correction?.localWordIndex)
         assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[0].status)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.evaluation.words[1].status)
-        assertEquals(2, result.currentWordInAyah)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[1].status)
+        assertEquals(0, result.currentWordInAyah)
     }
 
     @Test
@@ -418,7 +433,7 @@ class RecitationProgressTrackerTest {
         assertEquals(CorrectionKind.WRONG_WORD, first.correction?.kind)
         assertNull(repeated.correction)
         assertNull(intermediateWrong.correction)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, intermediateWrong.evaluation.words[1].status)
+        assertEquals(WordStatus.UNCERTAIN, intermediateWrong.evaluation.words[1].status)
 
         tracker.resumeFrom(0, 0)
         val resolved = tracker.update(final("a"))

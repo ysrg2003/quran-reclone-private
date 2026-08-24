@@ -186,6 +186,10 @@ class ReferenceAudioPlayer {
         try {
             mediaPlayer.setDataSource(source)
             mediaPlayer.setOnPreparedListener { prepared ->
+                if (player !== prepared) {
+                    runCatching { prepared.release() }
+                    return@setOnPreparedListener
+                }
                 val rawStart = startMs.coerceAtLeast(0)
                 val rawEnd = endMs.coerceAtLeast(0)
                 val safeStart = minOf(rawStart, rawEnd)

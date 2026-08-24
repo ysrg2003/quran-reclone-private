@@ -14,6 +14,7 @@ class CorrectionSettingsTest {
 
         assertTrue(defaults.automaticCorrectionEnabled)
         assertTrue(defaults.automaticPreviousAyah)
+        assertTrue(defaults.listenForOpeningBasmala)
         assertEquals(3, defaults.wholeAyahAfterConsecutiveErrors)
         assertTrue(defaults.playFirstErrorBeforeWholeAyah)
         assertEquals(1, defaults.wordRepeatCount)

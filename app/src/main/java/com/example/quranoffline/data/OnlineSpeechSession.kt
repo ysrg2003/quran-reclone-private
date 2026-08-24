@@ -21,6 +21,7 @@ class OnlineSpeechSession(
     private var restartScheduled = false
     private var committedText = ""
     private var currentPartialText = ""
+    private var lastEmittedCombinedText = ""
     private val restartRunnable = Runnable {
         restartScheduled = false
         if (active.get()) startPlatformListening()
@@ -75,7 +76,10 @@ class OnlineSpeechSession(
                 } else {
                     currentPartialText = text
                 }
-                onUpdate(RecognitionUpdate.Text(joinTexts(committedText, currentPartialText), FloatArray(0), isFinal = isFinal, segmentCompleted = isFinal))
+                val combined = joinTexts(committedText, currentPartialText)
+                if (!isFinal && combined == lastEmittedCombinedText) return
+                lastEmittedCombinedText = combined
+                onUpdate(RecognitionUpdate.Text(combined, FloatArray(0), isFinal = isFinal, segmentCompleted = isFinal))
             }
         })
     }
@@ -84,6 +88,7 @@ class OnlineSpeechSession(
         if (!active.compareAndSet(false, true)) return
         committedText = ""
         currentPartialText = ""
+        lastEmittedCombinedText = ""
         onUpdate(RecognitionUpdate.Started)
         startPlatformListening()
     }

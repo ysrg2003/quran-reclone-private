@@ -4,9 +4,13 @@ import java.text.Normalizer
 
 private val arabicMarks = Regex("[\\u0610-\\u061a\\u064b-\\u065f\\u06d6-\\u06ed]")
 private val smallAlif = 'ٰ'
+private val silentAlifMarker = '۟'
 
 fun normalizeArabicForMatch(value: String): String {
     return Normalizer.normalize(value, Normalizer.Form.NFC)
+        // Uthmani rasm marks a silent final alif with a small high rounded
+        // zero, e.g. كَفَرُوا۟. Remove the alif only for speech comparison.
+        .replace("ا$silentAlifMarker", "")
         // Uthmani rasm writes the pronounced alif in words such as
         // ٱلصَّلَوٰةَ and ٱلزَّكَوٰةَ as a superscript alif over waw.
         // Expand that sequence before stripping marks; this is comparison-only
@@ -22,6 +26,7 @@ fun normalizeArabicForMatch(value: String): String {
 
 private fun normalizeArabicWithSmallAlif(value: String): String {
     return Normalizer.normalize(value, Normalizer.Form.NFC)
+        .replace("ا$silentAlifMarker", "")
         .replace("و$smallAlif", "ا")
         .replace(arabicMarks, "")
         .replace(smallAlif, 'ا')
@@ -69,10 +74,16 @@ fun arabicSpellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean
     }
 }
 
-fun quranWordMatches(word: QuranWord, observed: String): Boolean =
-    arabicWordsEquivalent(word.text, observed) ||
-        arabicWordsEquivalent(word.matchText, observed) ||
-        Muqattaat.matches(word, observed)
+fun quranWordMatches(word: QuranWord, observed: String): Boolean {
+    val hasSilentFinalAlif = word.text.contains("ا$silentAlifMarker")
+    return if (hasSilentFinalAlif) {
+        // The ASCII-like matchText intentionally omits Quranic marks, but it
+        // must not reintroduce a silent alif as a pronounced speech form.
+        arabicWordsEquivalent(word.text, observed)
+    } else {
+        arabicWordsEquivalent(word.text, observed) || arabicWordsEquivalent(word.matchText, observed)
+    } || Muqattaat.matches(word, observed)
+}
 
 enum class WordStatus { MATCHED, MISSING, EXTRA_OR_UNEXPECTED, UNCERTAIN }
 
