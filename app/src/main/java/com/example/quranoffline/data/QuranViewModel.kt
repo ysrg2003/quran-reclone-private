@@ -44,6 +44,7 @@ data class QuranUiState(
     val readerPlaying: Boolean = false,
     val readerScope: ReaderScope = ReaderScope.AYAH,
     val readerCurrentKey: String? = null,
+    val selectedAyahIndices: List<Int> = emptyList(),
     val correctionAyahIndex: Int = -1,
     val correctionFirstWordInAyah: Int = -1,
     val selectedSurah: Int = 1,
@@ -283,6 +284,37 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playAyah(surah: Int, ayah: Int) = startReader(ReaderScope.AYAH, surah, ayah)
 
+    fun beginAyahSelection(surah: Int, ayah: Int) {
+        val index = state.value.allAyahs.indexOfFirst { it.surah == surah && it.ayah == ayah }
+        if (index < 0) return
+        state.value = state.value.copy(selectedAyahIndices = listOf(index), notice = "تم تحديد الآية $ayah. اضغط على آية أخرى لإكمال نطاق متصل.")
+    }
+
+    fun tapAyahSelection(surah: Int, ayah: Int) {
+        val index = state.value.allAyahs.indexOfFirst { it.surah == surah && it.ayah == ayah }
+        if (index < 0) return
+        val current = state.value.selectedAyahIndices
+        val next = if (current.isEmpty()) {
+            listOf(index)
+        } else {
+            AyahSelection(current.first(), current.last()).tap(index).indices.toList()
+        }
+        state.value = state.value.copy(selectedAyahIndices = next, notice = "تم تحديد ${next.size} آيات متصلة.")
+    }
+
+    fun clearAyahSelection() {
+        state.value = state.value.copy(selectedAyahIndices = emptyList(), notice = "أُلغي تحديد الآيات.")
+    }
+
+    fun playSelectedAyahs() {
+        val selected = state.value.selectedAyahIndices
+        if (selected.isEmpty()) {
+            state.value = state.value.copy(notice = "حدد آية واحدة على الأقل أولاً.")
+            return
+        }
+        startReaderIndices(selected, "الآيات المحددة")
+    }
+
     fun playOpeningBasmala(surah: Int) {
         if (QuranPresentation.openingBasmalaForSurah(surah) == null) {
             state.value = state.value.copy(notice = "الفاتحة آيتها الأولى هي البسملة، والتوبة لا تُفتتح ببسملة مستقلة.")
@@ -337,6 +369,38 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         readerGeneration++
         referenceAudioPlayer.stop()
         state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "أُوقف تشغيل القراءة.")
+    }
+
+    private fun startReaderIndices(selected: List<Int>, label: String) {
+        if (!state.value.assetsReady) {
+            state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً.")
+            return
+        }
+        val items = selected.distinct().sorted().mapNotNull { index ->
+            val target = state.value.allAyahs.getOrNull(index) ?: return@mapNotNull null
+            val timings = timingRepository.forAyah(target.surah, target.ayah)
+            val first = timings.firstOrNull() ?: return@mapNotNull null
+            val last = timings.lastOrNull() ?: first
+            val local = assetManager.cachedAudioFile(target.surah, target.ayah)
+            if (state.value.mode == AssetMode.DOWNLOAD && local == null) return@mapNotNull null
+            ReferenceAudioPlayer.QueueItem(
+                source = local?.absolutePath ?: assetManager.audioUrl(target.surah, target.ayah),
+                startMs = first.startMs,
+                endMs = last.endMs,
+                key = "${target.surah}:${target.ayah}",
+            )
+        }
+        if (items.isEmpty()) {
+            state.value = state.value.copy(notice = if (state.value.mode == AssetMode.DOWNLOAD) "نزّل صوت الآيات المحددة أولاً، أو اختر وضع البث المباشر." else "لا توجد مقاطع صوتية صالحة للآيات المحددة.")
+            return
+        }
+        val generation = ++readerGeneration
+        state.value = state.value.copy(readerPlaying = true, readerScope = ReaderScope.AYAH, readerCurrentKey = items.first().key, notice = "تُقرأ $label…")
+        referenceAudioPlayer.playQueue(
+            items = items,
+            onItemStarted = { key -> if (generation == readerGeneration) state.value = state.value.copy(readerCurrentKey = key) },
+            onFinished = { if (generation == readerGeneration) state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "اكتملت قراءة $label.") },
+        )
     }
 
     private fun startReader(scope: ReaderScope, surah: Int, ayah: Int) {
