@@ -137,13 +137,21 @@ data class QuranMetadata(
 
         fun parse(xml: String): QuranMetadata {
             require(xml.isNotBlank()) { "Quran metadata XML is empty" }
-            val builder = DocumentBuilderFactory.newInstance().apply {
+            require(!xml.contains(Regex("(?i)<!\\s*(DOCTYPE|ENTITY)"))) {
+                "Quran metadata XML must not contain DTD or entity declarations"
+            }
+            val factory = DocumentBuilderFactory.newInstance().apply {
                 isNamespaceAware = false
-                setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-                setFeature("http://xml.org/sax/features/external-general-entities", false)
-                setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-                setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-            }.newDocumentBuilder()
+                isExpandEntityReferences = false
+            }
+            // Android XML implementations differ in the optional SAX feature set. The
+            // input-level DTD/ENTITY rejection above remains mandatory; these features
+            // are defense-in-depth when the platform parser exposes them.
+            safeSetFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", true)
+            safeSetFeature(factory, "http://xml.org/sax/features/external-general-entities", false)
+            safeSetFeature(factory, "http://xml.org/sax/features/external-parameter-entities", false)
+            safeSetFeature(factory, "http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            val builder = factory.newDocumentBuilder()
             val root = builder.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8))).documentElement
             require(root.tagName == "quran" && root.getAttribute("type") == "metadata") { "Unsupported Quran metadata root" }
             val suraRows = childElements(root, "suras", "sura")
@@ -195,6 +203,15 @@ data class QuranMetadata(
             )
             validateStructure(metadata)
             return metadata
+        }
+
+        private fun safeSetFeature(factory: DocumentBuilderFactory, name: String, value: Boolean) {
+            try {
+                factory.setFeature(name, value)
+            } catch (_: Exception) {
+                // Some Android platform parsers do not recognize all Xerces feature URIs.
+                // The mandatory declaration scan above still prevents DTD/entity input.
+            }
         }
 
         private fun validateStructure(metadata: QuranMetadata) {

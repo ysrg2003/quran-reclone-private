@@ -18,6 +18,19 @@ class QuranMetadataTest {
         )
 
     @Test
+    fun rejectsDtdAndEntityDeclarationsBeforeParsing() {
+        val xml = javaClass.getResourceAsStream("/quran-meta-data.xml")!!.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        val malicious = xml.replaceFirst("<quran", "<!DOCTYPE quran [<!ENTITY external SYSTEM \"file:///tmp/secret\">]><quran")
+        var rejected = false
+        try {
+            QuranMetadata.parse(malicious)
+        } catch (error: IllegalArgumentException) {
+            rejected = error.message?.contains("DTD") == true
+        }
+        assertTrue(rejected)
+    }
+
+    @Test
     fun parsesArabicSurasAndIgnoresEnglishPresentationFields() {
         val metadata = load()
 
