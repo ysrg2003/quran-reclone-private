@@ -47,7 +47,7 @@
 | العنصر | القيمة |
 |---|---|
 | مستودع التطبيق | `ysrg2003/quran-memorization-online` |
-| آخر commit للتطبيق | `cd1ba3a` — Harden recitation flow and improve Quran reader |
+| آخر commit للتطبيق | `b5c3872` — Add mushaf marker presentation and reopenable reading sessions |
 | مستودع الأصول | `ysrg2003/quran-memorization-assets` |
 | commit نص القرآن | `7e3af3e` |
 | commit تخطيط الأسطر | `fa59065` |
