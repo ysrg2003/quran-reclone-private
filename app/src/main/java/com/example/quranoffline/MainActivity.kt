@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1432,7 +1433,11 @@ private fun MushafPageSurface(
     onPageChanged: (Int) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
-    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEF8))) {
+    Card(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 760.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEF8)),
+    ) {
         LazyRow(
             state = listState,
             reverseLayout = true,
