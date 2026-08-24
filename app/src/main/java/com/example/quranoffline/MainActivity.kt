@@ -226,6 +226,7 @@ private fun QuranOfflineApp(
                 onResume = onRequestMicrophone,
                 onSetStart = viewModel::setMemorizationStart,
                 onPlayAyah = viewModel::playAyah,
+                onPlayBasmala = viewModel::playOpeningBasmala,
                 onReadFromHere = viewModel::playFromHere,
                 onMemorizeFromHere = viewModel::startMemorizationFrom,
                 onCorrection = viewModel::playCorrectionForCurrentWord,
@@ -255,12 +256,14 @@ private fun QuranOfflineApp(
             3 -> HistoryScreen(
                 state = state,
                 onClear = viewModel::clearSessions,
+                onClearErrors = viewModel::clearCorrectedErrors,
                 onExport = onExportBackup,
                 modifier = Modifier.padding(padding),
             )
             4 -> ReaderScreen(
                 state = state,
                 onPlayAyah = viewModel::playAyah,
+                onPlayBasmala = viewModel::playOpeningBasmala,
                 onReadFromHere = viewModel::playFromHere,
                 onSetStart = viewModel::setMemorizationStart,
                 onMemorizeFromHere = viewModel::startMemorizationFrom,
@@ -421,6 +424,7 @@ private fun MemorizationScreen(
     onResume: () -> Unit,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onPlayAyah: (Int, Int) -> Unit,
+    onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
     onCorrection: () -> Unit,
@@ -549,6 +553,7 @@ private fun MemorizationScreen(
                         onSetStart = onSetStart,
                         onMemorizeFromHere = onMemorizeFromHere,
                         onPlayAyah = onPlayAyah,
+                        onPlayBasmala = onPlayBasmala,
                         onReadFromHere = onReadFromHere,
                     )
                 }
@@ -1025,6 +1030,7 @@ private fun AyahBlock(
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
     onPlayAyah: (Int, Int) -> Unit,
+    onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -1043,7 +1049,12 @@ private fun AyahBlock(
         }
         openingBasmala?.let { basmala ->
             Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Text("${basmala.text}  ·  بداية مستقلة لا تُحسب من كلمات الآية", modifier = Modifier.padding(10.dp), textAlign = TextAlign.Right, color = Color(0xFF76552A), style = MaterialTheme.typography.bodyMedium)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp)) {
+                    IconButton(onClick = { onPlayBasmala(ayah.surah) }) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل البسملة الافتتاحية", tint = Color(0xFF76552A))
+                    }
+                    Text("${basmala.text}  ·  جملة مستقلة لا تُحسب من كلمات الآية", modifier = Modifier.weight(1f).padding(vertical = 10.dp), textAlign = TextAlign.Right, color = Color(0xFF76552A), style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
         val wordFlow: @Composable () -> Unit = {
@@ -1191,6 +1202,9 @@ private fun RecitationCard(
                 val ayahNumber = currentAyah?.ayah
                 if (ayahNumber != null) {
                     Text("الآية المتوقعة: $ayahNumber • الكلمة التالية: ${state.currentWordInAyah + 1}", color = Color(0xFFD7E9DF))
+                    if (state.currentAyahLocked) {
+                        Text("الآية الحالية مقفلة: صحّح كل الكلمات الحمراء قبل الانتقال إلى الآية التالية.", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
             if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) {
@@ -1228,6 +1242,7 @@ private fun RecitationCard(
 private fun HistoryScreen(
     state: com.example.quranoffline.data.QuranUiState,
     onClear: () -> Unit,
+    onClearErrors: () -> Unit,
     onExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1244,6 +1259,32 @@ private fun HistoryScreen(
             }
         }
         Spacer(Modifier.height(12.dp))
+        if (state.correctedErrors.isNotEmpty()) {
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E8))) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.weight(1f)) {
+                            Text("الأخطاء التي صُححت", fontWeight = FontWeight.Bold, color = Color(0xFF6E4B25))
+                            Text("${state.correctedErrors.size} خطأ محفوظ محلياً", color = Color(0xFF8A6A45), style = MaterialTheme.typography.bodySmall)
+                        }
+                        OutlinedButton(onClick = onClearErrors) { Text("مسح") }
+                    }
+                    state.correctedErrors.take(5).forEach { error ->
+                        Text(
+                            "${error.surah}:${error.ayah} • الكلمة ${error.localWordIndex + 1} • المتوقع: ${error.expected} • سُمع: ${error.observed ?: "—"} • صُحح بـ: ${error.correctedWith ?: "—"}",
+                            color = Color(0xFF6E4B25),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    if (state.correctedErrors.size > 5) {
+                        Text("يظهر آخر 5 أخطاء هنا؛ يبقى السجل الكامل محفوظاً محلياً.", color = Color(0xFF8A6A45), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
         if (state.sessions.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("لا توجد جلسات محفوظة بعد.")
@@ -1270,6 +1311,7 @@ private fun HistoryScreen(
 private fun ReaderScreen(
     state: com.example.quranoffline.data.QuranUiState,
     onPlayAyah: (Int, Int) -> Unit,
+    onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
@@ -1335,6 +1377,7 @@ private fun ReaderScreen(
                     onSetStart = onSetStart,
                     onMemorizeFromHere = onMemorizeFromHere,
                     onPlayAyah = onPlayAyah,
+                    onPlayBasmala = onPlayBasmala,
                     onReadFromHere = onReadFromHere,
                 )
             }

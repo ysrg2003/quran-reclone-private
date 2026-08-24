@@ -44,10 +44,23 @@ fun normalizeArabicForComparison(value: String): String = normalizeArabicForMatc
  * every ordinary alif optional.
  */
 fun arabicWordsEquivalent(first: String, second: String): Boolean {
-    val observed = normalizeArabicForMatch(second)
-    val firstForms = setOf(normalizeArabicForMatch(first), normalizeArabicWithSmallAlif(first))
-    val secondForms = setOf(normalizeArabicForMatch(second), normalizeArabicWithSmallAlif(second))
-    return firstForms.intersect(secondForms).isNotEmpty() || observed in firstForms
+    val firstForms = spellingForms(first, allowSpeechTaMarbutaSubstitution = first.contains('ة'))
+    val secondForms = spellingForms(second, allowSpeechTaMarbutaSubstitution = false)
+    return firstForms.intersect(secondForms).isNotEmpty()
+}
+
+/**
+ * Android speech providers sometimes transcribe a final ta marbuta as ه.
+ * Keep the Quran/reference spelling untouched and allow that substitution only
+ * from a canonical word that actually contains ة; never apply it globally.
+ */
+private fun spellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean): Set<String> {
+    val baseForms = setOf(normalizeArabicForMatch(value), normalizeArabicWithSmallAlif(value))
+    return if (allowSpeechTaMarbutaSubstitution) {
+        baseForms + baseForms.map { it.replace('ة', 'ه') }
+    } else {
+        baseForms
+    }
 }
 
 fun quranWordMatches(word: QuranWord, observed: String): Boolean =

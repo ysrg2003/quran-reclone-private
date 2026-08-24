@@ -337,6 +337,78 @@ class RecitationProgressTrackerTest {
     }
 
     @Test
+    fun lastWrongWordLocksCurrentAyahUntilItIsCorrected() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b"), ayah(2, "c", "d")))
+
+        val wrong = tracker.update(final("a x"))
+
+        assertEquals(0, wrong.currentAyahIndex)
+        assertEquals(1, wrong.currentWordInAyah)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, wrong.evaluation.words[1].status)
+        assertEquals(WordStatus.UNCERTAIN, wrong.evaluation.words[2].status)
+
+        tracker.resumeFrom(0, 1)
+        val corrected = tracker.update(final("b"))
+
+        assertEquals(1, corrected.currentAyahIndex)
+        assertEquals(0, corrected.currentWordInAyah)
+        assertEquals(WordStatus.MATCHED, corrected.evaluation.words[1].status)
+        assertEquals(1, corrected.correctedErrors.size)
+        assertEquals("x", corrected.correctedErrors.single().observed)
+        assertEquals("b", corrected.correctedErrors.single().correctedWith)
+    }
+
+    @Test
+    fun futureAyahWordsAreNotEvaluatedWhenReaderJumpsBeforeCurrentAyahIsGreen() {
+        val tracker = RecitationProgressTracker(
+            listOf(ayah(1, "a", "b", "c"), ayah(2, "d", "e"), ayah(3, "f", "g")),
+        )
+
+        val result = tracker.update(final("f g"))
+
+        assertEquals(0, result.currentAyahIndex)
+        assertEquals(CorrectionKind.SKIPPED_WORD, result.correction?.kind)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[0].status)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[1].status)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[2].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[3].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[4].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[5].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[6].status)
+    }
+
+    @Test
+    fun ayahLockStillStopsFutureWordsWhenAutomaticCorrectionIsDisabled() {
+        val tracker = RecitationProgressTracker(
+            listOf(ayah(1, "a", "b", "c"), ayah(2, "d", "e"), ayah(3, "f", "g")),
+            correctionSettings = CorrectionSettings.DEFAULTS.copy(automaticCorrectionEnabled = false),
+        )
+
+        val result = tracker.update(final("f g"))
+
+        assertNull(result.correction)
+        assertEquals(WordStatus.MISSING, result.evaluation.words[0].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[3].status)
+        assertEquals(WordStatus.UNCERTAIN, result.evaluation.words[5].status)
+        assertEquals(0, result.currentAyahIndex)
+    }
+
+    @Test
+    fun correctingMissingWordsProducesHistoryEntriesAndUnlocksNextAyah() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b"), ayah(2, "c", "d")))
+        tracker.update(final("c d"))
+
+        tracker.resumeFrom(0, 0)
+        val corrected = tracker.update(final("a b"))
+
+        assertEquals(1, corrected.currentAyahIndex)
+        assertEquals(2, corrected.correctedErrors.size)
+        assertTrue(corrected.correctedErrors.all { it.kind == CorrectionKind.SKIPPED_WORD })
+        assertEquals(WordStatus.MATCHED, corrected.evaluation.words[0].status)
+        assertEquals(WordStatus.MATCHED, corrected.evaluation.words[1].status)
+    }
+
+    @Test
     fun correctionKeyIsDeduplicatedUntilWordIsResolved() {
         val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c")))
 

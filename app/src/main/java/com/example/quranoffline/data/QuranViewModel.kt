@@ -26,6 +26,7 @@ data class QuranUiState(
     val evaluation: RecitationEvaluation? = null,
     val notice: String = "جاري تحميل النص والتوقيتات من مستودع الأصول…",
     val sessions: List<SessionSummary> = emptyList(),
+    val correctedErrors: List<CorrectedRecitationError> = emptyList(),
     val goal: DailyGoal = DailyGoal(targetAyahs = 3, completedAyahs = 0, day = ""),
     val checkpoint: MemorizationCheckpoint? = null,
     val currentWordIndex: Int = -1,
@@ -33,6 +34,7 @@ data class QuranUiState(
     val currentSpokenWordIndex: Int = -1,
     val currentAyahIndex: Int = -1,
     val currentWordInAyah: Int = -1,
+    val currentAyahLocked: Boolean = false,
     val recitationCursor: Int = 0,
     val correctionPlaying: Boolean = false,
     val correctionPhase: CorrectionPhase = CorrectionPhase.LISTENING,
@@ -74,6 +76,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val metadataRepository = QuranMetadataRepository(application)
     private var repository = QuranRepository(application)
     private val store = LocalSessionStore(application)
+    private val correctedErrorStore = LocalRecitationErrorStore(application)
     private val goalStore = LocalGoalStore(application)
     private val memorizationProgressStore = LocalMemorizationProgressStore(application)
     private val correctionSettingsStore = LocalCorrectionSettingsStore(application)
@@ -86,11 +89,13 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private var activeCorrection: CorrectionRequest? = null
     private var correctionWasListening = false
     private var openingBasmalaConsumed = true
+    private var openingBasmalaNotice: String? = null
     private var readerGeneration = 0L
 
     private val state = mutableStateOf(
         QuranUiState(
             sessions = store.list(),
+            correctedErrors = correctedErrorStore.list(),
             goal = goalStore.current(),
             checkpoint = memorizationProgressStore.read(),
             correctionSettings = correctionSettingsStore.current(),
@@ -267,6 +272,46 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playAyah(surah: Int, ayah: Int) = startReader(ReaderScope.AYAH, surah, ayah)
 
+    fun playOpeningBasmala(surah: Int) {
+        if (QuranPresentation.openingBasmalaForSurah(surah) == null) {
+            state.value = state.value.copy(notice = "الفاتحة آيتها الأولى هي البسملة، والتوبة لا تُفتتح ببسملة مستقلة.")
+            return
+        }
+        if (!state.value.assetsReady) {
+            state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً.")
+            return
+        }
+        if (state.value.listening || state.value.correctionPlaying) stopListening()
+        val timings = timingRepository.forAyah(1, 1)
+        val first = timings.firstOrNull()
+        val last = timings.lastOrNull() ?: first
+        if (first == null || last == null) {
+            state.value = state.value.copy(notice = "لا يتوفر توقيت مرجعي مستقل للبِسملة حالياً.")
+            return
+        }
+        val local = assetManager.cachedAudioFile(1, 1)
+        if (state.value.mode == AssetMode.DOWNLOAD && local == null) {
+            state.value = state.value.copy(notice = "نزّل صوت الفاتحة أولاً لتشغيل البِسملة في وضع التنزيل، أو اختر وضع البث المباشر.")
+            return
+        }
+        val generation = ++readerGeneration
+        val key = "opening-basmala:$surah"
+        state.value = state.value.copy(readerPlaying = true, readerScope = ReaderScope.AYAH, readerCurrentKey = key, notice = "تُسمع البِسملة الافتتاحية؛ لا تُحسب آية ولا كلمة.")
+        referenceAudioPlayer.playQueue(
+            items = listOf(
+                ReferenceAudioPlayer.QueueItem(
+                    source = local?.absolutePath ?: assetManager.audioUrl(1, 1),
+                    startMs = first.startMs,
+                    endMs = last.endMs,
+                    key = key,
+                ),
+            ),
+            pauseBetweenMs = 0,
+            onItemStarted = { itemKey -> if (generation == readerGeneration) state.value = state.value.copy(readerCurrentKey = itemKey) },
+            onFinished = { if (generation == readerGeneration) state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "اكتملت البِسملة الافتتاحية؛ ابدأ الآن بالآية الأولى.") },
+        )
+    }
+
     fun playFromHere(surah: Int, ayah: Int) = startReader(ReaderScope.QURAN, surah, ayah)
 
     fun playReaderScope(scope: ReaderScope) {
@@ -342,7 +387,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (state.value.engine == RecitationEngine.OFFLINE && !state.value.modelReady) { state.value = state.value.copy(notice = "نزّل نموذج FastConformer أولاً لتفعيل التسميع Offline."); return }
-        if (state.value.listening || state.value.correctionPlaying) return
+        if (state.value.listening || state.value.correctionPlaying || state.value.readerPlaying) return
+        openingBasmalaNotice = null
         val metadata = state.value.metadata ?: return
         val pageStart = QuranPageLayout.firstAyahIndexOnPage(state.value.allAyahs, metadata, state.value.currentPage)
         val selectedSurahStart = state.value.allAyahs.indexOfFirst { ayah ->
@@ -376,6 +422,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentSpokenWordIndex = -1,
             currentAyahIndex = startAyahIndex,
             currentWordInAyah = startWordIndex,
+            currentAyahLocked = false,
             recitationCursor = tracker.globalWordIndex(startAyahIndex, startWordIndex) ?: 0,
             correctionPlaying = false,
             correctionPhase = CorrectionPhase.LISTENING,
@@ -432,6 +479,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentSpokenWordIndex = -1,
             currentAyahIndex = previousAyahIndex,
             currentWordInAyah = 0,
+            currentAyahLocked = false,
             recitationCursor = tracker.globalWordIndex(previousAyahIndex, 0) ?: 0,
             correctionPlaying = false,
             correctionPhase = CorrectionPhase.LISTENING,
@@ -447,17 +495,22 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         if (state.value.correctionPlaying && update !is RecognitionUpdate.Started) return
         when (update) {
             RecognitionUpdate.Started -> Unit
-            is RecognitionUpdate.Text -> {
+            is             RecognitionUpdate.Text -> {
+                openingBasmalaNotice = null
+
                 val previousState = state.value
                 val tracker = progressTracker ?: RecitationProgressTracker(previousState.allAyahs, correctionSettings = previousState.correctionSettings).also { progressTracker = it }
+                val filteredTranscript = openingBasmalaTranscript(update.value, update.isFinal, update.segmentCompleted)
                 val result = tracker.update(
                     RecitationProgressInput(
-                        transcript = openingBasmalaTranscript(update.value),
+                        transcript = filteredTranscript,
                         isFinal = update.isFinal,
                         segmentCompleted = update.segmentCompleted,
                     ),
                 )
                 val correction = result.correction
+                if (result.correctedErrors.isNotEmpty()) correctedErrorStore.appendAll(result.correctedErrors)
+                val correctedErrors = if (result.correctedErrors.isNotEmpty()) correctedErrorStore.list() else previousState.correctedErrors
                 val currentTarget = correction?.let { tracker.globalWordIndex(it.ayahIndex, it.localWordIndex) }
                     ?: result.currentGlobalWordIndex.takeIf { it < targetWords.size }
                 val resolvedAyah = previousState.allAyahs.getOrNull(result.currentAyahIndex)
@@ -469,16 +522,18 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     pageWordOffset = globalWordOffset(previousState.allAyahs, resolvedVisibleAyahs.firstOrNull()),
                     transcript = update.value,
                     evaluation = result.evaluation,
+                    correctedErrors = correctedErrors,
                     currentWordIndex = currentTarget ?: -1,
                     currentSpokenWord = result.spokenWord,
                     currentSpokenWordIndex = result.spokenGlobalWordIndex,
                     currentAyahIndex = result.currentAyahIndex,
                     currentWordInAyah = result.currentWordInAyah,
+                    currentAyahLocked = result.currentAyahLocked,
                     recitationCursor = result.currentGlobalWordIndex.coerceIn(0, targetWords.size),
                     correctionMessage = correction?.let(::correctionMessage) ?: previousState.correctionMessage,
                     correctionAyahIndex = correction?.ayahIndex ?: previousState.correctionAyahIndex,
                     correctionFirstWordInAyah = correction?.localWordIndex ?: previousState.correctionFirstWordInAyah,
-                    notice = if (previousState.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.",
+                    notice = openingBasmalaNotice ?: if (previousState.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.",
                 )
                 if (update.isFinal || update.segmentCompleted) persistCheckpoint(result.currentAyahIndex, result.currentWordInAyah)
                 if (correction != null && (update.isFinal || update.segmentCompleted) && activeCorrection == null) {
@@ -501,23 +556,24 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun openingBasmalaTranscript(transcript: String): String {
+    private fun openingBasmalaTranscript(transcript: String, isFinal: Boolean, segmentCompleted: Boolean): String {
         if (openingBasmalaConsumed) return transcript
         val current = state.value.allAyahs.getOrNull(state.value.currentAyahIndex)
         if (current == null || current.ayah != 1 || current.surah == 1 || current.surah == 9) {
             openingBasmalaConsumed = true
             return transcript
         }
-        val tokens = normalizeArabicForComparison(transcript).split(' ').filter(String::isNotBlank)
-        val prefix = listOf("بسم", "الله", "الرحمن", "الرحيم")
-        val isPrefix = tokens.isNotEmpty() && tokens.size < prefix.size && tokens.indices.all { tokens[it] == prefix[it] }
-        if (isPrefix) return ""
-        if (tokens.size >= prefix.size && tokens.take(prefix.size) == prefix) {
-            openingBasmalaConsumed = true
-            return tokens.drop(prefix.size).joinToString(" ")
+        val result = OpeningBasmalaSpeechFilter.filter(
+            transcript = transcript,
+            isFinal = isFinal,
+            segmentCompleted = segmentCompleted,
+            alreadyConsumed = false,
+        )
+        openingBasmalaConsumed = result.consumed
+        if (result.needsCorrection) {
+            openingBasmalaNotice = "لم تطابق البسملة الافتتاحية تماماً؛ لن تُحسب ضمن الآية، ويمكن إعادة تلاوتها قبل بدء الآية."
         }
-        openingBasmalaConsumed = true
-        return transcript
+        return result.ayahTranscript
     }
 
     private fun pauseRecognitionForCorrection(request: CorrectionRequest) {
@@ -749,6 +805,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 store.list(),
                 goalStore.current(),
                 state.value.correctionSettings,
+                checkpoint = state.value.checkpoint,
+                correctedErrors = state.value.correctedErrors,
             )
             state.value = state.value.copy(notice = "تم تصدير النسخة الاحتياطية وإعدادات التصحيح إلى الملف الذي اخترته.")
         }
@@ -756,6 +814,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearSessions() { store.clear(); state.value = state.value.copy(sessions = emptyList(), notice = "حُذف سجل الجلسات المحلي.") }
+
+    fun clearCorrectedErrors() {
+        correctedErrorStore.clear()
+        state.value = state.value.copy(correctedErrors = emptyList(), notice = "حُذف سجل الأخطاء المصححة المحلي.")
+    }
 
     override fun onCleared() { recognitionGeneration++; onlineSession?.stop(); localSession?.stop(); progressTracker = null; referenceAudioPlayer.stop(); super.onCleared() }
 

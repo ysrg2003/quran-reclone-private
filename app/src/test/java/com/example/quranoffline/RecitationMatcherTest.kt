@@ -131,4 +131,22 @@ class RecitationMatcherTest {
         assertEquals(WordStatus.MATCHED, result.words.single().status)
         assertEquals(0, result.unexpected)
     }
+
+    @Test
+    fun speechHaCanRepresentCanonicalTaMarbutaWithoutChangingDisplayedText() {
+        val expectedWord = listOf(QuranWord(0, "الصلاة", "الصلاة"))
+        val result = RecitationMatcher.evaluate(expectedWord, "الصلاه", hasFinalResult = true)
+        assertEquals(1, result.matched)
+        assertEquals("الصلاة", result.words.single().expected)
+        assertEquals(WordStatus.MATCHED, result.words.single().status)
+    }
+
+    @Test
+    fun ordinaryHaIsNotAcceptedAsTaMarbuta() {
+        val expectedWord = listOf(QuranWord(0, "الصلاة", "الصلاة"))
+        val result = RecitationMatcher.evaluate(expectedWord, "الصلاح", hasFinalResult = true)
+        assertEquals(0, result.matched)
+        assertEquals(1, result.unexpected)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.words.single().status)
+    }
 }

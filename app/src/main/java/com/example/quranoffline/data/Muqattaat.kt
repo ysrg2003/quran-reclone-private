@@ -180,7 +180,6 @@ object Muqattaat {
         .replace("إ", "ا")
         .replace("آ", "ا")
         .replace("ى", "ي")
-        .replace("ة", "ه")
         .replace("ـ", "")
         .replace("َ", "")
         .replace("ً", "")

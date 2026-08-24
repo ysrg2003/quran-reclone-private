@@ -12,9 +12,11 @@ object LocalBackup {
         sessions: List<SessionSummary>,
         goal: DailyGoal,
         correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
+        checkpoint: MemorizationCheckpoint? = null,
+        correctedErrors: List<CorrectedRecitationError> = emptyList(),
     ) {
         val payload = JSONObject().apply {
-            put("format", "quran-online-backup-v2")
+            put("format", "quran-online-backup-v3")
             put("createdAt", System.currentTimeMillis())
             put("goal", JSONObject().apply {
                 put("targetAyahs", goal.targetAyahs)
@@ -36,6 +38,31 @@ object LocalBackup {
                 put("clipPaddingBeforeMs", settings.clipPaddingBeforeMs)
                 put("clipPaddingAfterMs", settings.clipPaddingAfterMs)
                 put("resumePosition", settings.resumePosition.name)
+            })
+            checkpoint?.let { saved ->
+                put("checkpoint", JSONObject().apply {
+                    put("surah", saved.surah)
+                    put("ayah", saved.ayah)
+                    put("wordIndex", saved.wordIndex)
+                    put("includeOpeningBasmala", saved.includeOpeningBasmala)
+                    put("updatedAt", saved.updatedAt)
+                    put("schemaVersion", saved.schemaVersion)
+                })
+            }
+            put("correctedErrors", JSONArray().apply {
+                correctedErrors.forEach { error ->
+                    put(JSONObject().apply {
+                        put("id", error.id)
+                        put("surah", error.surah)
+                        put("ayah", error.ayah)
+                        put("localWordIndex", error.localWordIndex)
+                        put("expected", error.expected)
+                        put("observed", error.observed)
+                        put("correctedWith", error.correctedWith)
+                        put("kind", error.kind.name)
+                        put("correctedAt", error.correctedAt)
+                    })
+                }
             })
             put("sessions", JSONArray().apply {
                 sessions.forEach { session ->
