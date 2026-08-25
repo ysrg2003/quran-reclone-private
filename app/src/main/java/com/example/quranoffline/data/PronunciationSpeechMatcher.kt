@@ -33,7 +33,7 @@ object PronunciationSpeechMatcher {
             output.append(target)
             observedIndex++
             expectedIndex++
-            if (target in "اوي" && expectedIndex - 1 in maddPositions) {
+            if (target in "اويى" && expectedIndex - 1 in maddPositions) {
                 while (observedIndex < observed.length && observed[observedIndex] == target) observedIndex++
             }
         }
@@ -78,7 +78,7 @@ object PronunciationSpeechMatcher {
             output.append(target)
             observedIndex++
             expectedIndex++
-            if (target in "اوي") {
+            if (target in "اويى") {
                 while (observedIndex < observed.length && observed[observedIndex] == target) observedIndex++
             }
         }

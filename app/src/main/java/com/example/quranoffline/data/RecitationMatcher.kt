@@ -34,6 +34,7 @@ fun normalizeArabicForMatch(value: String): String {
 private fun normalizeArabicWithSmallAlif(value: String): String {
     return removeSilentMarkedLetters(value)
         .replace("و$smallAlif", "ا")
+        .replace("ى$smallAlif", "ى")
         .replace(arabicMarks, "")
         .replace(smallAlif, 'ا')
         .replace('ٱ', 'ا')
@@ -56,9 +57,9 @@ fun normalizeArabicForComparison(value: String): String = normalizeArabicForMatc
     .replace("ء", "")
 
 /**
- * Treats a small alif as optional only when the canonical word actually has it.
- * This accepts both "ملك"/"مالك" and "العلمين"/"العالمين" without making
- * every ordinary alif optional.
+ * Treats a written dagger alif as a required pronounced carrier. The
+ * comparison can therefore accept the spoken alif in "مالك" and "العالمين",
+ * but never makes every ordinary alif optional.
  */
 fun arabicWordsEquivalent(first: String, second: String): Boolean {
     val firstForms = arabicSpellingForms(first, allowSpeechTaMarbutaSubstitution = first.contains('ة'))
@@ -72,7 +73,12 @@ fun arabicWordsEquivalent(first: String, second: String): Boolean {
  * from a canonical word that actually contains ة; never apply it globally.
  */
 fun arabicSpellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean): Set<String> {
-    val baseForms = setOf(normalizeArabicForMatch(value), normalizeArabicWithSmallAlif(value))
+    val base = normalizeArabicForMatch(value)
+    val pronounced = normalizeArabicWithSmallAlif(value)
+    // A written dagger alif is a pronounced carrier. When expanding it changes
+    // the comparison spelling, keep only the expanded form; do not let a
+    // legacy matchText that dropped it make the word green.
+    val baseForms = if (pronounced != base) setOf(pronounced) else setOf(base, pronounced)
     return if (allowSpeechTaMarbutaSubstitution) {
         baseForms + baseForms.map { it.replace('ة', 'ه') }
     } else {
@@ -84,16 +90,24 @@ fun quranWordMatches(word: QuranWord, observed: String): Boolean {
     val markerIndex = word.text.indexOf(silentAlifMarker)
     val hasSilentMarker = markerIndex >= 0
     val canonicalMatch = arabicWordsEquivalent(word.text, observed)
-    // SpeechRecognizer often writes a silent carrier back into Arabic text
-    // (كفروا / اشتروا / لقوا), even when the reader did not pronounce it.
-    // Accept that provider spelling as a recognition-only fallback; displayed
-    // Quran/Word text and the canonical matcher remain unchanged.
-    val providerSpelling = hasSilentMarker &&
-        arabicWordsEquivalent(word.matchText, observed)
+    // SpeechRecognizer may write the carrier that is marked silent back into
+    // Arabic text. The provider spelling is never accepted for a final alif
+    // carrying the round-zero marker: كفروا/لقوا/اشتروا must be spoken as
+    // كفرو/لقو/اشترو. A written-and-pronounced alif remains required.
+    val canonicalSpoken = normalizeArabicWithSmallAlif(word.text)
+    val alternateSpelling = arabicWordsEquivalent(word.matchText, observed)
+    val hasSilentFinalAlif = word.text.endsWith("ا$silentAlifMarker")
+    // A provider spelling may preserve a silent non-alif carrier such as the
+    // marked waw in Ulaika, but it may not re-introduce a final alif carrying
+    // the round-zero marker. A carrier that is written and pronounced remains
+    // required in the comparison layer.
+    val providerSpelling = hasSilentMarker && !hasSilentFinalAlif && alternateSpelling
+    val alternateKeepsPronouncedAlif = normalizeArabicWithSmallAlif(word.matchText) == canonicalSpoken
+    val alternateAllowed = alternateSpelling && (canonicalSpoken == normalizeArabicForMatch(word.text) || alternateKeepsPronouncedAlif)
     return if (hasSilentMarker) {
         canonicalMatch || providerSpelling
     } else {
-        canonicalMatch || arabicWordsEquivalent(word.matchText, observed)
+        canonicalMatch || alternateAllowed
     } || Muqattaat.matches(word, observed)
 }
 

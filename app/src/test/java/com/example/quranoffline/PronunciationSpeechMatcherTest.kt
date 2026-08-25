@@ -53,4 +53,23 @@ class PronunciationSpeechMatcherTest {
         assertEquals("قال", PronunciationSpeechMatcher.collapseValidMaddRepeats("قااال", "قال", setOf(1)))
         assertEquals("كتتتب", PronunciationSpeechMatcher.collapseValidMaddRepeats("كتتتب", "كتب", setOf(1)))
     }
+
+    @Test
+    fun pronouncedDaggerAlifIsRequiredInPronunciationReference() {
+        val word = QuranWord(0, "ٱلْعَٰلَمِينَ", "العلمين")
+        val reference = PronunciationWord(0, "العالمين", listOf("العالمين"), setOf(3, 6), null, null, null, null)
+        assertTrue(PronunciationSpeechMatcher.matches(word, reference, "العالمين"))
+        assertFalse(PronunciationSpeechMatcher.matches(word, reference, "العلمين"))
+    }
+
+    @Test
+    fun ordinaryWordDoesNotCollapseRepeatedNonMaddAlifInWholeAyah() {
+        val reference = PronunciationAyah(
+            1,
+            1,
+            "اكل",
+            listOf(PronunciationWord(0, "اكل", listOf("اكل"), emptySet(), null, null, null, null)),
+        )
+        assertFalse(PronunciationSpeechMatcher.matchesAyahPhrase(reference, listOf("اااكل")))
+    }
 }

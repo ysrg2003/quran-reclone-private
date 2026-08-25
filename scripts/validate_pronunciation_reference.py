@@ -49,7 +49,7 @@ def main() -> int:
                 errors.append(f"invalid word spoken text at {key[0]}:{key[1]}:{index}")
             if not isinstance(word["spokenTokens"], list) or not word["spokenTokens"]:
                 errors.append(f"missing spokenTokens at {key[0]}:{key[1]}:{index}")
-            if any(position < 0 or position >= len(word["spoken"]) or word["spoken"][position] not in "اوي" for position in word["maddPositions"]):
+            if any(position < 0 or position >= len(word["spoken"]) or word["spoken"][position] not in "اويى" for position in word["maddPositions"]):
                 errors.append(f"invalid madd position at {key[0]}:{key[1]}:{index}")
     if total_words != 77430:
         errors.append(f"word count mismatch: {total_words}")

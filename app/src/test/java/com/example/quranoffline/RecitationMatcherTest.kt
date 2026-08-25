@@ -13,7 +13,7 @@ class RecitationMatcherTest {
     private val expected = listOf(
         QuranWord(0, "بِسْمِ", "بسم"),
         QuranWord(1, "اللَّهِ", "الله"),
-        QuranWord(2, "الرَّحْمَٰنِ", "الرحمن"),
+        QuranWord(2, "الرَّحْمَٰنِ", "الرحمان"),
     )
 
     @Test
@@ -34,7 +34,7 @@ class RecitationMatcherTest {
 
     @Test
     fun skippedExpectedWordDoesNotShiftLaterWord() {
-        val result = RecitationMatcher.evaluate(expected, "بسم الرحمن", hasFinalResult = true)
+        val result = RecitationMatcher.evaluate(expected, "بسم الرحمان", hasFinalResult = true)
         assertEquals(2, result.matched)
         assertEquals(1, result.missing)
         assertEquals(0, result.unexpected)
@@ -44,7 +44,7 @@ class RecitationMatcherTest {
 
     @Test
     fun extraObservedWordDoesNotShiftLaterWords() {
-        val result = RecitationMatcher.evaluate(expected, "بسم الله خطأ الرحمن", hasFinalResult = true)
+        val result = RecitationMatcher.evaluate(expected, "بسم الله الرحمان الرحيم", hasFinalResult = true)
         assertEquals(3, result.matched)
         assertEquals(1, result.unexpected)
         assertEquals(WordStatus.MATCHED, result.words[2].status)
@@ -52,7 +52,7 @@ class RecitationMatcherTest {
 
     @Test
     fun partialSkippedWordIsMissingWhenLaterWordWasHeard() {
-        val result = RecitationMatcher.evaluate(expected, "بسم الرحمن", hasFinalResult = false)
+        val result = RecitationMatcher.evaluate(expected, "بسم الرحمان", hasFinalResult = false)
         assertEquals(2, result.matched)
         assertEquals(1, result.missing)
         assertEquals(0, result.uncertain)
@@ -72,12 +72,12 @@ class RecitationMatcherTest {
         val repeated = listOf(
             QuranWord(0, "بِسْمِ", "بسم"),
             QuranWord(1, "اللَّهِ", "الله"),
-            QuranWord(2, "الرَّحْمَٰنِ", "الرحمن"),
+            QuranWord(2, "الرَّحْمَٰنِ", "الرحمان"),
             QuranWord(3, "الرَّحِيمِ", "الرحيم"),
-            QuranWord(4, "الرَّحْمَٰنِ", "الرحمن"),
+            QuranWord(4, "الرَّحْمَٰنِ", "الرحمان"),
             QuranWord(5, "الرَّحِيمِ", "الرحيم"),
         )
-        val result = RecitationMatcher.evaluate(repeated, "الرحمن الرحيم", hasFinalResult = true)
+        val result = RecitationMatcher.evaluate(repeated, "الرحمان الرحيم", hasFinalResult = true)
         assertEquals(2, result.matched)
         assertEquals(WordStatus.MATCHED, result.words[2].status)
         assertEquals(WordStatus.MATCHED, result.words[3].status)
@@ -93,7 +93,7 @@ class RecitationMatcherTest {
             QuranWord(3, "الرَّحْمَٰنِ", "الرحمن"),
             QuranWord(4, "الرَّحِيمِ", "الرحيم"),
         )
-        val result = RecitationMatcher.evaluate(repeated, "الرحمن الرحيم", hasFinalResult = true, preferredExpectedIndex = 3)
+        val result = RecitationMatcher.evaluate(repeated, "الرحمان الرحيم", hasFinalResult = true, preferredExpectedIndex = 3)
         assertEquals(2, result.matched)
         assertEquals(WordStatus.MATCHED, result.words[3].status)
         assertEquals(WordStatus.MATCHED, result.words[4].status)
@@ -102,7 +102,7 @@ class RecitationMatcherTest {
     @Test
     fun previousJudgementsArePreservedWhenNewSegmentArrives() {
         val previous = RecitationMatcher.evaluate(expected, "بسم الله", hasFinalResult = true)
-        val current = RecitationMatcher.evaluate(expected, "الرحمن", hasFinalResult = false, preferredExpectedIndex = 2)
+        val current = RecitationMatcher.evaluate(expected, "الرحمان", hasFinalResult = false, preferredExpectedIndex = 2)
         val merged = RecitationMatcher.mergePrevious(previous, current, preserveBeforeIndex = 2)
         assertEquals(WordStatus.MATCHED, merged.words[0].status)
         assertEquals(WordStatus.MATCHED, merged.words[1].status)
@@ -111,7 +111,7 @@ class RecitationMatcherTest {
 
     @Test
     fun diacriticsDoNotBreakBasicMatching() {
-        val result = RecitationMatcher.evaluate(expected, "بِسْمِ اللَّهِ الرَّحْمَٰنِ", hasFinalResult = true)
+        val result = RecitationMatcher.evaluate(expected, "بِسْمِ اللَّهِ الرَّحْمَانِ", hasFinalResult = true)
         assertEquals(3, result.matched)
         assertEquals(0, result.unexpected)
     }
@@ -126,12 +126,30 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun alifSpellingVariantOfAlAlaminIsMatched() {
+    fun drawnAlifSpellingOfAlAlaminIsRequiredAndMatched() {
         val expectedWord = listOf(QuranWord(0, "ٱلْعَٰلَمِينَ", "العلمين"))
         val result = RecitationMatcher.evaluate(expectedWord, "العالمين", hasFinalResult = true)
         assertEquals(1, result.matched)
         assertEquals(WordStatus.MATCHED, result.words.single().status)
         assertEquals(0, result.unexpected)
+    }
+
+    @Test
+    fun droppingDrawnAlifFromAlAlaminIsRejected() {
+        val expectedWord = listOf(QuranWord(0, "ٱلْعَٰلَمِينَ", "العلمين"))
+        val result = RecitationMatcher.evaluate(expectedWord, "العلمين", hasFinalResult = true)
+        assertEquals(0, result.matched)
+        assertEquals(1, result.unexpected)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.words.single().status)
+    }
+
+    @Test
+    fun droppingPronouncedAlifFromAlRahmanIsRejected() {
+        val expectedWord = listOf(QuranWord(0, "ٱلرَّحْمَٰنِ", "الرحمن"))
+        val result = RecitationMatcher.evaluate(expectedWord, "الرحمن", hasFinalResult = true)
+        assertEquals(0, result.matched)
+        assertEquals(1, result.unexpected)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.words.single().status)
     }
 
     @Test
@@ -156,20 +174,20 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun silentFinalCarrierWordsAcceptSpeechRecognizerWrittenAlif() {
+    fun silentFinalCarrierWordsRejectSpeechRecognizerWrittenAlif() {
         val expectedWords = listOf(
             QuranWord(0, "كَفَرُوا۟", "كفروا"),
             QuranWord(1, "ٱشْتَرَوُا۟", "اشتروا"),
             QuranWord(2, "لَقُوا۟", "لقوا"),
         )
         val result = RecitationMatcher.evaluate(expectedWords, "كفروا اشتروا لقوا", hasFinalResult = true)
-        assertEquals(3, result.matched)
-        assertEquals(0, result.unexpected)
-        assertTrue(result.words.all { it.status == WordStatus.MATCHED })
+        assertEquals(0, result.matched)
+        assertEquals(3, result.unexpected)
+        assertTrue(result.words.all { it.status == WordStatus.EXTRA_OR_UNEXPECTED })
     }
 
     @Test
-    fun silentFinalCarrierWordsAlsoAcceptPronunciationWithoutWrittenCarrier() {
+    fun silentFinalCarrierWordsAcceptPronunciationWithoutWrittenCarrier() {
         val expectedWords = listOf(
             QuranWord(0, "كَفَرُوا۟", "كفروا"),
             QuranWord(1, "ٱشْتَرَوُا۟", "اشتروا"),
@@ -206,7 +224,7 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun silentFinalAlifWithSmallCircleIsNotRequiredInSpeech() {
+    fun silentFinalAlifWithSmallCircleIsNotPronounced() {
         val expectedWord = listOf(QuranWord(0, "كَفَرُوا۟", "كفروا"))
         val result = RecitationMatcher.evaluate(expectedWord, "كفرو", hasFinalResult = true)
         assertEquals(1, result.matched)
@@ -215,12 +233,12 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun speechRecognizerWrittenFinalAlifIsAcceptedForSilentFinalCarrier() {
+    fun speechRecognizerWrittenFinalAlifIsRejectedForSilentFinalCarrier() {
         val expectedWord = listOf(QuranWord(0, "كَفَرُوا۟", "كفروا"))
         val result = RecitationMatcher.evaluate(expectedWord, "كفروا", hasFinalResult = true)
-        assertEquals(1, result.matched)
-        assertEquals(0, result.unexpected)
-        assertEquals(WordStatus.MATCHED, result.words.single().status)
+        assertEquals(0, result.matched)
+        assertEquals(1, result.unexpected)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.words.single().status)
     }
 
     @Test
@@ -233,13 +251,13 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun speechRecognizerWrittenFinalAlifIsAcceptedForLaqu() {
+    fun speechRecognizerWrittenFinalAlifIsRejectedForLaqu() {
         val expectedWord = listOf(QuranWord(0, "لَقُوا۟", "لقوا"))
         val silent = RecitationMatcher.evaluate(expectedWord, "لقو", hasFinalResult = true)
         val providerWritten = RecitationMatcher.evaluate(expectedWord, "لقوا", hasFinalResult = true)
         assertEquals(1, silent.matched)
-        assertEquals(1, providerWritten.matched)
-        assertEquals(WordStatus.MATCHED, providerWritten.words.single().status)
+        assertEquals(0, providerWritten.matched)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, providerWritten.words.single().status)
     }
 
     @Test

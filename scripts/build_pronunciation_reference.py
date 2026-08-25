@@ -77,7 +77,9 @@ def normalize_spoken_with_madd(value: str) -> tuple[str, list[int]]:
             last_haraka = ""
             continue
         if char == "ى" and index + 1 < len(chars) and chars[index + 1] == SMALL_ALIF:
-            output.append("ا")
+            # Alif maqsurah with dagger alif is one pronounced long-vowel
+            # carrier and remains ى in ordinary Arabic speech spelling.
+            output.append("ى")
             madd_positions.append(len(output) - 1)
             index += 2
             last_haraka = ""
