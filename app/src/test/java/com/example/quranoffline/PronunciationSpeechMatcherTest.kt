@@ -55,6 +55,14 @@ class PronunciationSpeechMatcherTest {
     }
 
     @Test
+    fun rawRecognizerTextUsesSpokenReferenceNotVisualRasm() {
+        val word = WordReferenceFixtures.fatihaBasmala[2]
+        val reference = PronunciationWord(2, "الرحمان", listOf("الرحمان"), setOf(5), null, null, null, null)
+        assertTrue(PronunciationSpeechMatcher.matches(word, reference, "الرحمان"))
+        assertFalse(PronunciationSpeechMatcher.matches(word, reference, "الرحمن"))
+    }
+
+    @Test
     fun pronouncedDaggerAlifIsRequiredInPronunciationReference() {
         val word = WordReferenceFixtures.alamin
         val reference = PronunciationWord(0, "العالمين", listOf("العالمين"), setOf(3, 6), null, null, null, null)

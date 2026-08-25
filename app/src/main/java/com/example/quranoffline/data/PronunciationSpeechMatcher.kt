@@ -3,12 +3,14 @@ package com.example.quranoffline.data
 /** Speech-only matching against the pronunciation reference asset. */
 object PronunciationSpeechMatcher {
     /**
-     * Matches one recognized token against the reference pronunciation. The
-     * canonical Quran matcher remains the first fallback; the audio-derived
-     * spelling is an additional comparison layer only.
+     * Matches the raw recognizer token against the speech-only reference.
+     *
+     * The visible Quran spelling is deliberately not a fallback here. For
+     * example, Word renders الرَّحۡمَٰنِ while the expected spoken form is
+     * الرحمان; accepting the visual spelling would turn a recognizer result
+     * of الرحمن into a false positive or compare the wrong string.
      */
     fun matches(word: QuranWord, pronunciation: PronunciationWord?, observed: String): Boolean {
-        if (quranWordMatches(word, observed)) return true
         val reference = pronunciation ?: return false
         val expected = normalizeArabicForComparison(reference.spoken)
         val actual = normalizeArabicForComparison(observed)

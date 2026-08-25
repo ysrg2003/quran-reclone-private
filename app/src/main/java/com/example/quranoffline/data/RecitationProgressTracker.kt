@@ -53,7 +53,8 @@ data class RecitationProgressResult(
  */
 class RecitationProgressTracker(
     private val ayahs: List<QuranAyah>,
-    private val pronunciationReference: PronunciationReference = PronunciationReference.fromJson(""),
+    /** Null is reserved for synthetic unit tests; production passes the loaded reference explicitly. */
+    private val pronunciationReference: PronunciationReference? = null,
     private val rollbackWindow: Int = 3,
     private val jumpConfirmationWords: Int = 2,
     correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
@@ -223,7 +224,7 @@ class RecitationProgressTracker(
             cachedEvaluation = buildEvaluation()
         }
 
-        val spokenWord = tokens.lastOrNull()
+        val spokenWord = rawLastToken(input.transcript)
         val currentGlobal = currentGlobalWordIndex()
         val resolvedErrors = correctedErrors.toList()
         correctedErrors.clear()
@@ -610,7 +611,7 @@ class RecitationProgressTracker(
     private fun matchCompleteAyahFromReference(tokens: List<String>): Boolean {
         if (tokens.isEmpty() || nextWordInAyah != 0 || awaitingResume || committedTokens.isNotEmpty()) return false
         val ayah = ayahs.getOrNull(currentAyahIndex) ?: return false
-        val reference = pronunciationReference.ayah(ayah.surah, ayah.ayah) ?: return false
+        val reference = pronunciationReference?.ayah(ayah.surah, ayah.ayah) ?: return false
         if (!PronunciationSpeechMatcher.matchesAyahPhrase(reference, tokens)) return false
         val observedUnits = tokens.flatMap { it.split(' ').filter(String::isNotBlank) }
         var observedIndex = 0
@@ -629,16 +630,29 @@ class RecitationProgressTracker(
     private fun matchesWord(ayahIndex: Int, localWordIndex: Int, observed: String): Boolean {
         val ayah = ayahs.getOrNull(ayahIndex) ?: return false
         val word = ayah.words.getOrNull(localWordIndex) ?: return false
-        return PronunciationSpeechMatcher.matches(
-            word = word,
-            pronunciation = pronunciationReference.word(ayah.surah, ayah.ayah, localWordIndex),
-            observed = observed,
-        )
+        val referenceWord = pronunciationReference?.word(ayah.surah, ayah.ayah, localWordIndex)
+        return if (pronunciationReference == null) {
+            // This branch is only for synthetic tracker tests that omit the
+            // speech asset. The app always injects the complete local asset.
+            quranWordMatches(word, observed)
+        } else {
+            // A loaded-but-incomplete asset fails closed; visual Quran text is
+            // never an observed speech fallback.
+            PronunciationSpeechMatcher.matches(word = word, pronunciation = referenceWord, observed = observed)
+        }
     }
 
+    /**
+     * Preserve the recognizer token as observed data. Arabic normalization is
+     * performed only inside the speech matcher; it must not turn the observed
+     * result into Quran display spelling before judgement.
+     */
     private fun tokenize(text: String): List<String> = Muqattaat.coalesceSpeechTokens(
-        normalizeArabicForComparison(text).split(' ').filter(String::isNotBlank)
+        text.trim().split(Regex("\\s+")).filter(String::isNotBlank)
     )
+
+    private fun rawLastToken(text: String): String? =
+        text.trim().split(Regex("\\s+")).lastOrNull { it.isNotBlank() }
 
     private fun longestCommonPrefix(first: List<String>, second: List<String>): Int {
         val limit = minOf(first.size, second.size)

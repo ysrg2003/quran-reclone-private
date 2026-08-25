@@ -12,6 +12,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -19,7 +22,87 @@ import androidx.compose.ui.unit.sp
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranUiState
 import com.example.quranoffline.data.WordReferenceLine
+import com.example.quranoffline.data.WordStatus
 import com.example.quranoffline.data.selectionKey
+
+private data class LineWordRange(
+    val start: Int,
+    val end: Int,
+    val globalWordIndex: Int,
+)
+
+private fun lineWordRanges(
+    line: WordReferenceLine,
+    state: QuranUiState,
+    pageAyahs: List<QuranAyah>,
+): List<LineWordRange> {
+    val compactText = buildString { line.text.forEach { if (!it.isWhitespace()) append(it) } }
+    val originalPositions = buildList {
+        line.text.forEachIndexed { index, character -> if (!character.isWhitespace()) add(index) }
+    }
+    if (compactText.isBlank() || originalPositions.isEmpty()) return emptyList()
+
+    val ranges = mutableListOf<LineWordRange>()
+    var compactCursor = 0
+    line.ayahKeys.forEach { key ->
+        val ayah = state.allAyahs.firstOrNull { it.selectionKey() == key }
+            ?: pageAyahs.firstOrNull { it.selectionKey() == key }
+            ?: return@forEach
+        val ayahIndex = state.allAyahs.indexOfFirst { it.selectionKey() == key }
+        val globalOffset = if (ayahIndex >= 0) {
+            state.allAyahs.take(ayahIndex).sumOf { it.words.size }
+        } else {
+            -1
+        }
+        ayah.words.forEachIndexed { localIndex, word ->
+            val compactWord = buildString { word.text.forEach { if (!it.isWhitespace()) append(it) } }
+            if (compactWord.isBlank()) return@forEachIndexed
+            val compactStart = compactText.indexOf(compactWord, compactCursor)
+            if (compactStart < 0 || compactStart + compactWord.length > originalPositions.size) return@forEachIndexed
+            val originalStart = originalPositions[compactStart]
+            val originalEnd = originalPositions[compactStart + compactWord.length - 1] + 1
+            val globalIndex = if (globalOffset >= 0) globalOffset + localIndex else -1
+            ranges += LineWordRange(originalStart, originalEnd, globalIndex)
+            compactCursor = compactStart + compactWord.length
+        }
+    }
+    return ranges
+}
+
+private fun wordStatusColor(state: QuranUiState, globalWordIndex: Int): Color? {
+    if (globalWordIndex < 0) return null
+    if (globalWordIndex == state.currentSpokenWordIndex && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
+        return Color(0xFFFFE0A6)
+    }
+    return when (state.evaluation?.words?.getOrNull(globalWordIndex)?.status) {
+        WordStatus.MATCHED -> Color(0xFFDCEFE5)
+        WordStatus.MISSING, WordStatus.EXTRA_OR_UNEXPECTED -> Color(0xFFFFD8D3)
+        else -> null
+    }
+}
+
+/**
+ * Adds only rendering spans to the literal Word line. The AnnotatedString text
+ * remains byte-for-character identical to line.text; it is never used by the
+ * speech matcher or by Quran data storage.
+ */
+private fun annotatedWordLine(
+    line: WordReferenceLine,
+    state: QuranUiState,
+    pageAyahs: List<QuranAyah>,
+): AnnotatedString {
+    val ranges = lineWordRanges(line, state, pageAyahs)
+    if (ranges.isEmpty()) return AnnotatedString(line.text)
+    return buildAnnotatedString {
+        append(line.text)
+        ranges.forEach { range ->
+            val color = wordStatusColor(state, range.globalWordIndex) ?: return@forEach
+            if (range.start in 0 until length && range.end <= length && range.start < range.end) {
+                addStyle(SpanStyle(background = color), range.start, range.end)
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -56,6 +139,9 @@ internal fun WordReferenceLineView(
     }
     val fontSize = (22f * textScale).sp
     val textColor = Color(0xFF183D33)
+    // Keep the exact Word line in the layout and only make the glyphs
+    // transparent during a hidden recitation; this preserves line geometry.
+    val hiddenAyahText = state.hidden && line.type == "ayah"
 
     when (line.type) {
         "sura" -> Text(
@@ -111,11 +197,11 @@ internal fun WordReferenceLineView(
                 .horizontalScroll(rememberScrollState(), reverseScrolling = true),
         ) {
             Text(
-                text = line.text,
+                text = if (line.type == "ayah") annotatedWordLine(line, state, pageAyahs) else AnnotatedString(line.text),
                 modifier = Modifier.fillMaxWidth(),
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
-                color = textColor,
+                color = if (hiddenAyahText) Color.Transparent else textColor,
                 textAlign = TextAlign.Right,
                 lineHeight = (34f * textScale).sp,
                 softWrap = false,

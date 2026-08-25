@@ -622,9 +622,10 @@ private fun MemorizationScreen(
                         val progress = if (evaluation.total == 0) 0f else evaluation.matched.toFloat() / evaluation.total
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                         Text("مطابق: ${evaluation.matched} من ${evaluation.total} • غير مؤكد: ${evaluation.uncertain} • يحتاج مراجعة: ${evaluation.missing + evaluation.unexpected}")
-                        if (state.transcript.isNotBlank()) {
-                            Text("الناتج المسموع بالصيغة القرآنية", fontWeight = FontWeight.SemiBold)
-                            Text(QuranTextPresentation.annotated(state.transcript), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                        if (state.rawTranscript.isNotBlank()) {
+                            Text("الناتج الخام للتعرّف الصوتي", fontWeight = FontWeight.SemiBold)
+                            Text(state.rawTranscript, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                            Text("يُقارن هذا النص الخام بمرجع النطق، ولا يُحوَّل إلى الرسم القرآني قبل الحكم.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
                         }
                         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Refresh, null)
@@ -1267,6 +1268,22 @@ private fun RecitationCard(
                         Text("الآية الحالية مقفلة: صحّح كل الكلمات الحمراء قبل الانتقال إلى الآية التالية.", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
                     }
                 }
+            }
+            if (state.rawTranscript.isNotBlank()) {
+                Text("الناتج الخام للتعرّف الصوتي", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
+                Text(
+                    state.rawTranscript,
+                    color = Color.White,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "يُقارن هذا النص الخام بمرجع النطق فقط؛ لا يُحوَّل إلى الرسم القرآني قبل الحكم.",
+                    color = Color(0xFFD7E9DF),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) {
                 Text("بدون اتصال غير متاح بأمان على هذا الهاتف 32-bit؛ استخدم التعرّف عبر الإنترنت أو هاتفاً 64-bit.", color = Color(0xFFFFE1B5))

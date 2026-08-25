@@ -4,6 +4,9 @@ import com.example.quranoffline.data.CorrectionKind
 import com.example.quranoffline.data.CorrectionSettings
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranWord
+import com.example.quranoffline.data.PronunciationAyah
+import com.example.quranoffline.data.PronunciationReference
+import com.example.quranoffline.data.PronunciationWord
 import com.example.quranoffline.data.RecitationProgressInput
 import com.example.quranoffline.data.RecitationProgressTracker
 import com.example.quranoffline.data.WordStatus
@@ -22,6 +25,18 @@ class RecitationProgressTrackerTest {
     )
 
     private fun final(text: String) = RecitationProgressInput(text, isFinal = true, segmentCompleted = true)
+
+    private fun speechReference(surah: Int, ayah: Int, spoken: String): PronunciationReference =
+        PronunciationReference.fromAyahs(
+            listOf(
+                PronunciationAyah(
+                    surah = surah,
+                    ayah = ayah,
+                    spoken = spoken,
+                    words = listOf(PronunciationWord(0, spoken, listOf(spoken), emptySet(), null, null, null, null)),
+                ),
+            ),
+        )
 
     @Test
     fun wrongWordProducesOneCorrectionForExpectedPosition() {
@@ -147,6 +162,23 @@ class RecitationProgressTrackerTest {
         assertEquals(WordStatus.MATCHED, first.evaluation.words[0].status)
         assertEquals(WordStatus.MATCHED, first.evaluation.words[1].status)
         assertEquals(WordStatus.MATCHED, second.evaluation.words[2].status)
+    }
+
+    @Test
+    fun trackerComparesRawRecognizerTextWithSpokenReference() {
+        val visualWord = WordReferenceFixtures.fatihaBasmala[2]
+        val ayah = QuranAyah(1, 1, visualWord.text, visualWord.matchText, listOf(visualWord))
+        val expectedSpoken = speechReference(1, 1, "الرحمان")
+
+        val accepted = RecitationProgressTracker(listOf(ayah), pronunciationReference = expectedSpoken)
+            .update(final("الرحمان"))
+        assertEquals(WordStatus.MATCHED, accepted.evaluation.words.single().status)
+        assertEquals("الرحمان", accepted.evaluation.words.single().observed)
+
+        val rejected = RecitationProgressTracker(listOf(ayah), pronunciationReference = expectedSpoken)
+            .update(final("الرحمن"))
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, rejected.evaluation.words.single().status)
+        assertEquals("الرحمن", rejected.evaluation.words.single().observed)
     }
 
     @Test

@@ -24,6 +24,9 @@ data class QuranUiState(
     val listening: Boolean = false,
     val assetsReady: Boolean = false,
     val loadingAssets: Boolean = true,
+    /** Exact text returned by SpeechRecognizer; never Quranized before judgement. */
+    val rawTranscript: String = "",
+    /** Optional Quran-shaped display generated after judgement; never used for matching. */
     val transcript: String = "",
     val evaluation: RecitationEvaluation? = null,
     val notice: String = "جاري تجهيز نص Word الحرفي والتوقيتات…",
@@ -271,6 +274,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentPage = actualPage,
             pageWordOffset = globalWordOffset(state.value.allAyahs, visible.firstOrNull()),
             hidden = false,
+            rawTranscript = "",
             transcript = "",
             evaluation = null,
             currentWordIndex = -1,
@@ -530,6 +534,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentPage = startPage,
             pageWordOffset = globalWordOffset(state.value.allAyahs, startVisibleAyahs.firstOrNull()),
             listening = true,
+            rawTranscript = "",
             transcript = "",
             evaluation = null,
             currentWordIndex = tracker.globalWordIndex(startAyahIndex, startWordIndex) ?: -1,
@@ -595,6 +600,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentPage = previousPage,
             pageWordOffset = globalWordOffset(state.value.allAyahs, previousVisibleAyahs.firstOrNull()),
             listening = true,
+            rawTranscript = "",
             transcript = "",
             evaluation = null,
             currentWordIndex = tracker.globalWordIndex(previousAyahIndex, 0) ?: -1,
@@ -630,6 +636,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     // sentence. It is intentionally invisible to Quran word
                     // evaluation and never becomes progress.
                     state.value = previousState.copy(
+                        rawTranscript = "",
                         transcript = "",
                         currentSpokenWord = null,
                         currentSpokenWordIndex = -1,
@@ -669,10 +676,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val correctedErrors = if (result.correctedErrors.isNotEmpty()) correctedErrorStore.list() else previousState.correctedErrors
                 val currentTarget = correction?.let { tracker.globalWordIndex(it.ayahIndex, it.localWordIndex) }
                     ?: result.currentGlobalWordIndex.takeIf { it < targetWords.size }
-                val canonicalSpokenWord = canonicalMatchedWord(
-                    targetWords.getOrNull(result.spokenGlobalWordIndex),
-                    result.spokenWord,
-                )
+                // The current spoken word is diagnostic raw recognizer text;
+                // never replace it with QuranWord.text before or after judgement.
+                val rawSpokenWord = result.spokenWord
                 val resolvedAyah = previousState.allAyahs.getOrNull(result.currentAyahIndex)
                 val resolvedPage = resolvedAyah?.let { previousState.metadata?.ayah(it.surah, it.ayah)?.page } ?: previousState.currentPage
                 val resolvedVisibleAyahs = previousState.metadata?.let { page(previousState.allAyahs, it, resolvedPage) } ?: previousState.ayahs
@@ -680,11 +686,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     ayahs = resolvedVisibleAyahs,
                     currentPage = resolvedPage,
                     pageWordOffset = globalWordOffset(previousState.allAyahs, resolvedVisibleAyahs.firstOrNull()),
+                    // Keep the recognizer output raw. It is passed to the tracker above;
+                    // canonical Quran spelling is never used as an observed transcript.
+                    rawTranscript = update.value,
                     transcript = canonicalizeRecognizedTranscript(update.value, result.evaluation.words),
                     evaluation = result.evaluation,
                     correctedErrors = correctedErrors,
                     currentWordIndex = currentTarget ?: -1,
-                    currentSpokenWord = canonicalSpokenWord,
+                    currentSpokenWord = rawSpokenWord,
                     currentSpokenWordIndex = result.spokenGlobalWordIndex,
                     currentAyahIndex = result.currentAyahIndex,
                     currentWordInAyah = result.currentWordInAyah,
@@ -794,6 +803,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         state.value = state.value.copy(
             listening = true,
             openingBasmalaActive = false,
+            rawTranscript = "",
             transcript = "",
             currentSpokenWord = null,
             currentSpokenWordIndex = -1,

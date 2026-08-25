@@ -48,6 +48,10 @@ class PronunciationReference private constructor(
             return fromJson(raw)
         }
 
+        /** Pure factory used by JVM tests and small deterministic fixtures. */
+        fun fromAyahs(ayahs: List<PronunciationAyah>): PronunciationReference =
+            PronunciationReference(ayahs.associateBy { "${it.surah}:${it.ayah}" })
+
         fun fromJson(raw: String): PronunciationReference {
             if (raw.isBlank()) return PronunciationReference(emptyMap())
             val root = JSONObject(raw)
