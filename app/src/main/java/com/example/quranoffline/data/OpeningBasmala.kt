@@ -3,8 +3,8 @@ package com.example.quranoffline.data
 /** A presentation/recitation item, never a QuranAyah and never a progress word. */
 data class OpeningBasmala(
     val surah: Int,
-    val text: String = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
-    val matchText: String = "بسم الله الرحمن الرحيم",
+    val text: String = "بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ",
+    val matchText: String = "بسم الله الرحمان الرحيم",
     val countAsAyah: Boolean = false,
 )
 
@@ -24,7 +24,7 @@ data class OpeningBasmalaSpeechResult(
  */
 object OpeningBasmalaSpeechFilter {
     private const val FIRST_WORD = "بسم"
-    private val canonicalWords = listOf("بسم", "الله", "الرحمن", "الرحيم")
+    private val canonicalWords = listOf("بسم", "الله", "الرحمان", "الرحيم")
 
     fun filter(transcript: String, isFinal: Boolean, segmentCompleted: Boolean, alreadyConsumed: Boolean): OpeningBasmalaSpeechResult {
         if (alreadyConsumed) return OpeningBasmalaSpeechResult(transcript, consumed = true, needsCorrection = false)

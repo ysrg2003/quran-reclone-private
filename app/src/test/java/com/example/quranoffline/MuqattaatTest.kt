@@ -36,7 +36,7 @@ class MuqattaatTest {
 
     @Test
     fun pronunciationKeepsVisualTokenOneWordAndUsesLetterNames() {
-        val pronunciation = Muqattaat.pronunciationFor(QuranWord(0, "الٓمٓ", "الم"))!!
+        val pronunciation = Muqattaat.pronunciationFor(WordReferenceFixtures.baqarahOpeningMuqattaat)!!
         assertEquals("الٓمٓ", pronunciation.visualToken)
         assertEquals(listOf("ألف", "لام", "ميم"), pronunciation.spokenNames)
         assertEquals("ألف لام ميم", pronunciation.spokenText)
@@ -58,14 +58,14 @@ class MuqattaatTest {
         val fiveNames = listOf("حا", "يا", "طا", "ها", "را")
         assertEquals(5, expected.size)
         assertEquals(fiveNames, expected.values.toList())
-        val haMim = Muqattaat.pronunciationFor(QuranWord(0, "حمٓ", "حم"))!!
+        val haMim = Muqattaat.pronunciationFor(WordReferenceFixtures.ham)!!
         assertEquals("حا", haMim.units[0].shortName)
         assertEquals(MuqattaatMaddCategory.NATURAL_TWO_HARAKAT, haMim.units[0].maddCategory)
     }
 
     @Test
     fun separateLetterNamesMatchOneReferenceWord() {
-        val expected = listOf(QuranWord(0, "الٓمٓ", "الم"))
+        val expected = listOf(WordReferenceFixtures.baqarahOpeningMuqattaat)
         val result = RecitationMatcher.evaluate(expected, "ألف لام ميم", hasFinalResult = true)
         assertEquals(1, result.matched)
         assertEquals(0, result.unexpected)
@@ -75,7 +75,7 @@ class MuqattaatTest {
     @Test
     fun partialMuqattaatSpeechDoesNotPrematurelyMarkWrong() {
         val tracker = RecitationProgressTracker(listOf(
-            com.example.quranoffline.data.QuranAyah(2, 1, "الٓمٓ", "الم", listOf(QuranWord(0, "الٓمٓ", "الم")))
+            com.example.quranoffline.data.QuranAyah(2, 1, WordReferenceFixtures.baqarahOpeningMuqattaat.text, WordReferenceFixtures.baqarahOpeningMuqattaat.matchText, listOf(WordReferenceFixtures.baqarahOpeningMuqattaat))
         ))
         tracker.startFromAyah(0)
         val partial = tracker.update(RecitationProgressInput("ألف", isFinal = false, segmentCompleted = false))
@@ -87,7 +87,7 @@ class MuqattaatTest {
 
     @Test
     fun longMaddInLetterNamesStillMatchesOneReferenceWord() {
-        val expected = listOf(QuranWord(0, "الٓمٓ", "الم"))
+        val expected = listOf(WordReferenceFixtures.baqarahOpeningMuqattaat)
         val result = RecitationMatcher.evaluate(expected, "أألف لاممم ميممم", hasFinalResult = true)
         assertEquals(1, result.matched)
         assertEquals(0, result.unexpected)
@@ -96,7 +96,7 @@ class MuqattaatTest {
 
     @Test
     fun longMaddAsRepeatedAlifLamMimTokensStillMatches() {
-        val expected = listOf(QuranWord(0, "الٓمٓ", "الم"))
+        val expected = listOf(WordReferenceFixtures.baqarahOpeningMuqattaat)
         val result = RecitationMatcher.evaluate(expected, "اااالف لاااام مميييم", hasFinalResult = true)
         assertEquals(1, result.matched)
         assertEquals(WordStatus.MATCHED, result.words.single().status)
@@ -104,7 +104,7 @@ class MuqattaatTest {
 
     @Test
     fun ordinaryAlamWordIsNotTreatedAsMuqattaat() {
-        val ordinary = QuranWord(0, "أَلَمْ", "ألم")
+        val ordinary = WordReferenceFixtures.ordinaryAlam
         assertFalse(Muqattaat.pronunciationFor(ordinary) != null)
         assertTrue(quranWordMatches(ordinary, "ألم"))
         assertFalse(quranWordMatches(ordinary, "ألف لام ميم"))
@@ -112,7 +112,7 @@ class MuqattaatTest {
 
     @Test
     fun keHaYaAinSadUsesAinNotHa() {
-        val pronunciation = Muqattaat.pronunciationFor(QuranWord(0, "كٓهيعٓصٓ", "كهيعص"))!!
+        val pronunciation = Muqattaat.pronunciationFor(WordReferenceFixtures.kahyainSad)!!
         assertEquals(listOf("كاف", "ها", "يا", "عين", "صاد"), pronunciation.spokenNames)
         assertEquals("أسماء حروف مستقلة", "أسماء حروف مستقلة")
     }

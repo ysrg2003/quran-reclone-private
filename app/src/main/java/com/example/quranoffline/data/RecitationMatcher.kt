@@ -13,7 +13,11 @@ private val silentAlifMarker = '۟'
  */
 private fun removeSilentMarkedLetters(value: String): String =
     Normalizer.normalize(value, Normalizer.Form.NFC)
+        // Word uses the small high dotless head of khah (U+06E1) for sukun;
+        // the legacy audio source may use the round-zero marker (U+06DF).
         .replace(Regex("\\p{L}$silentAlifMarker"), "")
+        .replace(Regex("وْ(?=ل)"), "")
+        .replace(Regex("اْ$"), "")
         .replace(silentAlifMarker.toString(), "")
 
 fun normalizeArabicForMatch(value: String): String {
@@ -88,7 +92,7 @@ fun arabicSpellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean
 
 fun quranWordMatches(word: QuranWord, observed: String): Boolean {
     val markerIndex = word.text.indexOf(silentAlifMarker)
-    val hasSilentMarker = markerIndex >= 0
+    val hasSilentMarker = markerIndex >= 0 || word.text.contains("وْل") || word.text.endsWith("اْ")
     val canonicalMatch = arabicWordsEquivalent(word.text, observed)
     // SpeechRecognizer may write the carrier that is marked silent back into
     // Arabic text. The provider spelling is never accepted for a final alif
@@ -96,7 +100,7 @@ fun quranWordMatches(word: QuranWord, observed: String): Boolean {
     // كفرو/لقو/اشترو. A written-and-pronounced alif remains required.
     val canonicalSpoken = normalizeArabicWithSmallAlif(word.text)
     val alternateSpelling = arabicWordsEquivalent(word.matchText, observed)
-    val hasSilentFinalAlif = word.text.endsWith("ا$silentAlifMarker")
+    val hasSilentFinalAlif = word.text.endsWith("ا$silentAlifMarker") || word.text.endsWith("اْ")
     // A provider spelling may preserve a silent non-alif carrier such as the
     // marked waw in Ulaika, but it may not re-introduce a final alif carrying
     // the round-zero marker. A carrier that is written and pronounced remains

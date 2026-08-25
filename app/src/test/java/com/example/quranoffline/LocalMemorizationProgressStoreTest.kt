@@ -3,7 +3,6 @@ package com.example.quranoffline
 import com.example.quranoffline.data.MemorizationCheckpoint
 import com.example.quranoffline.data.MemorizationCheckpointCodec
 import com.example.quranoffline.data.QuranAyah
-import com.example.quranoffline.data.QuranWord
 import com.example.quranoffline.data.validatedAgainst
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,11 +12,27 @@ import org.junit.Test
 
 class LocalMemorizationProgressStoreTest {
     private val ayahs = listOf(
-        QuranAyah(1, 1, "بِسْمِ", "بسم", listOf(QuranWord(0, "بِسْمِ", "بسم"))),
-        QuranAyah(2, 1, "الٓمٓ", "الم", listOf(QuranWord(0, "الٓمٓ", "الم"))),
-        QuranAyah(2, 2, "ذَٰلِكَ ٱلْكِتَٰبُ", "ذلك الكتاب", listOf(
-            QuranWord(0, "ذَٰلِكَ", "ذلك"), QuranWord(1, "ٱلْكِتَٰبُ", "الكتاب")
-        )),
+        QuranAyah(
+            1,
+            1,
+            WordReferenceFixtures.fatihaBasmala[0].text,
+            WordReferenceFixtures.fatihaBasmala[0].matchText,
+            listOf(WordReferenceFixtures.fatihaBasmala[0]),
+        ),
+        QuranAyah(
+            2,
+            1,
+            WordReferenceFixtures.baqarahOpeningMuqattaat.text,
+            WordReferenceFixtures.baqarahOpeningMuqattaat.matchText,
+            listOf(WordReferenceFixtures.baqarahOpeningMuqattaat),
+        ),
+        QuranAyah(
+            2,
+            2,
+            "${WordReferenceFixtures.dhalika.text} ${WordReferenceFixtures.kitab.text}",
+            "ذلك الكتاب",
+            listOf(WordReferenceFixtures.dhalika, WordReferenceFixtures.kitab),
+        ),
     )
 
     @Test
@@ -54,6 +69,6 @@ class LocalMemorizationProgressStoreTest {
         val withBasmala = MemorizationCheckpoint(2, 1, 0, true, 1L).validatedAgainst(ayahs)
         assertTrue(withBasmala!!.includeOpeningBasmala)
         assertEquals(1, ayahs[1].words.size)
-        assertFalse(ayahs[1].words.any { it.text == "بِسْمِ" })
+        assertFalse(ayahs[1].words.any { it.text == WordReferenceFixtures.fatihaBasmala[0].text })
     }
 }

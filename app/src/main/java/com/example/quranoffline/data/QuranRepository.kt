@@ -42,8 +42,8 @@ class QuranRepository(
     fun surahNumbers(): List<Int> = ayahs.map { it.surah }.distinct()
 
     companion object {
-        private val basmalaText = listOf("بِسْمِ", "ٱللَّهِ", "ٱلرَّحْمَٰنِ", "ٱلرَّحِيمِ")
-        private val basmalaMatchText = listOf("بسم", "الله", "الرحمن", "الرحيم")
+        private val basmalaText = listOf("بِسۡمِ", "ٱللَّهِ", "ٱلرَّحۡمَٰنِ", "ٱلرَّحۡيمِ")
+        private val basmalaMatchText = listOf("بسم", "الله", "الرحمان", "الرحيم")
 
         private fun parse(raw: String): List<QuranAyah> {
             if (raw.isBlank()) return emptyList()

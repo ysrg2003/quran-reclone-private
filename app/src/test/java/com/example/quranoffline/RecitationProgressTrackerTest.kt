@@ -156,9 +156,9 @@ class RecitationProgressTrackerTest {
                 QuranAyah(
                     surah = 1,
                     ayah = 5,
-                    text = "إِيَّاكَ",
-                    matchText = "إياك",
-                    words = listOf(QuranWord(0, "إِيَّاكَ", "إياك")),
+                    text = WordReferenceFixtures.iyyaka.text,
+                    matchText = WordReferenceFixtures.iyyaka.matchText,
+                    words = listOf(WordReferenceFixtures.iyyaka),
                 ),
             ),
         )
@@ -176,12 +176,12 @@ class RecitationProgressTrackerTest {
                 QuranAyah(
                     surah = 1,
                     ayah = 4,
-                    text = "مَٰلِكِ يَوْمِ الدِّينِ",
+                    text = "${WordReferenceFixtures.malik.text} ${WordReferenceFixtures.yawm.text} ${WordReferenceFixtures.deen.text}",
                     matchText = "ملك يوم الدين",
                     words = listOf(
-                        QuranWord(0, "مَٰلِكِ", "ملك"),
-                        QuranWord(1, "يَوْمِ", "يوم"),
-                        QuranWord(2, "الدِّينِ", "الدين"),
+                        WordReferenceFixtures.malik,
+                        WordReferenceFixtures.yawm.copy(index = 1),
+                        WordReferenceFixtures.deen.copy(index = 2),
                     ),
                 ),
             ),
@@ -202,9 +202,9 @@ class RecitationProgressTrackerTest {
                 QuranAyah(
                     surah = 1,
                     ayah = 2,
-                    text = "ٱلْعَٰلَمِينَ",
-                    matchText = "العلمين",
-                    words = listOf(QuranWord(0, "ٱلْعَٰلَمِينَ", "العلمين")),
+                    text = WordReferenceFixtures.alamin.text,
+                    matchText = WordReferenceFixtures.alamin.matchText,
+                    words = listOf(WordReferenceFixtures.alamin),
                 ),
             ),
         )
@@ -320,9 +320,9 @@ class RecitationProgressTrackerTest {
                 QuranAyah(
                     surah = 1,
                     ayah = 7,
-                    text = "الضالين",
-                    matchText = "الضالين",
-                    words = listOf(QuranWord(0, "الضالين", "الضالين")),
+                    text = WordReferenceFixtures.dalleen.text,
+                    matchText = WordReferenceFixtures.dalleen.matchText,
+                    words = listOf(WordReferenceFixtures.dalleen),
                 ),
             ),
         )

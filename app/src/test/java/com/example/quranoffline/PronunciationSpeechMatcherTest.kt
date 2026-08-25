@@ -13,21 +13,21 @@ import org.junit.Test
 class PronunciationSpeechMatcherTest {
     @Test
     fun validAlifMaddMayBeRepeated() {
-        val word = QuranWord(0, "قَالَ", "قال")
+        val word = WordReferenceFixtures.qala
         val reference = PronunciationWord(0, "قال", listOf("قال"), setOf(1), null, null, null, null)
         assertTrue(PronunciationSpeechMatcher.matches(word, reference, "قااال"))
     }
 
     @Test
     fun repeatedConsonantWithoutMaddIsNotCollapsed() {
-        val word = QuranWord(0, "كَتَبَ", "كتب")
-        val reference = PronunciationWord(0, "كتب", listOf("كتب"), emptySet(), null, null, null, null)
-        assertFalse(PronunciationSpeechMatcher.matches(word, reference, "كتتتب"))
+        val word = WordReferenceFixtures.kataba
+        val reference = PronunciationWord(0, "كتبت", listOf("كتبت"), emptySet(), null, null, null, null)
+        assertFalse(PronunciationSpeechMatcher.matches(word, reference, "كتتبت"))
     }
 
     @Test
     fun muqattaatLetterNamesAcceptLongMaddOnlyInNames() {
-        val word = QuranWord(0, "كٓهيعٓصٓ", "كهيعص")
+        val word = WordReferenceFixtures.kahyainSad
         assertTrue(quranWordMatches(word, "كاااف ها يا عييين صاااد"))
         assertFalse(quranWordMatches(word, "كككاف ها يا عين صاد"))
     }
@@ -51,12 +51,12 @@ class PronunciationSpeechMatcherTest {
     @Test
     fun constrainedMaddCollapseReturnsCanonicalSpelling() {
         assertEquals("قال", PronunciationSpeechMatcher.collapseValidMaddRepeats("قااال", "قال", setOf(1)))
-        assertEquals("كتتتب", PronunciationSpeechMatcher.collapseValidMaddRepeats("كتتتب", "كتب", setOf(1)))
+        assertEquals("كتتبت", PronunciationSpeechMatcher.collapseValidMaddRepeats("كتتبت", "كتبت", setOf(1)))
     }
 
     @Test
     fun pronouncedDaggerAlifIsRequiredInPronunciationReference() {
-        val word = QuranWord(0, "ٱلْعَٰلَمِينَ", "العلمين")
+        val word = WordReferenceFixtures.alamin
         val reference = PronunciationWord(0, "العالمين", listOf("العالمين"), setOf(3, 6), null, null, null, null)
         assertTrue(PronunciationSpeechMatcher.matches(word, reference, "العالمين"))
         assertFalse(PronunciationSpeechMatcher.matches(word, reference, "العلمين"))

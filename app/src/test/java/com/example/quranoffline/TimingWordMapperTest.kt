@@ -11,7 +11,8 @@ import org.junit.Test
 class TimingWordMapperTest {
     @Test
     fun ordinalFallbackMapsWordsWhenAlignLeavesGaps() {
-        val ayah = QuranAyah(10, 1, "الٓر تلك ءايت الكتب الحكيم", "الر تلك ءايت الكتب الحكيم", (0..4).map { QuranWord(it, "كلمة$it", "كلمة$it") })
+        // Synthetic words: this test covers timing-index fallback, not Quran spelling.
+        val ayah = QuranAyah(10, 1, "word0 word1 word2 word3 word4", "word0 word1 word2 word3 word4", (0..4).map { QuranWord(it, "word$it", "word$it") })
         val timings = listOf(
             TimingSegment(0, 1, 400, 7200),
             TimingSegment(2, 3, 7210, 7480),
@@ -25,7 +26,8 @@ class TimingWordMapperTest {
 
     @Test
     fun wholeAyahUsesFirstAndLastAudioBoundsEvenWhenIndexesDiffer() {
-        val ayah = QuranAyah(13, 1, "الٓمٓر", "المر", listOf(QuranWord(0, "الٓمٓر", "المر")))
+        // Synthetic token: whole-ayah audio bounds are independent of Quran text.
+        val ayah = QuranAyah(13, 1, "synthetic-token", "synthetic-token", listOf(QuranWord(0, "synthetic-token", "synthetic-token")))
         val timings = listOf(TimingSegment(0, 1, 70, 10880), TimingSegment(15, 16, 27500, 30380))
         val whole = TimingWordMapper.wholeAyah(ayah, timings)
         assertNotNull(whole)
