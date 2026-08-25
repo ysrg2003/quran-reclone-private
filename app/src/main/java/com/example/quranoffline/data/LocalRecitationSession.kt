@@ -23,6 +23,8 @@ sealed interface RecognitionUpdate {
     data object Started : RecognitionUpdate
     data class Text(val value: String, val timestamps: FloatArray, val isFinal: Boolean = false, val segmentCompleted: Boolean = false) : RecognitionUpdate
     data class Failed(val message: String) : RecognitionUpdate
+    /** A recoverable recognizer error; the session remains active while it restarts. */
+    data class Retrying(val message: String) : RecognitionUpdate
     data object Stopped : RecognitionUpdate
 }
 

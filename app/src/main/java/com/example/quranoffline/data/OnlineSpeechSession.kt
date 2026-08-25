@@ -8,6 +8,7 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Online recognizer with automatic recovery from normal speech pauses. */
@@ -22,13 +23,18 @@ class OnlineSpeechSession(
     private var committedText = ""
     private var currentPartialText = ""
     private var lastEmittedCombinedText = ""
+    private var lastRmsLogAt = 0L
     private val restartRunnable = Runnable {
         restartScheduled = false
         if (active.get()) startPlatformListening()
     }
     private val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-SA")
+        // Use the generic Arabic locale: some installed Google recognizers
+        // advertise ar-SA but return ERROR_NO_MATCH for ordinary Arabic input.
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar")
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ar")
+        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         // Quranic words can contain deliberately long madd; do not finalize a
@@ -40,15 +46,36 @@ class OnlineSpeechSession(
 
     init {
         recognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) = onUpdate(RecognitionUpdate.Started)
-            override fun onBeginningOfSpeech() = Unit
-            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onReadyForSpeech(params: Bundle?) {
+                Log.d(TAG, "SpeechRecognizer ready")
+                onUpdate(RecognitionUpdate.Started)
+            }
+            override fun onBeginningOfSpeech() {
+                Log.d(TAG, "SpeechRecognizer beginning")
+            }
+            override fun onRmsChanged(rmsdB: Float) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastRmsLogAt >= 1_000L) {
+                    lastRmsLogAt = now
+                    Log.d(TAG, "SpeechRecognizer rms=$rmsdB")
+                }
+            }
             override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() = Unit
+            override fun onEndOfSpeech() {
+                Log.d(TAG, "SpeechRecognizer end of speech")
+            }
 
             override fun onError(error: Int) {
                 if (!active.get()) return
+                Log.w(TAG, "SpeechRecognizer error code=$error")
                 if (error in TRANSIENT_ERRORS) {
+                    runCatching { recognizer.cancel() }
+                    val message = if (error == SpeechRecognizer.ERROR_NO_MATCH) {
+                        "لم تفهم خدمة التعرف هذا المقطع (رمز 7)؛ الميكروفون مفتوح، جارٍ إعادة الاستماع…"
+                    } else {
+                        "تعذر التقاط الصوت مؤقتاً (رمز $error)؛ جارٍ إعادة الاستماع…"
+                    }
+                    onUpdate(RecognitionUpdate.Retrying(message))
                     scheduleRestart()
                 } else {
                     active.set(false)
@@ -57,6 +84,7 @@ class OnlineSpeechSession(
             }
 
             override fun onResults(results: Bundle?) {
+                Log.d(TAG, "SpeechRecognizer final callback")
                 emit(results, isFinal = true)
                 if (active.get()) scheduleRestart()
             }
@@ -69,7 +97,11 @@ class OnlineSpeechSession(
 
             private fun emit(bundle: Bundle?, isFinal: Boolean) {
                 val text = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                if (text.isBlank()) return
+                if (text.isBlank()) {
+                    Log.d(TAG, "SpeechRecognizer callback without text final=$isFinal")
+                    return
+                }
+                Log.d(TAG, "SpeechRecognizer text callback final=$isFinal chars=${text.length}")
                 if (isFinal) {
                     committedText = joinTexts(committedText, text)
                     currentPartialText = ""
@@ -126,6 +158,7 @@ class OnlineSpeechSession(
         .joinToString(" ")
 
     companion object {
+        private const val TAG = "QuranSpeechSession"
         private const val RESTART_DELAY_MS = 280L
         private const val MINIMUM_SPEECH_MS = 350L
         private const val POSSIBLY_COMPLETE_SILENCE_MS = 2_000L

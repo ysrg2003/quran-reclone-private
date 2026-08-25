@@ -718,6 +718,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 progressTracker = null
                 state.value = state.value.copy(listening = false, openingBasmalaActive = false, notice = update.message)
             }
+            is RecognitionUpdate.Retrying -> {
+                if (activeCorrection != null) return
+                state.value = state.value.copy(
+                    listening = true,
+                    openingBasmalaActive = !openingBasmalaConsumed,
+                    notice = update.message,
+                )
+            }
             RecognitionUpdate.Stopped -> {
                 if (activeCorrection != null) return
                 progressTracker = null
