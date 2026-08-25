@@ -86,6 +86,23 @@ class MuqattaatTest {
     }
 
     @Test
+    fun longMaddInLetterNamesStillMatchesOneReferenceWord() {
+        val expected = listOf(QuranWord(0, "الٓمٓ", "الم"))
+        val result = RecitationMatcher.evaluate(expected, "أألف لاممم ميممم", hasFinalResult = true)
+        assertEquals(1, result.matched)
+        assertEquals(0, result.unexpected)
+        assertEquals(WordStatus.MATCHED, result.words.single().status)
+    }
+
+    @Test
+    fun longMaddAsRepeatedAlifLamMimTokensStillMatches() {
+        val expected = listOf(QuranWord(0, "الٓمٓ", "الم"))
+        val result = RecitationMatcher.evaluate(expected, "اااالف لاااام مميييم", hasFinalResult = true)
+        assertEquals(1, result.matched)
+        assertEquals(WordStatus.MATCHED, result.words.single().status)
+    }
+
+    @Test
     fun ordinaryAlamWordIsNotTreatedAsMuqattaat() {
         val ordinary = QuranWord(0, "أَلَمْ", "ألم")
         assertFalse(Muqattaat.pronunciationFor(ordinary) != null)

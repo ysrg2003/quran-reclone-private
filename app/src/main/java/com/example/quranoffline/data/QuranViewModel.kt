@@ -19,6 +19,7 @@ data class QuranUiState(
     val allAyahs: List<QuranAyah> = emptyList(),
     val metadata: QuranMetadata? = null,
     val pageLayout: QuranLayout? = null,
+    val wordReferenceLayout: WordReferenceLayout? = null,
     val hidden: Boolean = false,
     val listening: Boolean = false,
     val assetsReady: Boolean = false,
@@ -66,6 +67,7 @@ private data class PreparedAssets(
     val repository: QuranRepository,
     val metadata: QuranMetadata,
     val pageLayout: QuranLayout,
+    val wordReferenceLayout: WordReferenceLayout,
     val allAyahs: List<QuranAyah>,
     val ayahs: List<QuranAyah>,
     val pageWordOffset: Int,
@@ -158,6 +160,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val pageLayout = withContext(Dispatchers.IO) {
                     if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadPageLayout() else assetManager.fetchPageLayout()
                 }
+                val wordReferenceLayout = withContext(Dispatchers.IO) {
+                    WordReferenceLayout.load(getApplication())
+                }
                 val requestedSurah = state.value.selectedSurah
                 val prepared = withContext(Dispatchers.Default) {
                     val parsedRepository = QuranRepository(getApplication(), text)
@@ -165,18 +170,23 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     parsedMetadata.requireCompatible(parsedRepository.allAyahs())
                     timingRepository.update(timings)
                     val parsedPageLayout = QuranLayout.fromJson(pageLayout)
+                    check(wordReferenceLayout.pageCount == parsedMetadata.pages.size) { "Word reference page count does not match Quran metadata" }
                     val allAyahs = parsedRepository.allAyahs()
                     check(parsedPageLayout.pageCount == parsedMetadata.pages.size) { "Page layout page count does not match Quran metadata" }
                     check(parsedPageLayout.wordCount == allAyahs.sumOf { it.words.size }) { "Page layout word count does not match Quran text" }
                     val requestedSurahAyahs = parsedRepository.ayahsForSurah(requestedSurah).ifEmpty { parsedRepository.ayahsForSurah(1) }
                     val selectedSurah = requestedSurahAyahs.firstOrNull()?.surah ?: 1
                     val totalAyahs = parsedRepository.ayahsForSurah(selectedSurah).size
-                    val initialPage = parsedMetadata.ayah(selectedSurah, 1)?.page ?: 1
-                    val visiblePage = page(allAyahs, parsedMetadata, initialPage)
+                    val initialPage = wordReferenceLayout.pageForAyah(selectedSurah, 1) ?: parsedMetadata.ayah(selectedSurah, 1)?.page ?: 1
+                    val visiblePage = wordReferenceLayout.ayahKeysForPage(initialPage)
+                        .mapNotNull { (surah, ayah) -> allAyahs.firstOrNull { it.surah == surah && it.ayah == ayah } }
+                        .takeIf { it.isNotEmpty() }
+                        ?: page(allAyahs, parsedMetadata, initialPage)
                     PreparedAssets(
                         repository = parsedRepository,
                         metadata = parsedMetadata,
                         pageLayout = parsedPageLayout,
+                        wordReferenceLayout = wordReferenceLayout,
                         allAyahs = allAyahs,
                         ayahs = visiblePage,
                         pageWordOffset = globalWordOffset(allAyahs, visiblePage.firstOrNull()),
@@ -188,8 +198,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 repository = prepared.repository
                 state.value = state.value.copy(
-                    ayahs = prepared.ayahs, allAyahs = prepared.allAyahs, metadata = prepared.metadata, pageLayout = prepared.pageLayout, selectedSurah = prepared.selectedSurah,
-                    currentPage = prepared.metadata.ayah(prepared.selectedSurah, 1)?.page ?: 1,
+                    ayahs = prepared.ayahs, allAyahs = prepared.allAyahs, metadata = prepared.metadata, pageLayout = prepared.pageLayout, wordReferenceLayout = prepared.wordReferenceLayout, selectedSurah = prepared.selectedSurah,
+                    currentPage = prepared.wordReferenceLayout.pageForAyah(prepared.selectedSurah, 1) ?: prepared.metadata.ayah(prepared.selectedSurah, 1)?.page ?: 1,
                     totalPages = prepared.metadata.pages.size,
                     pageWordOffset = prepared.pageWordOffset,
                     totalAyahsInSurah = prepared.totalAyahs,
@@ -210,7 +220,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val metadata = state.value.metadata ?: return
         if (surahAyahs.isEmpty()) return
         if (state.value.listening || state.value.correctionPlaying) stopListening() else stopReader()
-        val pageNumber = metadata.ayah(surah, 1)?.page ?: 1
+        val pageNumber = state.value.wordReferenceLayout?.pageForAyah(surah, 1) ?: metadata.ayah(surah, 1)?.page ?: 1
         showPage(pageNumber, notice = "تم اختيار السورة ${metadata.sura(surah)?.arabicName ?: surah} من المصحف.")
         state.value = state.value.copy(
             selectedSurah = surah,
@@ -242,7 +252,10 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private fun showPage(pageNumber: Int, notice: String? = null) {
         val metadata = state.value.metadata ?: return
         val actualPage = pageNumber.coerceIn(1, metadata.pages.size)
-        val visible = page(state.value.allAyahs, metadata, actualPage)
+        val visible = state.value.wordReferenceLayout?.ayahKeysForPage(actualPage)
+            ?.mapNotNull { (surah, ayah) -> state.value.allAyahs.firstOrNull { it.surah == surah && it.ayah == ayah } }
+            ?.takeIf { it.isNotEmpty() }
+            ?: page(state.value.allAyahs, metadata, actualPage)
         val pageSurah = visible.firstOrNull()?.surah ?: state.value.selectedSurah
         val pageSurahAyahs = state.value.allAyahs.filter { it.surah == pageSurah }
         state.value = state.value.copy(

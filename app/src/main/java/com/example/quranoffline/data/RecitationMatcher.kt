@@ -83,13 +83,12 @@ fun arabicSpellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean
 fun quranWordMatches(word: QuranWord, observed: String): Boolean {
     val markerIndex = word.text.indexOf(silentAlifMarker)
     val hasSilentMarker = markerIndex >= 0
-    val markedBase = word.text.getOrNull(markerIndex - 1)
     val canonicalMatch = arabicWordsEquivalent(word.text, observed)
-    // ASR providers sometimes preserve an internal silent waw as an Arabic
-    // spelling carrier (أولئك), even though it is not pronounced. Do not apply
-    // that tolerance to a marked alif: كفروا۟ and لقوا۟ must reject pronounced
-    // final alif forms. The canonical clean form remains the primary path.
-    val providerSpelling = hasSilentMarker && markedBase != 'ا' &&
+    // SpeechRecognizer often writes a silent carrier back into Arabic text
+    // (كفروا / اشتروا / لقوا), even when the reader did not pronounce it.
+    // Accept that provider spelling as a recognition-only fallback; displayed
+    // Quran/Word text and the canonical matcher remain unchanged.
+    val providerSpelling = hasSilentMarker &&
         arabicWordsEquivalent(word.matchText, observed)
     return if (hasSilentMarker) {
         canonicalMatch || providerSpelling

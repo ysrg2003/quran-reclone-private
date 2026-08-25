@@ -156,6 +156,30 @@ class RecitationMatcherTest {
     }
 
     @Test
+    fun silentFinalCarrierWordsAcceptSpeechRecognizerWrittenAlif() {
+        val expectedWords = listOf(
+            QuranWord(0, "كَفَرُوا۟", "كفروا"),
+            QuranWord(1, "ٱشْتَرَوُا۟", "اشتروا"),
+            QuranWord(2, "لَقُوا۟", "لقوا"),
+        )
+        val result = RecitationMatcher.evaluate(expectedWords, "كفروا اشتروا لقوا", hasFinalResult = true)
+        assertEquals(3, result.matched)
+        assertEquals(0, result.unexpected)
+        assertTrue(result.words.all { it.status == WordStatus.MATCHED })
+    }
+
+    @Test
+    fun silentFinalCarrierWordsAlsoAcceptPronunciationWithoutWrittenCarrier() {
+        val expectedWords = listOf(
+            QuranWord(0, "كَفَرُوا۟", "كفروا"),
+            QuranWord(1, "ٱشْتَرَوُا۟", "اشتروا"),
+        )
+        val result = RecitationMatcher.evaluate(expectedWords, "كفرو اشترو", hasFinalResult = true)
+        assertEquals(2, result.matched)
+        assertEquals(0, result.unexpected)
+    }
+
+    @Test
     fun daggerAlifOverWawUsesTheSpokenAlifForAllEquivalentForms() {
         val expectedWords = listOf(
             QuranWord(0, "ٱلصَّلَوٰةَ", "الصلوة"),
@@ -191,12 +215,12 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun silentFinalAlifIsStillRejectedWhenActuallyPronounced() {
+    fun speechRecognizerWrittenFinalAlifIsAcceptedForSilentFinalCarrier() {
         val expectedWord = listOf(QuranWord(0, "كَفَرُوا۟", "كفروا"))
         val result = RecitationMatcher.evaluate(expectedWord, "كفروا", hasFinalResult = true)
-        assertEquals(0, result.matched)
-        assertEquals(1, result.unexpected)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.words.single().status)
+        assertEquals(1, result.matched)
+        assertEquals(0, result.unexpected)
+        assertEquals(WordStatus.MATCHED, result.words.single().status)
     }
 
     @Test
@@ -209,13 +233,13 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun silentMarkedAlifInLaquRejectsPronouncedAlif() {
+    fun speechRecognizerWrittenFinalAlifIsAcceptedForLaqu() {
         val expectedWord = listOf(QuranWord(0, "لَقُوا۟", "لقوا"))
         val silent = RecitationMatcher.evaluate(expectedWord, "لقو", hasFinalResult = true)
-        val pronounced = RecitationMatcher.evaluate(expectedWord, "لقوا", hasFinalResult = true)
+        val providerWritten = RecitationMatcher.evaluate(expectedWord, "لقوا", hasFinalResult = true)
         assertEquals(1, silent.matched)
-        assertEquals(0, pronounced.matched)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, pronounced.words.single().status)
+        assertEquals(1, providerWritten.matched)
+        assertEquals(WordStatus.MATCHED, providerWritten.words.single().status)
     }
 
     @Test

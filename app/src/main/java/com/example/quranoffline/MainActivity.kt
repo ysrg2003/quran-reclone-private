@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.layout.Arrangement
@@ -81,6 +83,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
@@ -99,8 +103,11 @@ import com.example.quranoffline.data.RecitationEngine
 import com.example.quranoffline.data.WordStatus
 import com.example.quranoffline.data.displayPause
 import com.example.quranoffline.data.QuranTextPresentation
+import com.example.quranoffline.data.WordReferenceLine
 import java.text.DateFormat
 import java.util.Date
+
+internal val WordReferenceFontFamily = FontFamily(Font(R.font.kfgqpc_hafs_uthmanic_script))
 
 class MainActivity : ComponentActivity() {
     private val quranViewModel: QuranViewModel by viewModels()
@@ -1495,14 +1502,14 @@ private fun ReaderScreen(
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("صفحة المصحف الحالية", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
-                    Text("تمثيل نصي منظم يعتمد حدود الصفحة وتسلسل الآيات في metadata المرجعية، من دون إدراج صور أو خطوط خارجية.", color = Color(0xFF66736C))
+                    Text("يعرض النص الحرفي المستخرج من ملف Word المرفق وبخط KFGQPC HAFS Uthmanic Script نفسه، مع إبقاء الرموز والضبط وترتيب الأسطر كما هي.", color = Color(0xFF66736C))
                     Text("لخيارات الآية: اضغط مطولاً على أي آية أو استخدم زر النقاط الثلاث.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
                 }
             }
         }
         item {
             MushafPageSurface(
-                pageAyahs = if (metadata == null) emptyList() else state.allAyahs.filter { metadata.ayah(it.surah, it.ayah)?.page == state.currentPage },
+                pageAyahs = state.ayahs,
                 state = state,
                 onSetStart = onSetStart,
                 onMemorizeFromHere = onMemorizeFromHere,
@@ -1646,22 +1653,25 @@ private fun MushafPageSurface(
             if (pageAyahs.isEmpty()) {
                 Text("لا توجد آيات محملة لهذه الصفحة حالياً.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             } else {
-                val ayahByKey = pageAyahs.associateBy { "${it.surah}:${it.ayah}" }
-                val layoutLines = state.pageLayout?.linesForPage(state.currentPage).orEmpty()
-                // Every source line remains one ordered visual unit at every scale; zoom changes
-                // glyph size only and never switches to a reflowing per-ayah layout.
-                if (layoutLines.isEmpty()) {
-                    pageAyahs.forEach { ayah ->
-                        PageAyahLine(
-                            ayah = ayah,
+                val wordReferenceLines = state.wordReferenceLayout?.linesForPage(state.currentPage).orEmpty()
+                if (wordReferenceLines.isEmpty()) {
+                    Text(
+                        "تعذر قراءة مرجع Word المحلي لهذه الصفحة.",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        color = Color(0xFF8A6A45),
+                    )
+                } else {
+                    wordReferenceLines.forEach { line ->
+                        WordReferenceLineView(
+                            line = line,
+                            state = state,
+                            pageAyahs = pageAyahs,
                             textScale = textScale,
-                            active = state.readerCurrentKey == ayah.selectionKey(),
-                            selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
-                            hasSelection = state.selectedAyahIndices.isNotEmpty(),
+                            onPlayBasmala = onPlayBasmala,
                             onSetStart = onSetStart,
                             onMemorizeFromHere = onMemorizeFromHere,
                             onPlayAyah = onPlayAyah,
-                            onPlayBasmala = onPlayBasmala,
                             onReadFromHere = onReadFromHere,
                             onReadSurahFromHere = onReadSurahFromHere,
                             onBookmark = onBookmark,
@@ -1669,85 +1679,6 @@ private fun MushafPageSurface(
                             onTapAyah = onTapAyah,
                             onLongPressAyah = onLongPressAyah,
                         )
-                    }
-                } else {
-                    layoutLines.forEach { line ->
-                        when (line.type) {
-                            "sura" -> {
-                                val surah = line.wordKeys.firstOrNull()?.surah ?: pageAyahs.first().surah
-                                Text(
-                                    "سورة ${state.metadata?.sura(surah)?.arabicName ?: surah}",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center,
-                                    color = Color(0xFF76552A),
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                            "bismillah" -> {
-                                val surah = pageAyahs.first().surah
-                                com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(surah)?.let { basmala ->
-                                    Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp)) {
-                                            IconButton(onClick = { onPlayBasmala(surah) }) { Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل البسملة الافتتاحية", tint = Color(0xFF76552A)) }
-                                            Text("${basmala.text}  ·  جملة مستقلة لا تدخل في الآية", modifier = Modifier.weight(1f).padding(vertical = 8.dp), textAlign = TextAlign.Right, color = Color(0xFF76552A), style = MaterialTheme.typography.bodyMedium)
-                                        }
-                                    }
-                                }
-                            }
-                            else -> {
-                                val lineGroups = line.wordKeys.mapNotNull { key ->
-                                    ayahByKey["${key.surah}:${key.ayah}"]?.let { ayah -> ayah to key }
-                                }.groupBy { it.first.selectionKey() }
-                                if (lineGroups.isNotEmpty()) {
-                                    val lineEntries = lineGroups.values.toList()
-                                    val lineTextLength = lineEntries.sumOf { entries ->
-                                        val ayah = entries.first().first
-                                        entries.sumOf { (_, key) -> ayah.words.getOrNull(key.word - 1)?.text?.length ?: 0 } + 6
-                                    }
-                                    val baseLineFontSize = when {
-                                        lineTextLength >= 78 -> 13.sp
-                                        lineTextLength >= 62 -> 15.sp
-                                        lineTextLength >= 46 -> 17.sp
-                                        lineTextLength >= 32 -> 20.sp
-                                        else -> 23.sp
-                                    }
-                                    val lineFontSize = (baseLineFontSize.value * textScale).sp
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        lineEntries.forEach { entries ->
-                                            val ayah = entries.first().first
-                                            val words = entries.mapNotNull { (_, key) -> ayah.words.getOrNull(key.word - 1) }
-                                            PageAyahInline(
-                                                ayah = ayah,
-                                                words = words,
-                                                fontSize = lineFontSize,
-                                                showAyahMarker = entries.any { it.second.word == 1 },
-                                                showSajdaMarker = state.metadata?.ayah(ayah.surah, ayah.ayah)?.sajda != null,
-                                                active = state.readerCurrentKey == ayah.selectionKey(),
-                                                selected = state.selectedAyahIndices.contains(state.allAyahs.indexOf(ayah)),
-                                                hasSelection = state.selectedAyahIndices.isNotEmpty(),
-                                                onSetStart = onSetStart,
-                                                onMemorizeFromHere = onMemorizeFromHere,
-                                                onPlayAyah = onPlayAyah,
-                                                onReadFromHere = onReadFromHere,
-                                                onReadSurahFromHere = onReadSurahFromHere,
-                                                onBookmark = onBookmark,
-                                                onOpenAyahActions = onOpenAyahActions,
-                                                onTapAyah = onTapAyah,
-                                                onLongPressAyah = onLongPressAyah,
-                                            )
-                                        }
-                                        line.markers.mapNotNull { it.symbol }.distinct().forEach { marker ->
-                                            Text(QuranTextPresentation.annotated(marker), color = Color(0xFF6E4B25), style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }

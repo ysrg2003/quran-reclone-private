@@ -49,11 +49,11 @@ object Muqattaat {
     private const val NUN = "ن"
 
     private val letterDefinitions = mapOf(
-        ALIF to MuqattaatLetter(ALIF, "ألف", "ألف", setOf("ألف", "الف"), MuqattaatMaddCategory.NONE),
-        LAM to MuqattaatLetter(LAM, "لام", "لام", setOf("لام"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        MIM to MuqattaatLetter(MIM, "ميم", "ميم", setOf("ميم"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        ALIF to MuqattaatLetter(ALIF, "ألف", "ألف", setOf("ألف", "الف", "ا"), MuqattaatMaddCategory.NONE),
+        LAM to MuqattaatLetter(LAM, "لام", "لام", setOf("لام", "ل"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        MIM to MuqattaatLetter(MIM, "ميم", "ميم", setOf("ميم", "م"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
         SAD to MuqattaatLetter(SAD, "صاد", "صاد", setOf("صاد", "ص"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        KAF to MuqattaatLetter(KAF, "كاف", "كاف", setOf("كاف"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        KAF to MuqattaatLetter(KAF, "كاف", "كاف", setOf("كاف", "ك"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
         HA to MuqattaatLetter(HA, "ها", "هاء", setOf("ها", "هاء", "هَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
         YA to MuqattaatLetter(YA, "يا", "ياء", setOf("يا", "ياء", "يَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
         TA to MuqattaatLetter(TA, "طا", "طاء", setOf("طا", "طاء", "طَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
@@ -190,5 +190,9 @@ object Muqattaat {
         .replace("ْ", "")
         .replace("ّ", "")
         .replace("ٰ", "")
+        // The recognizer may spell a two- or six-haraka madd as repeated
+        // Arabic letters. Collapse those repetitions only in the speech token;
+        // the Word/reference text is never changed.
+        .replace(Regex("([\\u0600-\\u06ff])\\1+"), "$1")
         .trim()
 }
