@@ -17,6 +17,7 @@ data class PronunciationWord(
     val audioEndMs: Int?,
     val audioWordStart: Int?,
     val audioWordEnd: Int?,
+    val legacyWordIndices: List<Int> = emptyList(),
 )
 
 data class PronunciationAyah(
@@ -70,6 +71,7 @@ class PronunciationReference private constructor(
                                     audioEndMs = word.optionalInt("audioEndMs"),
                                     audioWordStart = word.optionalInt("audioWordStart"),
                                     audioWordEnd = word.optionalInt("audioWordEnd"),
+                                    legacyWordIndices = word.optJSONArray("legacyWordIndices")?.toIntList().orEmpty(),
                                 ),
                             )
                         }
@@ -91,6 +93,9 @@ class PronunciationReference private constructor(
 
         private fun JSONArray.toIntSet(): Set<Int> =
             buildSet(length()) { for (index in 0 until length()) add(getInt(index)) }
+
+        private fun JSONArray.toIntList(): List<Int> =
+            buildList(length()) { for (index in 0 until length()) add(getInt(index)) }
 
         private fun JSONObject.optionalInt(key: String): Int? =
             runCatching { getInt(key) }.getOrNull()

@@ -2,6 +2,7 @@ package com.example.quranoffline
 
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranWord
+import com.example.quranoffline.data.PronunciationWord
 import com.example.quranoffline.data.TimingSegment
 import com.example.quranoffline.data.TimingWordMapper
 import org.junit.Assert.assertEquals
@@ -22,6 +23,33 @@ class TimingWordMapperTest {
         assertEquals(400, TimingWordMapper.forWord(ayah, timings, 0)!!.startMs)
         assertEquals(7210, TimingWordMapper.forWord(ayah, timings, 1)!!.startMs)
         assertEquals(8710, TimingWordMapper.forWord(ayah, timings, 4)!!.startMs)
+    }
+
+    @Test
+    fun explicitWordMappingSpansAllLegacySegmentsForMergedWord() {
+        val ayah = QuranAyah(36, 22, "merged", "merged", listOf(QuranWord(0, "merged", "merged")))
+        val timings = listOf(
+            TimingSegment(0, 1, 100, 200),
+            TimingSegment(1, 2, 210, 300),
+            TimingSegment(2, 3, 310, 400),
+        )
+        val pronunciation = PronunciationWord(
+            index = 0,
+            spoken = "merged",
+            spokenTokens = listOf("merged"),
+            maddPositions = emptySet(),
+            audioStartMs = 210,
+            audioEndMs = 400,
+            audioWordStart = 1,
+            audioWordEnd = 3,
+            legacyWordIndices = listOf(1, 2),
+        )
+        val mapped = TimingWordMapper.forWord(ayah, timings, 0, pronunciation)
+        assertNotNull(mapped)
+        assertEquals(1, mapped!!.wordStart)
+        assertEquals(3, mapped.wordEnd)
+        assertEquals(210, mapped.startMs)
+        assertEquals(400, mapped.endMs)
     }
 
     @Test

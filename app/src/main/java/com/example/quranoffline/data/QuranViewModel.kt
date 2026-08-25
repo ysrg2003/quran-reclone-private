@@ -26,7 +26,7 @@ data class QuranUiState(
     val loadingAssets: Boolean = true,
     val transcript: String = "",
     val evaluation: RecitationEvaluation? = null,
-    val notice: String = "جاري تحميل النص والتوقيتات من مستودع الأصول…",
+    val notice: String = "جاري تجهيز نص Word الحرفي والتوقيتات…",
     val sessions: List<SessionSummary> = emptyList(),
     val correctedErrors: List<CorrectedRecitationError> = emptyList(),
     val goal: DailyGoal = DailyGoal(targetAyahs = 3, completedAyahs = 0, day = ""),
@@ -153,9 +153,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadAssets(mode: AssetMode) {
         viewModelScope.launch {
             try {
-                val text = withContext(Dispatchers.IO) {
-                    if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadText() else assetManager.fetchText()
-                }
                 val timings = withContext(Dispatchers.IO) {
                     if (mode == AssetMode.DOWNLOAD) assetManager.loadOrDownloadTimings() else assetManager.fetchTimings()
                 }
@@ -170,7 +167,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 val requestedSurah = state.value.selectedSurah
                 val prepared = withContext(Dispatchers.Default) {
-                    val parsedRepository = QuranRepository(getApplication(), text)
+                    val parsedRepository = QuranRepository(getApplication())
                     val parsedMetadata = metadataRepository.load()
                     parsedMetadata.requireCompatible(parsedRepository.allAyahs())
                     timingRepository.update(timings)
@@ -215,10 +212,10 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     downloadedAyahs = prepared.downloadedAyahs,
                     modelReady = prepared.modelReady,
                     checkpoint = memorizationProgressStore.read()?.validatedAgainst(prepared.allAyahs),
-                    notice = if (mode == AssetMode.STREAM) "البث المباشر فعال؛ النص والتوقيتات في الذاكرة فقط." else "وضع التنزيل فعال؛ الصوت يُحفظ فقط عندما تختار تنزيله.",
+                    notice = if (mode == AssetMode.STREAM) "النص القرآني من مرجع Word المحلي؛ التوقيتات والصوت في الذاكرة فقط." else "النص القرآني من مرجع Word المحلي؛ وضع التنزيل يحفظ الصوت الذي تختاره.",
                 )
             } catch (error: Throwable) {
-                state.value = state.value.copy(loadingAssets = false, assetsReady = false, notice = "تعذر تحميل الأصول من المستودع العام: ${error.message ?: "خطأ شبكي"}")
+                state.value = state.value.copy(loadingAssets = false, assetsReady = false, notice = "تعذر تجهيز أصول التطبيق المحلية أو التوقيتات: ${error.message ?: "خطأ غير معروف"}")
             }
         }
     }
@@ -867,7 +864,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private fun playCorrection(request: CorrectionRequest) {
         val ayah = state.value.allAyahs.getOrNull(request.ayahIndex) ?: return finishCorrectionPlayback()
         val timings = timingRepository.forAyah(ayah.surah, ayah.ayah)
-        val firstWord = TimingWordMapper.forWord(ayah, timings, request.localWordIndex)
+        val pronunciationWord = pronunciationReference.word(ayah.surah, ayah.ayah, request.localWordIndex)
+        val firstWord = TimingWordMapper.forWord(ayah, timings, request.localWordIndex, pronunciationWord)
             ?: return finishCorrectionPlayback()
         val wholeAyah = if (request.readWholeAyah) TimingWordMapper.wholeAyah(ayah, timings) else null
         val localFile = assetManager.cachedAudioFile(ayah.surah, ayah.ayah)

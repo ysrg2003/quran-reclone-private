@@ -3,7 +3,12 @@ package com.example.quranoffline.data
 import android.content.Context
 import org.json.JSONObject
 
-/** Canonical Quran data loaded from bundled or remotely fetched Tanzil-derived JSON. */
+/**
+ * Canonical Quran data loaded only from the bundled Word-derived asset.
+ *
+ * `text` is the supplied Uthmanic Word spelling. `matchText` is a separate
+ * comparison hint and is never used to render or replace the canonical text.
+ */
 data class QuranWord(
     val index: Int,
     val text: String,
@@ -18,15 +23,12 @@ data class QuranAyah(
     val words: List<QuranWord>,
 )
 
-class QuranRepository(
-    context: Context,
-    private val remoteText: String? = null,
-) {
+class QuranRepository(context: Context) {
     private val appContext = context.applicationContext
     private val ayahs: List<QuranAyah> by lazy {
-        val raw = remoteText ?: runCatching {
-            appContext.assets.open("quran/quran_content.json").bufferedReader().use { it.readText() }
-        }.getOrDefault("")
+        val raw = appContext.assets.open("quran/word_reference_ayahs.json")
+            .bufferedReader()
+            .use { it.readText() }
         parse(raw)
     }
 
@@ -42,53 +44,48 @@ class QuranRepository(
     fun surahNumbers(): List<Int> = ayahs.map { it.surah }.distinct()
 
     companion object {
-        private val basmalaText = listOf("بِسۡمِ", "ٱللَّهِ", "ٱلرَّحۡمَٰنِ", "ٱلرَّحۡيمِ")
-        private val basmalaMatchText = listOf("بسم", "الله", "الرحمان", "الرحيم")
-
         private fun parse(raw: String): List<QuranAyah> {
-            if (raw.isBlank()) return emptyList()
+            require(raw.isNotBlank()) { "word_reference_ayahs.json is empty" }
             val root = JSONObject(raw)
+            require(root.getInt("ayahCount") == 6236) { "Unexpected Word reference ayah count" }
+            require(root.getInt("wordCount") == 77430) { "Unexpected Word reference word count" }
             val items = root.getJSONArray("ayahs")
             return buildList(items.length()) {
                 for (i in 0 until items.length()) {
                     val item = items.getJSONObject(i)
-                    val surah = item.getInt("surah")
-                    val ayah = item.getInt("ayah")
                     val wordsJson = item.getJSONArray("words")
-                    val rawWords = buildList(wordsJson.length()) {
+                    val words = buildList(wordsJson.length()) {
                         for (j in 0 until wordsJson.length()) {
                             val word = wordsJson.getJSONObject(j)
                             add(
                                 QuranWord(
                                     index = word.getInt("index"),
                                     text = word.getString("text"),
-                                    matchText = word.getString("matchText"),
-                                )
+                                    matchText = word.optString("matchText"),
+                                ),
                             )
                         }
                     }
-                    val wordsToKeep = if (isLegacyOpeningBasmala(surah, ayah, rawWords)) rawWords.drop(4) else rawWords
-                    val words = wordsToKeep.mapIndexed { index, word -> word.copy(index = index) }
+                    require(words.map { it.index } == words.indices.toList()) {
+                        "Non-contiguous Word indices at ${item.getInt("surah")}:${item.getInt("ayah")}"
+                    }
+                    val wordText = words.joinToString(" ") { it.text }
                     add(
                         QuranAyah(
-                            surah = surah,
-                            ayah = ayah,
-                            text = words.joinToString(" ") { it.text },
+                            surah = item.getInt("surah"),
+                            ayah = item.getInt("ayah"),
+                            text = wordText,
                             matchText = words.joinToString(" ") { it.matchText },
                             words = words,
-                        )
+                        ),
                     )
                 }
+            }.also { result ->
+                require(result.size == 6236) { "Unexpected parsed Word reference size" }
+                require(result.zipWithNext().all { (first, second) ->
+                    second.surah > first.surah || (second.surah == first.surah && second.ayah > first.ayah)
+                }) { "Word reference ayahs are not in Quran order" }
             }
-        }
-
-        /** Keeps a network-fallback cache on the same contract as the migrated asset. */
-        private fun isLegacyOpeningBasmala(surah: Int, ayah: Int, words: List<QuranWord>): Boolean {
-            if (surah !in 2..114 || surah == 9 || ayah != 1 || words.size < 5) return false
-            val firstText = words.take(4).map { normalizeArabicForComparison(it.text) }
-            val firstMatch = words.take(4).map { normalizeArabicForComparison(it.matchText) }
-            return firstText == basmalaText.map(::normalizeArabicForComparison) &&
-                firstMatch == basmalaMatchText.map(::normalizeArabicForComparison)
         }
     }
 }

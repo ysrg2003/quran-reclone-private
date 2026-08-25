@@ -21,8 +21,15 @@ def main() -> int:
     root = json.loads(args.reference.read_text(encoding="utf-8"))
     rows = root["ayahs"]
     errors: list[str] = []
-    if root.get("schemaVersion") != 1:
-        errors.append("schemaVersion must be 1")
+    if root.get("schemaVersion") != 2:
+        errors.append("schemaVersion must be 2")
+    if root.get("canonicalTextSource") != "UthmanicHafs_V20.doc via word_reference_ayahs.json":
+        errors.append("canonicalTextSource must identify the Word reference")
+    if root.get("legacySegmentationReconciliation", {}).get("mappedAyahs") != [
+        {"surah": 2, "ayah": 181}, {"surah": 8, "ayah": 6}, {"surah": 13, "ayah": 37},
+        {"surah": 15, "ayah": 7}, {"surah": 27, "ayah": 20}, {"surah": 36, "ayah": 22},
+    ]:
+        errors.append("legacy segmentation reconciliation keys are incomplete or out of order")
     if root.get("ayahCount") != 6236 or len(rows) != 6236:
         errors.append(f"ayah count mismatch: metadata={root.get('ayahCount')} rows={len(rows)}")
     if root.get("wordCount") != 77430:
@@ -51,6 +58,8 @@ def main() -> int:
                 errors.append(f"missing spokenTokens at {key[0]}:{key[1]}:{index}")
             if any(position < 0 or position >= len(word["spoken"]) or word["spoken"][position] not in "اويى" for position in word["maddPositions"]):
                 errors.append(f"invalid madd position at {key[0]}:{key[1]}:{index}")
+            if not isinstance(word.get("legacyWordIndices"), list) or not word["legacyWordIndices"]:
+                errors.append(f"missing legacyWordIndices at {key[0]}:{key[1]}:{index}")
     if total_words != 77430:
         errors.append(f"word count mismatch: {total_words}")
     by_key = {(row["surah"], row["ayah"]): row for row in rows}
