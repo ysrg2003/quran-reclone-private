@@ -10,7 +10,7 @@ class OpeningBasmalaTest {
     @Test
     fun completeOpeningBasmalaIsAnIndependentSentence() {
         val result = OpeningBasmalaSpeechFilter.filter(
-            transcript = "بسم الله الرحمن الرحيم",
+            transcript = "بسم الله الرحمان الرحيم",
             isFinal = true,
             segmentCompleted = true,
             alreadyConsumed = false,
@@ -39,7 +39,7 @@ class OpeningBasmalaTest {
     @Test
     fun wrongOpeningBasmalaIsNotPassedAsAnAyahWord() {
         val result = OpeningBasmalaSpeechFilter.filter(
-            transcript = "بسم الله الرحمن الرحيم",
+            transcript = "بسم الله الرحمان الرحيم",
             isFinal = true,
             segmentCompleted = true,
             alreadyConsumed = false,
@@ -60,7 +60,7 @@ class OpeningBasmalaTest {
     @Test
     fun correctBasmalaAndFirstAyahCanArriveInOneRecognizerResult() {
         val result = OpeningBasmalaSpeechFilter.filter(
-            transcript = "بسم الله الرحمن الرحيم الم ذلك",
+            transcript = "بسم الله الرحمان الرحيم الم ذلك",
             isFinal = true,
             segmentCompleted = true,
             alreadyConsumed = false,
