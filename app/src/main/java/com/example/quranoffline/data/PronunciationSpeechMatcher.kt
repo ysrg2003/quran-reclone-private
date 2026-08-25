@@ -61,7 +61,7 @@ object PronunciationSpeechMatcher {
             val expected = normalizeArabicForComparison(expectedUnit)
             val actual = normalizeArabicForComparison(flattenedObserved[index])
             expected == actual ||
-                collapseLongVowelRepeats(actual, expected) == expected ||
+                (word.spokenTokens.size > 1 && collapseLongVowelRepeats(actual, expected) == expected) ||
                 (word.maddPositions.isNotEmpty() && collapseValidMaddRepeats(actual, expected, word.maddPositions) == expected)
         }
     }
