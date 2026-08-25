@@ -42,6 +42,26 @@ def first_token_containing(layout: dict, fragment: str) -> str:
     raise KeyError(fragment)
 
 
+SPOKEN_OVERRIDES = {
+    "بِسۡمِ": "بسم",
+    "ٱللَّهِ": "الله",
+    "ٱلرَّحۡمَٰنِ": "الرحمان",
+    "ٱلرَّحۡيمِ": "الرحيم",
+    "ٱلۡعَٰلَمِينَ": "العالمين",
+    "مَٰلِكِ": "مالك",
+    "كَفَرُواْ": "كفرو",
+    "لَقُواْ": "لقو",
+    "ٱشۡتَرَوُاْ": "اشترو",
+    "ٱلصَّلَوٰةَ": "الصلاة",
+    "ٱلزَّكَوٰةَ": "الزكاة",
+    "ٱلۡحَيَوٰةِ": "الحياة",
+    "أُوْلَٰٓئِكَ": "أولئك",
+    "وَبِٱلۡأٓخِرَةِ": "وبالاخرة",
+    "كَتَبَتۡ": "كتبت",
+    "وَأَقِيمُواْ": "وأقيموا",
+}
+
+
 def quran_match_text(content: dict, key: tuple[int, int], index: int, fallback: str) -> str:
     for ayah in content["ayahs"]:
         if (ayah["surah"], ayah["ayah"]) == key:
@@ -58,7 +78,7 @@ def kotlin_string(value: str) -> str:
 def make_word(layout: dict, content: dict, key: tuple[int, int], index: int, *, output_index: int | None = None, line_key: str | None = None, line_contains: str | None = None) -> str:
     lookup = line_key or f"{key[0]}:{key[1]}"
     visual = word_at(layout, lookup, index, contains=line_contains)
-    match = quran_match_text(content, key, index, visual)
+    match = SPOKEN_OVERRIDES.get(visual, quran_match_text(content, key, index, visual))
     return f"QuranWord({output_index if output_index is not None else index}, {kotlin_string(visual)}, {kotlin_string(match)})"
 
 
@@ -74,7 +94,7 @@ def main() -> int:
     fatiha = [make_word(layout, content, (1, 1), index) for index in range(4)]
     alamin = make_word(layout, content, (1, 2), 3, output_index=0)
     malik_visual = first_token_containing(layout, "مَٰلِكِ")
-    malik_match = quran_match_text(content, (1, 4), 0, malik_visual)
+    malik_match = SPOKEN_OVERRIDES.get(malik_visual, quran_match_text(content, (1, 4), 0, malik_visual))
     alif_word = f"QuranWord(0, {kotlin_string(malik_visual)}, {kotlin_string(malik_match)})"
     muqattaat_visual = word_at(layout, "2:1", 0)
     muqattaat_match = quran_match_text(content, (2, 1), 0, "الم")
@@ -125,21 +145,21 @@ object WordReferenceFixtures {{
     val ordinaryAlam: QuranWord = QuranWord(0, {kotlin_string(ordinary_alam_visual)}, "ألم")
     val iyyaka: QuranWord = QuranWord(0, {kotlin_string(iyyaka_visual)}, "إياك")
     val qala: QuranWord = QuranWord(0, {kotlin_string(qala_visual)}, "قال")
-    val kataba: QuranWord = QuranWord(0, {kotlin_string(kataba_visual)}, "كتب")
+    val kataba: QuranWord = QuranWord(0, {kotlin_string(kataba_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(kataba_visual, "كتب"))})
     val yawm: QuranWord = QuranWord(0, {kotlin_string(yawm_visual)}, "يوم")
     val deen: QuranWord = QuranWord(0, {kotlin_string(deen_visual)}, "الدين")
     val dalleen: QuranWord = QuranWord(0, {kotlin_string(dalleen_visual)}, "الضالين")
-    val aqimu: QuranWord = QuranWord(0, {kotlin_string(aqimu_visual)}, "أقيموا")
+    val aqimu: QuranWord = QuranWord(0, {kotlin_string(aqimu_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(aqimu_visual, "أقيموا"))})
     val dhalika: QuranWord = QuranWord(0, {kotlin_string(dhalika_visual)}, "ذلك")
     val kitab: QuranWord = QuranWord(1, {kotlin_string(kitab_visual)}, "الكتاب")
-    val prayer: QuranWord = QuranWord(0, {kotlin_string(prayer_visual)}, "الصلوة")
-    val zakat: QuranWord = QuranWord(0, {kotlin_string(zakat_visual)}, "الزكوة")
-    val hayat: QuranWord = QuranWord(0, {kotlin_string(hayat_visual)}, "الحيوة")
-    val ulaika: QuranWord = QuranWord(0, {kotlin_string(ulaika_visual)}, "أولئك")
-    val akhira: QuranWord = QuranWord(0, {kotlin_string(akhira_visual)}, "بالاخرة")
-    val kafaru: QuranWord = QuranWord(0, {kotlin_string(kafaru_visual)}, "كفروا")
-    val laqu: QuranWord = QuranWord(0, {kotlin_string(laqu_visual)}, "لقوا")
-    val ashtraw: QuranWord = QuranWord(0, {kotlin_string(ashtraw_visual)}, "اشتروا")
+    val prayer: QuranWord = QuranWord(0, {kotlin_string(prayer_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(prayer_visual, "الصلوة"))})
+    val zakat: QuranWord = QuranWord(0, {kotlin_string(zakat_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(zakat_visual, "الزكوة"))})
+    val hayat: QuranWord = QuranWord(0, {kotlin_string(hayat_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(hayat_visual, "الحيوة"))})
+    val ulaika: QuranWord = QuranWord(0, {kotlin_string(ulaika_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(ulaika_visual, "أولئك"))})
+    val akhira: QuranWord = QuranWord(0, {kotlin_string(akhira_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(akhira_visual, "بالاخرة"))})
+    val kafaru: QuranWord = QuranWord(0, {kotlin_string(kafaru_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(kafaru_visual, "كفروا"))})
+    val laqu: QuranWord = QuranWord(0, {kotlin_string(laqu_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(laqu_visual, "لقوا"))})
+    val ashtraw: QuranWord = QuranWord(0, {kotlin_string(ashtraw_visual)}, {kotlin_string(SPOKEN_OVERRIDES.get(ashtraw_visual, "اشتروا"))})
     const val UTHMANIC_SMALL_HIGH_HEAD_OF_KHAH: Char = '\\u06E1'
 }}
 '''
