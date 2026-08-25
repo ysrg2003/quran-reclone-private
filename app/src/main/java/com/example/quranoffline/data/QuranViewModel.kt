@@ -68,6 +68,7 @@ private data class PreparedAssets(
     val metadata: QuranMetadata,
     val pageLayout: QuranLayout,
     val wordReferenceLayout: WordReferenceLayout,
+    val pronunciationReference: PronunciationReference,
     val allAyahs: List<QuranAyah>,
     val ayahs: List<QuranAyah>,
     val pageWordOffset: Int,
@@ -88,6 +89,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val correctionSettingsStore = LocalCorrectionSettingsStore(application)
     private val timingRepository = ReferenceTimingRepository()
     private val referenceAudioPlayer = ReferenceAudioPlayer()
+    private var pronunciationReference = PronunciationReference.fromJson("")
     private var onlineSession: OnlineSpeechSession? = null
     private var localSession: LocalRecitationSession? = null
     private var progressTracker: RecitationProgressTracker? = null
@@ -163,6 +165,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val wordReferenceLayout = withContext(Dispatchers.IO) {
                     WordReferenceLayout.load(getApplication())
                 }
+                val pronunciationReference = withContext(Dispatchers.IO) {
+                    PronunciationReference.load(getApplication())
+                }
                 val requestedSurah = state.value.selectedSurah
                 val prepared = withContext(Dispatchers.Default) {
                     val parsedRepository = QuranRepository(getApplication(), text)
@@ -171,6 +176,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     timingRepository.update(timings)
                     val parsedPageLayout = QuranLayout.fromJson(pageLayout)
                     check(wordReferenceLayout.pageCount == parsedMetadata.pages.size) { "Word reference page count does not match Quran metadata" }
+                    check(pronunciationReference.size() == parsedRepository.allAyahs().size) { "Pronunciation reference ayah count does not match Quran text" }
                     val allAyahs = parsedRepository.allAyahs()
                     check(parsedPageLayout.pageCount == parsedMetadata.pages.size) { "Page layout page count does not match Quran metadata" }
                     check(parsedPageLayout.wordCount == allAyahs.sumOf { it.words.size }) { "Page layout word count does not match Quran text" }
@@ -187,6 +193,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                         metadata = parsedMetadata,
                         pageLayout = parsedPageLayout,
                         wordReferenceLayout = wordReferenceLayout,
+                        pronunciationReference = pronunciationReference,
                         allAyahs = allAyahs,
                         ayahs = visiblePage,
                         pageWordOffset = globalWordOffset(allAyahs, visiblePage.firstOrNull()),
@@ -197,6 +204,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 repository = prepared.repository
+                this@QuranViewModel.pronunciationReference = prepared.pronunciationReference
                 state.value = state.value.copy(
                     ayahs = prepared.ayahs, allAyahs = prepared.allAyahs, metadata = prepared.metadata, pageLayout = prepared.pageLayout, wordReferenceLayout = prepared.wordReferenceLayout, selectedSurah = prepared.selectedSurah,
                     currentPage = prepared.wordReferenceLayout.pageForAyah(prepared.selectedSurah, 1) ?: prepared.metadata.ayah(prepared.selectedSurah, 1)?.page ?: 1,
@@ -506,7 +514,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         }
         val startAyahIndex = savedAyahIndex ?: (if (pageStart >= 0) pageStart else selectedSurahStart).coerceAtLeast(0)
         val startWordIndex = if (savedAyahIndex != null) savedCheckpoint?.wordIndex ?: 0 else 0
-        val tracker = RecitationProgressTracker(state.value.allAyahs, correctionSettings = state.value.correctionSettings)
+        val tracker = RecitationProgressTracker(
+            state.value.allAyahs,
+            pronunciationReference = pronunciationReference,
+            correctionSettings = state.value.correctionSettings,
+        )
         tracker.startFromPosition(startAyahIndex, startWordIndex)
         progressTracker = tracker
         // At every eligible surah opening, listen for an optional standalone
@@ -567,7 +579,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         recognitionGeneration++
         onlineSession?.stop(); onlineSession = null
         localSession?.stop(); localSession = null
-        val tracker = RecitationProgressTracker(state.value.allAyahs, correctionSettings = state.value.correctionSettings)
+        val tracker = RecitationProgressTracker(
+            state.value.allAyahs,
+            pronunciationReference = pronunciationReference,
+            correctionSettings = state.value.correctionSettings,
+        )
         tracker.startFromAyah(previousAyahIndex)
         openingBasmalaConsumed = !shouldListenForOpeningBasmala(previousAyahIndex)
         openingBasmalaDetected = false
@@ -639,7 +655,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     // while the trailing ayah words continue below.
                 }
 
-                val tracker = progressTracker ?: RecitationProgressTracker(previousState.allAyahs, correctionSettings = previousState.correctionSettings).also { progressTracker = it }
+                val tracker = progressTracker ?: RecitationProgressTracker(
+                    previousState.allAyahs,
+                    pronunciationReference = pronunciationReference,
+                    correctionSettings = previousState.correctionSettings,
+                ).also { progressTracker = it }
                 val result = tracker.update(
                     RecitationProgressInput(
                         transcript = filteredTranscript,

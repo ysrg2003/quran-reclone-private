@@ -134,7 +134,7 @@ object Muqattaat {
                 val forms = pronunciation.units
                 if (index + forms.size > normalized.size) return@firstNotNullOfOrNull null
                 val slice = normalized.subList(index, index + forms.size)
-                if (slice.indices.all { forms[it].spokenForms.map(::normalizeSpeech).contains(slice[it]) }) {
+                if (slice.indices.all { speechNameMatches(forms[it], slice[it]) }) {
                     pronunciation to forms.size
                 } else null
             }
@@ -144,7 +144,7 @@ object Muqattaat {
                 continue
             }
             val single = letterDefinitions.values.firstOrNull { definition ->
-                definition.spokenForms.map(::normalizeSpeech).contains(normalized[index])
+                speechNameMatches(definition, normalized[index])
             }
             if (single != null) result += single.shortName else result += tokens[index]
             index++
@@ -159,7 +159,7 @@ object Muqattaat {
         val pronunciation = pronunciationFor(visualToken, matchToken) ?: return false
         val observedForms = normalizeSpeech(observed).split(' ').filter(String::isNotBlank)
         val spoken = pronunciation.units.flatMap { it.spokenForms }.map(::normalizeSpeech).toSet()
-        if (observedForms.size == pronunciation.units.size && observedForms.indices.all { pronunciation.units[it].spokenForms.map(::normalizeSpeech).contains(observedForms[it]) }) return true
+        if (observedForms.size == pronunciation.units.size && observedForms.indices.all { speechNameMatches(pronunciation.units[it], observedForms[it]) }) return true
         return observedForms.size == 1 && canonicalLetters(observedForms.single()) == pronunciation.matchToken && observedForms.single() !in spoken
     }
 
@@ -167,7 +167,52 @@ object Muqattaat {
         val pronunciation = pronunciationFor(word) ?: return false
         val observedForms = normalizeSpeech(observed).split(' ').filter(String::isNotBlank)
         if (observedForms.isEmpty() || observedForms.size >= pronunciation.units.size) return false
-        return observedForms.indices.all { pronunciation.units[it].spokenForms.map(::normalizeSpeech).contains(observedForms[it]) }
+        return observedForms.indices.all { speechNameMatches(pronunciation.units[it], observedForms[it]) }
+    }
+
+    private fun speechNameMatches(definition: MuqattaatLetter, observed: String): Boolean {
+        val normalizedObserved = normalizeSpeech(observed)
+        return definition.spokenForms.any { form ->
+            val expected = normalizeSpeech(form)
+            normalizedObserved == expected || collapseLongVowelRepeats(normalizedObserved, expected) == expected || duplicatedOnsetWithMadd(normalizedObserved, expected) || stretchedFinalConsonant(normalizedObserved, expected)
+        }
+    }
+
+    private fun collapseLongVowelRepeats(observed: String, expected: String): String {
+        if (observed.isBlank() || expected.isBlank()) return observed
+        val result = StringBuilder()
+        var expectedIndex = 0
+        var observedIndex = 0
+        while (observedIndex < observed.length && expectedIndex < expected.length) {
+            val current = observed[observedIndex]
+            val target = expected[expectedIndex]
+            if (current != target) return observed
+            result.append(target)
+            observedIndex++
+            expectedIndex++
+            if (target in "اوي") {
+                while (observedIndex < observed.length && observed[observedIndex] == target) observedIndex++
+            }
+        }
+        return if (observedIndex == observed.length && expectedIndex == expected.length) result.toString() else observed
+    }
+
+    /**
+     * Some Arabic recognizers repeat the initial consonant while decoding a
+     * long letter name, e.g. `مميييم`. Accept that narrow form only if the
+     * remaining name matches after valid long-vowel collapse; ordinary Quran
+     * words never use this path.
+     */
+    private fun duplicatedOnsetWithMadd(observed: String, expected: String): Boolean {
+        if (observed.length <= expected.length || observed.firstOrNull() != expected.firstOrNull()) return false
+        return collapseLongVowelRepeats(observed.drop(1), expected) == expected
+    }
+
+    /** Provider-compatible tail stretch for letter names only; ordinary words never use this path. */
+    private fun stretchedFinalConsonant(observed: String, expected: String): Boolean {
+        if (observed.length <= expected.length || !observed.startsWith(expected)) return false
+        val tail = observed.drop(expected.length)
+        return tail.isNotEmpty() && tail.all { it == expected.last() } && expected.last() !in "اوي"
     }
 
     private fun canonicalLetters(value: String): String = normalizeSpeech(value)
@@ -190,9 +235,5 @@ object Muqattaat {
         .replace("ْ", "")
         .replace("ّ", "")
         .replace("ٰ", "")
-        // The recognizer may spell a two- or six-haraka madd as repeated
-        // Arabic letters. Collapse those repetitions only in the speech token;
-        // the Word/reference text is never changed.
-        .replace(Regex("([\\u0600-\\u06ff])\\1+"), "$1")
         .trim()
 }

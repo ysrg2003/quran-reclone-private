@@ -53,6 +53,7 @@ data class RecitationProgressResult(
  */
 class RecitationProgressTracker(
     private val ayahs: List<QuranAyah>,
+    private val pronunciationReference: PronunciationReference = PronunciationReference.fromJson(""),
     private val rollbackWindow: Int = 3,
     private val jumpConfirmationWords: Int = 2,
     correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
@@ -162,7 +163,13 @@ class RecitationProgressTracker(
         if (stable) {
             stopProcessingSegment = false
             val newTokens = suffixAfterCommitted(tokens)
+            val contextWordIndex = currentGlobalWordIndex()
+            val contextMatched = matchCompleteAyahFromReference(newTokens)
+            if (contextMatched) spokenGlobalWordIndex = contextWordIndex
             var index = 0
+            if (contextMatched) {
+                index = newTokens.size
+            }
             while (index < newTokens.size) {
                 var token = newTokens[index]
                 val expectedCurrent = ayahs.getOrNull(currentAyahIndex)?.words?.getOrNull(nextWordInAyah)
@@ -267,7 +274,7 @@ class RecitationProgressTracker(
 
         if (awaitingResume) {
             val resumeIndex = expected.indices
-                .filter { quranWordMatches(expectedWords[it], token) }
+                .filter { matchesWord(currentAyahIndex, it, token) }
                 .minByOrNull { kotlin.math.abs(it - resumeAnchorLocalIndex) }
             if (resumeIndex != null) {
                 awaitingResume = false
@@ -295,10 +302,10 @@ class RecitationProgressTracker(
         }
 
         val current = nextWordInAyah.coerceIn(0, expected.lastIndex)
-        val exactCurrent = quranWordMatches(expectedWords[current], token)
+        val exactCurrent = matchesWord(currentAyahIndex, current, token)
         val rollbackStart = (current - rollbackWindow).coerceAtLeast(0)
-        val rollbackMatch = (rollbackStart until current).firstOrNull { quranWordMatches(expectedWords[it], token) }
-        val laterMatch = ((current + 1)..expected.lastIndex).firstOrNull { quranWordMatches(expectedWords[it], token) }
+        val rollbackMatch = (rollbackStart until current).firstOrNull { matchesWord(currentAyahIndex, it, token) }
+        val laterMatch = ((current + 1)..expected.lastIndex).firstOrNull { matchesWord(currentAyahIndex, it, token) }
 
         return when {
             exactCurrent -> {
@@ -371,9 +378,9 @@ class RecitationProgressTracker(
         val previousWords = ayahs[currentAyahIndex - 1].words
         val confirmationCount = minOf(jumpConfirmationWords, previousWords.size)
         if (confirmationCount <= 0 || segmentIndex + confirmationCount > segment.size) return false
-        if (quranWordMatches(currentWords.first(), segment[segmentIndex])) return false
+        if (matchesWord(currentAyahIndex, 0, segment[segmentIndex])) return false
         return (0 until confirmationCount).all { offset ->
-            quranWordMatches(previousWords[offset], segment[segmentIndex + offset])
+            matchesWord(currentAyahIndex - 1, offset, segment[segmentIndex + offset])
         }
     }
 
@@ -385,7 +392,7 @@ class RecitationProgressTracker(
         } else {
             listOf(nextWordInAyah.coerceIn(0, expectedWords.lastIndex))
         }
-        return candidateIndices.any { quranWordMatches(expectedWords[it], token) }
+        return candidateIndices.any { matchesWord(currentAyahIndex, it, token) }
     }
 
     private fun isPotentialWordPrefix(token: String): Boolean {
@@ -415,13 +422,13 @@ class RecitationProgressTracker(
         var maximum = 0
         for (token in segment.drop(segmentIndex)) {
             if (expectedIndex >= expected.size) break
-            if (quranWordMatches(expected[expectedIndex], token)) {
+            if (matchesWord(currentAyahIndex, expectedIndex, token)) {
                 maximum = maxOf(maximum, issueCount)
                 issueCount = 0
                 expectedIndex++
                 continue
             }
-            val later = ((expectedIndex + 1)..expected.lastIndex).firstOrNull { quranWordMatches(expected[it], token) }
+            val later = ((expectedIndex + 1)..expected.lastIndex).firstOrNull { matchesWord(currentAyahIndex, it, token) }
             if (later != null) {
                 issueCount += later - expectedIndex
                 expectedIndex = later + 1
@@ -437,9 +444,11 @@ class RecitationProgressTracker(
         if (segmentIndex + jumpConfirmationWords > segment.size) return false
         if (currentAyahIndex + 1 !in ayahs.indices) return false
         val phrase = segment.subList(segmentIndex, segmentIndex + jumpConfirmationWords)
-        return ayahs.drop(currentAyahIndex + 1).any { ayah ->
-            val start = ayah.words.take(jumpConfirmationWords)
-            start.size >= jumpConfirmationWords && start.indices.all { quranWordMatches(start[it], phrase[it]) }
+        return (currentAyahIndex + 1 until ayahs.size).any { candidateAyahIndex ->
+            val start = ayahs[candidateAyahIndex].words.take(jumpConfirmationWords)
+            start.size >= jumpConfirmationWords && start.indices.all {
+                matchesWord(candidateAyahIndex, it, phrase[it])
+            }
         }
     }
 
@@ -447,7 +456,7 @@ class RecitationProgressTracker(
         if (currentAyahIndex !in ayahs.indices) return fallback
         val start = ayahStarts[currentAyahIndex]
         val candidates = ayahs[currentAyahIndex].words.indices.filter { local ->
-            quranWordMatches(ayahs[currentAyahIndex].words[local], token)
+            matchesWord(currentAyahIndex, local, token)
         }
         return candidates.minByOrNull { local -> kotlin.math.abs(start + local - fallback) }?.let(start::plus) ?: fallback
     }
@@ -592,6 +601,40 @@ class RecitationProgressTracker(
         missing = missingCount,
         unexpected = unexpectedCount,
     )
+
+    /**
+     * Uses the complete Sheikh-derived ayah phrase as a second-level check.
+     * It runs only at the beginning of an ayah and only on a stable complete
+     * phrase, so it cannot skip an unresolved word or unlock the next ayah.
+     */
+    private fun matchCompleteAyahFromReference(tokens: List<String>): Boolean {
+        if (tokens.isEmpty() || nextWordInAyah != 0 || awaitingResume || committedTokens.isNotEmpty()) return false
+        val ayah = ayahs.getOrNull(currentAyahIndex) ?: return false
+        val reference = pronunciationReference.ayah(ayah.surah, ayah.ayah) ?: return false
+        if (!PronunciationSpeechMatcher.matchesAyahPhrase(reference, tokens)) return false
+        val observedUnits = tokens.flatMap { it.split(' ').filter(String::isNotBlank) }
+        var observedIndex = 0
+        ayah.words.indices.forEach { localIndex ->
+            val referenceWord = reference.words.getOrNull(localIndex) ?: return@forEach
+            val unitCount = referenceWord.spokenTokens.ifEmpty { listOf(referenceWord.spoken) }.size
+            val observed = observedUnits.drop(observedIndex).take(unitCount).joinToString(" ")
+            markMatched(localIndex, observed)
+            observedIndex += unitCount
+        }
+        nextWordInAyah = ayah.words.size
+        advanceAyah()
+        return true
+    }
+
+    private fun matchesWord(ayahIndex: Int, localWordIndex: Int, observed: String): Boolean {
+        val ayah = ayahs.getOrNull(ayahIndex) ?: return false
+        val word = ayah.words.getOrNull(localWordIndex) ?: return false
+        return PronunciationSpeechMatcher.matches(
+            word = word,
+            pronunciation = pronunciationReference.word(ayah.surah, ayah.ayah, localWordIndex),
+            observed = observed,
+        )
+    }
 
     private fun tokenize(text: String): List<String> = Muqattaat.coalesceSpeechTokens(
         normalizeArabicForComparison(text).split(' ').filter(String::isNotBlank)
