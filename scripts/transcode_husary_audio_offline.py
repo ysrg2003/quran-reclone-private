@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = Path(os.environ.get("HUSARY_SOURCE_DIR", str(ROOT / "app/src/offline/assets/quran/audio/husary")))
+SOURCE = Path(os.environ.get("HUSARY_SOURCE_DIR", str(ROOT.parent / "quran-husary-mp3-source")))
 DEST = ROOT / "app/src/offline/assets/quran/audio/husary_aac"
 MANIFEST = ROOT / "app/src/offline/assets/quran/audio/husary_aac_manifest.json"
 WORKERS = min(4, max(2, os.cpu_count() or 2))

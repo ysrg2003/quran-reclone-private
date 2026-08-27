@@ -1721,6 +1721,19 @@ private fun MushafPageSurface(
     onLongPressAyah: (Int, Int) -> Unit,
 ) {
     var horizontalDrag by remember { mutableFloatStateOf(0f) }
+    // Build the expensive lookup structures once per page surface. Reusing
+    // them across lines avoids O(lineCount * allAyahCount) recomposition work.
+    val allAyahsByKey = remember(state.allAyahs) {
+        state.allAyahs.associateBy { it.selectionKey() }
+    }
+    val pageAyahsByKey = remember(pageAyahs) {
+        pageAyahs.associateBy { it.selectionKey() }
+    }
+    val ayahIndexByKey = remember(state.allAyahs) {
+        state.allAyahs.mapIndexed { index, ayah -> ayah.selectionKey() to index }.toMap()
+    }
+    val wordOffsets = remember(state.allAyahs) { buildWordOffsets(state.allAyahs) }
+    val selectedIndices = remember(state.selectedAyahIndices) { state.selectedAyahIndices.toSet() }
     val isOpeningPage = state.currentPage <= 2
     Card(
         modifier = Modifier
@@ -1777,6 +1790,11 @@ private fun MushafPageSurface(
                             state = state,
                             pageAyahs = pageAyahs,
                             textScale = textScale,
+                            ayahsByKey = allAyahsByKey,
+                            pageAyahsByKey = pageAyahsByKey,
+                            ayahIndexByKey = ayahIndexByKey,
+                            wordOffsets = wordOffsets,
+                            selectedIndices = selectedIndices,
                             onPlayBasmala = onPlayBasmala,
                             onSetStart = onSetStart,
                             onMemorizeFromHere = onMemorizeFromHere,

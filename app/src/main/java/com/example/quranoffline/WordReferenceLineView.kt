@@ -32,6 +32,11 @@ internal fun WordReferenceLineView(
     state: QuranUiState,
     pageAyahs: List<QuranAyah>,
     textScale: Float,
+    ayahsByKey: Map<String, QuranAyah>,
+    pageAyahsByKey: Map<String, QuranAyah>,
+    ayahIndexByKey: Map<String, Int>,
+    wordOffsets: List<Int>,
+    selectedIndices: Set<Int>,
     onPlayBasmala: (Int) -> Unit,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
@@ -43,15 +48,9 @@ internal fun WordReferenceLineView(
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
 ) {
-    val ayahs = line.ayahKeys.mapNotNull { key ->
-        val parts = key.split(':')
-        val surah = parts.getOrNull(0)?.toIntOrNull() ?: return@mapNotNull null
-        val ayah = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
-        state.allAyahs.firstOrNull { it.surah == surah && it.ayah == ayah }
-            ?: pageAyahs.firstOrNull { it.surah == surah && it.ayah == ayah }
-    }
+    val ayahs = line.ayahKeys.mapNotNull { key -> ayahsByKey[key] ?: pageAyahsByKey[key] }
     val primary = ayahs.firstOrNull()
-    val selected = ayahs.any { state.selectedAyahIndices.contains(state.allAyahs.indexOf(it)) }
+    val selected = ayahs.any { ayahIndexByKey[it.selectionKey()]?.let(selectedIndices::contains) == true }
     val active = ayahs.any { state.readerCurrentKey == it.selectionKey() }
     val background = when {
         selected -> Color(0xFFFFE0A6)
@@ -115,7 +114,7 @@ internal fun WordReferenceLineView(
                 .horizontalScroll(rememberScrollState(), reverseScrolling = true),
         ) {
             Text(
-                text = annotatedWordReferenceLine(line, state),
+                text = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets),
                 modifier = Modifier.fillMaxWidth(),
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
@@ -134,24 +133,32 @@ internal fun WordReferenceLineView(
  * this baseline layout has ayah ranges, not a trusted word-coordinate map.
  */
 internal fun annotatedWordReferenceLine(line: WordReferenceLine, state: QuranUiState): AnnotatedString {
+    val ayahsByKey = state.allAyahs.associateBy { it.selectionKey() }
+    val indexes = state.allAyahs.mapIndexed { index, ayah -> ayah.selectionKey() to index }.toMap()
+    return annotatedWordReferenceLine(line, state, ayahsByKey, indexes, buildWordOffsets(state.allAyahs))
+}
+
+private fun annotatedWordReferenceLine(
+    line: WordReferenceLine,
+    state: QuranUiState,
+    ayahsByKey: Map<String, QuranAyah>,
+    ayahIndexByKey: Map<String, Int>,
+    wordOffsets: List<Int>,
+): AnnotatedString {
     val evaluation = state.evaluation ?: return AnnotatedString(line.text)
     if (line.type != "ayah" || state.hidden) return AnnotatedString(line.text)
 
     val ranges = mutableListOf<Triple<Int, Int, Color>>()
     line.ayahKeys.forEach { key ->
-        val parts = key.split(':')
-        val surah = parts.getOrNull(0)?.toIntOrNull() ?: return@forEach
-        val ayahNumber = parts.getOrNull(1)?.toIntOrNull() ?: return@forEach
-        val ayah = state.allAyahs.firstOrNull { it.surah == surah && it.ayah == ayahNumber }
-            ?: return@forEach
-        val ayahIndex = state.allAyahs.indexOf(ayah)
-        if (ayahIndex < 0) return@forEach
+        val ayah = ayahsByKey[key] ?: return@forEach
+        val ayahIndex = ayahIndexByKey[key] ?: return@forEach
         var searchFrom = 0
         ayah.words.forEachIndexed { localIndex, word ->
             val start = line.text.indexOf(word.text, searchFrom)
             if (start < 0) return@forEachIndexed
             val end = start + word.text.length
-            val status = evaluation.words.getOrNull(globalWordIndex(state, ayahIndex, localIndex))?.status
+            val globalIndex = wordOffsets.getOrNull(ayahIndex)?.plus(localIndex) ?: return@forEachIndexed
+            val status = evaluation.words.getOrNull(globalIndex)?.status
             val color = statusHighlightColor(status)
             if (color != null) ranges += Triple(start, end, color)
             searchFrom = end
@@ -166,9 +173,15 @@ internal fun annotatedWordReferenceLine(line: WordReferenceLine, state: QuranUiS
     }
 }
 
-private fun globalWordIndex(state: QuranUiState, ayahIndex: Int, localWordIndex: Int): Int {
-    if (ayahIndex !in state.allAyahs.indices) return -1
-    return state.allAyahs.take(ayahIndex).sumOf { it.words.size } + localWordIndex
+internal fun buildWordOffsets(ayahs: List<QuranAyah>): List<Int> {
+    val offsets = ArrayList<Int>(ayahs.size + 1)
+    var offset = 0
+    ayahs.forEach { ayah ->
+        offsets += offset
+        offset += ayah.words.size
+    }
+    offsets += offset
+    return offsets
 }
 
 private fun statusHighlightColor(status: WordStatus?): Color? = when (status) {

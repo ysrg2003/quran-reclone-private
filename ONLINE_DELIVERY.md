@@ -1,31 +1,97 @@
 # Online Delivery
 
-## مستودعات GitHub
+## الغرض وحدود التوزيع
 
-- الكود الخاص: https://github.com/ysrg2003/quran-memorization-online
-- الأصول العامة: https://github.com/ysrg2003/quran-memorization-assets
-- إصدار النموذج: https://github.com/ysrg2003/quran-memorization-assets/releases/tag/v0.1.0
+`online` هو flavor Android مستقل للتسميع عبر `SpeechRecognizer` الموجود في Android. تبقى قاعدة النص العثماني والتخطيط وmetadata وطبقة pronunciation وتوقيتات Husary محلية داخل APK، بينما صوت الحصري عند القراءة أو التصحيح يُجلب عبر HTTPS عند الحاجة. هذا المستودع مرشح **للاختبار الداخلي فقط**؛ لا توجد clearance عامة أو تجارية للأصول الجوهرية.
 
-## الأوضاع
+## البناء من الصفر
 
-| الوضع | السلوك |
+نفّذ الأوامر التالية من جذر المستودع:
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export ANDROID_SDK_ROOT=/home/ubuntu/tools/android-sdk
+/home/ubuntu/tools/gradle-8.10.2/bin/gradle :app:assembleOnlineDebug --no-daemon
+```
+
+النجاح المتوقع هو `BUILD SUCCESSFUL` ووجود:
+
+```text
+app/build/outputs/apk/online/debug/app-online-debug.apk
+```
+
+إذا ظهر خطأ `SDK location not found`، تحقق من `ANDROID_SDK_ROOT` ومسار `platforms/android-35`. إذا ظهر خطأ Java، استخدم JDK يحتوي `javac` واضبط `JAVA_HOME` قبل إعادة الأمر.
+
+## ما يدخل Online وما لا يدخل
+
+| المكوّن | Online |
 |---|---|
-| البث المباشر | يجلب النص والتوقيتات إلى الذاكرة، ويبث MP3 من `raw.githubusercontent.com` عند الحاجة، ولا يحفظ الأصول |
-| التنزيل الاختياري | يحفظ النص والتوقيتات في `filesDir`، ولا يحفظ صوت السورة إلا بعد ضغط «تنزيل السورة» |
-| المحلي بعد التنزيل | يعيد استخدام الصوت الموجود، ويمكن حذف ملفات السورة وإعادة تنزيلها |
+| Word canonical/layout/preview | موجود محلياً |
+| `pronunciation_reference.json` | موجود محلياً |
+| QUL Husary timing | موجود محلياً |
+| MP3/M4A الحصري | غير محزم؛ يطلب URL عند الحاجة |
+| FastConformer model | غير موجود |
+| sherpa AAR/native | غير موجود في variant Online |
+| `INTERNET` | موجود |
+| `RECORD_AUDIO` | موجود |
 
-التطبيق لا يرفع ملفات صوت المستخدم إلى خادم خاص به، لكنه يتيح محركين للتسميع: `SpeechRecognizer` المتاح في Android للتعرف Online، وFastConformer عبر sherpa-onnx للتعرف Offline بعد تنزيل النموذج من GitHub Release. في محرك Online يجب إظهار أن مزود النظام قد يعالج الصوت خارج الجهاز. نهاية مقطع الكلام أو الصمت القصير لا تنهي جلسة Online؛ يعاد فتح مقطع التعرف ما دام المستخدم لم يضغط إيقافاً. في محرك Offline يعالج الصوت محلياً ولا يحتاج التعرف إلى الإنترنت.
+لا يوجد في Online وضع Offline صامت. flavor يحدد engine؛ لذلك لا ينبغي توثيق Online على أنه يضم نموذجاً محلياً أو ملفات الصوت الكبيرة.
 
-## التصميم والمهارات المكيّفة
+## التشغيل الأول
 
-أُعيد ترتيب الشاشة بحيث يظهر «ورد اليوم» والمصحف وزر «ابدأ التسميع» قبل الإعدادات الثانوية، مع فصل واضح بين تبويب «التسميع» وزر بدء الجلسة. عند إخفاء النص أثناء التسميع تظهر الكلمة التي التقطها الجهاز في بطاقة مستقلة، وتُستخدم ألوان أخضر زمردي وذهبي هادئ وبطاقات ذات تسلسل بصري واضح. موجز التصميم ونظام تسمية الصور موجودان في `docs/DESIGN_BRIEF.md`.
+بعد تثبيت `app-online-debug.apk` وفتح التطبيق، تظهر واجهة preview للصفحات 1–5 أولاً، ثم يكتمل تحميل المصحف والتوقيتات في الخلفية. اختر بدء التسميع بعد منح `RECORD_AUDIO`. صمت أو نفس قصير لا ينهي الجلسة: `OnlineSpeechSession` يراكم partial/final ويعيد فتح مقطع provider بعد النتائج أو الخطأ العابر. قد يعالج مزود Android الصوت خارج الجهاز، لذلك لا يوصف Online بأنه معالجة خاصة بالكامل.
 
-تم تكييف المهارات الثلاث مع Kotlin/Jetpack Compose وStream/Download وSpeechRecognizer وFastConformer وADB في `docs/skills/`: `quran-android-vibe-engineering.md` و`quran-android-backend-reliability.md` و`quran-android-interface-craft.md`. لا تحتوي APK Online على أصول القرآن الكبيرة.
+عند قراءة آية كاملة، يبدأ المشغل من offset `0` حتى لا يقص صوتاً يسبق أول QUL cue. عند تصحيح كلمة منفردة، يستخدم المشغل نافذة الكلمة مع padding محدود داخل الصمت. البسملة الافتتاحية مستقلة ولا تُحسب من آيات السورة، ويجب تصحيح كلمة البسملة المفقودة قبل السماح بانتقال الكلمات اللاحقة.
 
-## الاختبار
+## فحص APK
 
-نجح `:app:testDebugUnitTest` و`:app:assembleDebug --offline` و`:app:lintDebug` من مستودع الكود بعد التعديلات. حجم APK Online الناتج نحو 56MB لأنه لا يضم نص القرآن أو التوقيتات أو الصوت أو نموذج ASR. نموذج Offline يُنزّل اختيارياً إلى `filesDir` ويفك محلياً من ZIP الإصدار. تم اختبار القراءة العامة لـmanifest والنص والتوقيتات وملف MP3 تجريبي عبر HTTPS، كما تم تثبيت النسخة السابقة عبر ADB وتشغيل شاشة التطبيق على هاتف فعلي. اختبار الإصدار الحالي بعد إعادة التصميم والتعديل على الهاتف ما زال مطلوباً.
+من جذر المشروع بعد البناء:
 
-## التراخيص
+```bash
+AAPT=/home/ubuntu/tools/android-sdk/build-tools/35.0.0/aapt
+APK=app/build/outputs/apk/online/debug/app-online-debug.apk
+$AAPT dump permissions "$APK"
+unzip -l "$APK" | grep -E 'm4a|mp3|fastconformer|sherpa|libonnxruntime' || true
+sha256sum "$APK"
+stat -c '%s bytes' "$APK"
+```
 
-راجع `third_party_notices/NOTICE.md` في النسخة المرفقة ومستودع الأصول العام. رابط EveryAyah العام وترخيص سكربت التنزيل لا يكفيان وحدهما لإثبات حق إعادة توزيع كل تسجيل؛ يجب مراجعة حقوق القارئ والاستخدام المقصود قبل النشر التجاري.
+المتوقع هو وجود `android.permission.INTERNET` و`android.permission.RECORD_AUDIO`، وعدم ظهور M4A/MP3/model/sherpa native. احفظ hash والحجم في Release Notes فقط بعد اكتمال final assemble، لا تستخدم قيم artifact قديمة.
+
+## الاختبارات
+
+```bash
+/home/ubuntu/tools/gradle-8.10.2/bin/gradle :app:testOnlineDebugUnitTest --no-daemon
+python3 scripts/validate_word_reference_content.py --reference app/src/main/assets/quran/word_reference_ayahs.json
+python3 scripts/validate_word_reference_layout.py
+python3 scripts/validate_pronunciation_reference.py --reference app/src/main/assets/quran/pronunciation_reference.json
+python3 scripts/verify_word_reference_preview.py
+python3 scripts/validate_full_quran_assets.py --mp3-dir ../quran-husary-mp3-source
+git diff --check
+```
+
+تثبت unit tests صحة المصدر والـstate machine، لكنها لا تثبت عمل microphone provider على هاتف بعينه. يلزم اختبار حي منفصل للبِسملة، omitted `الرحمان`، توقف النفس، بداية الآية من الكلمة الأولى، و`ERROR_NO_MATCH`.
+
+## الصوت والمصادر
+
+مصدر التوقيتات هو QUL Husary المقفل في `app/src/main/assets/quran/audio_timing/Husary_Murattal.json`. مصدر URL المستخدم runtime هو `https://audio-cdn.tarteel.ai/quran/husary/{surah:03d}{ayah:03d}.mp3`. تدقيق الحدود الكامل في `docs/HUSARY_AUDIO_BOUNDARY_AUDIT_2026-08-27.md` يصف ما أثبتته metadata وما بقي يحتاج استماعاً أو ASR. مصدر MP3 للتدقيق/التحويل هو `../quran-husary-mp3-source/` خارج repository، بينما M4A فقط تدخل Offline APK. لا تغيّر URL أو reciter لتجاوز anomaly، ولا تحول أداة التنزيل أو وجود CDN إلى إذن إعادة توزيع.
+
+## استكشاف الأخطاء
+
+| العرض | التفسير المرجح | الإجراء |
+|---|---|---|
+| لا يظهر نص الصفحة الأولى | preview أو asset parse فشل | راجع notice ثم شغّل validators؛ full load هو المصدر النهائي |
+| `ERROR_NO_MATCH` | provider أنهى segment بلا نتيجة | contract السابق يعيد الاستماع تلقائياً ما دام المستخدم لم يضغط إيقافاً |
+| الصوت يبدأ بعد أول كلمة | seek استُخدم كـword window | تحقق أن مسار القراءة الكاملة يرسل `startMs=0`؛ لا تعدّل timing JSON |
+| correction يعبر كلمة أخرى | padding غير gap-aware | راجع `withCorrectionPadding` وحد 120ms واختبار window |
+| Download أو model في Online | build variant خاطئ | استخدم `assembleOnlineDebug` وافحص `applicationId` ومحتوى APK |
+
+## الحقوق والخصوصية
+
+راجع `third_party_notices/NOTICE.md` و`docs/source-lock.md`. النص Word، خط KFGQPC، تسجيل الحصري، وتوقيتات QUL المشتقة هي نقاط مراجعة إلزامية قبل أي نشر عام أو تجاري. Online يطلب `INTERNET` و`RECORD_AUDIO`؛ صوت المستخدم يمر إلى provider Android حسب إعداد الجهاز، ولا يرفع التطبيق الصوت إلى خادم خاص به.
+
+## المراجع
+
+[1]: https://developer.android.com/reference/android/speech/SpeechRecognizer "Android SpeechRecognizer"
+[2]: https://qul.tarteel.ai/resources/recitation/112 "QUL Husary recitation source"
+[3]: https://github.com/GovarJabbar/Quran-PNG/tree/master "Quran-PNG external reference"

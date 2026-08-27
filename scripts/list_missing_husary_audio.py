@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "app/src/main/assets/quran/word_reference_ayahs.json"
-DEST = ROOT / "app/src/offline/assets/quran/audio/husary"
+DEST = ROOT.parent / "quran-husary-mp3-source"
 BASE = "https://audio-cdn.tarteel.ai/quran/husary"
 rows = json.loads(CANONICAL.read_text(encoding="utf-8"))["ayahs"]
 seen: set[str] = set()

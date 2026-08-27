@@ -274,10 +274,25 @@ class ReferenceAudioPlayer(private val context: Context) {
                     prepared.start()
                     return@setOnPreparedListener
                 }
+                val durationMs = prepared.duration.coerceAtLeast(1)
                 val rawStart = segment.startMs.coerceAtLeast(0)
                 val rawEnd = segment.endMs.coerceAtLeast(0)
-                val safeStart = minOf(rawStart, rawEnd)
-                val safeEnd = maxOf(rawStart, rawEnd).coerceAtLeast(safeStart + 80)
+                // QUL timestamps are integer millisecond cues and a transcoded
+                // AAC container can be a few milliseconds shorter than the MP3
+                // source. Clamp both bounds to the actual prepared file so a
+                // stale end cue cannot schedule a late stop or an invalid seek.
+                val safeStart = minOf(rawStart, rawEnd, (durationMs - 1).coerceAtLeast(0))
+                val safeEnd = minOf(
+                    durationMs,
+                    maxOf(rawStart, rawEnd, safeStart + 80),
+                )
+                if (safeEnd <= safeStart) {
+                    prepared.release()
+                    closeDescriptor()
+                    player = null
+                    onFinished()
+                    return@setOnPreparedListener
+                }
                 // API 26+ supports closest-frame seeking. The old one-argument
                 // seek may choose a previous MP3 sync frame and play adjacent
                 // words before the requested window.

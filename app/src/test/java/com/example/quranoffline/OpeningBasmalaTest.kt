@@ -54,7 +54,24 @@ class OpeningBasmalaTest {
         assertEquals("", result.ayahTranscript)
         assertEquals("", wrong.ayahTranscript)
         assertTrue(wrong.needsCorrection)
-        assertTrue(wrong.consumed)
+        assertFalse(wrong.consumed)
+        assertEquals("بسم الله الرحيم الرحيم", wrong.basmalaTranscript)
+        assertEquals("", wrong.ayahTranscript)
+    }
+
+    @Test
+    fun omittedMiddleBasmalaWordNeverReleasesTheLaterWordToAyah() {
+        val result = OpeningBasmalaSpeechFilter.filter(
+            transcript = "بسم الله الرحيم الم",
+            isFinal = true,
+            segmentCompleted = true,
+            alreadyConsumed = false,
+        )
+
+        assertFalse(result.consumed)
+        assertTrue(result.needsCorrection)
+        assertEquals("", result.ayahTranscript)
+        assertEquals("بسم الله الرحيم الم", result.basmalaTranscript)
     }
 
     @Test

@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "app/src/main/assets/quran/word_reference_ayahs.json"
-DEST = ROOT / "app/src/offline/assets/quran/audio/husary"
+DEST = ROOT.parent / "quran-husary-mp3-source"
 MANIFEST = ROOT / "app/src/offline/assets/quran/audio/husary_manifest.json"
 BASE_URL = "https://audio-cdn.tarteel.ai/quran/husary"
 WORKERS = min(64, max(16, (os.cpu_count() or 4) * 4))

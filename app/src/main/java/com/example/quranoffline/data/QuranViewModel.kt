@@ -10,6 +10,8 @@ import com.example.quranoffline.BuildConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -20,6 +22,8 @@ enum class ReaderScope { AYAH, SURAH, JUZ, HIZB, PAGES, QURAN }
 data class QuranUiState(
     val ayahs: List<QuranAyah> = emptyList(),
     val allAyahs: List<QuranAyah> = emptyList(),
+    /** Cached global word count; avoids flattening all 77k words on callbacks. */
+    val totalWordCount: Int = 0,
     val metadata: QuranMetadata? = null,
     val pageLayout: QuranLayout? = null,
     val wordReferenceLayout: WordReferenceLayout? = null,
@@ -70,6 +74,14 @@ data class QuranUiState(
     val modelReady: Boolean = false,
     val modelDownloading: Boolean = false,
     val offlineSupported: Boolean = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
+)
+
+private data class LoadedAssetInputs(
+    val allAyahs: List<QuranAyah>,
+    val metadata: QuranMetadata,
+    val wordReferenceLayout: WordReferenceLayout,
+    val pronunciationReference: PronunciationReference,
+    val bundledModelReady: Boolean,
 )
 
 private data class PreparedAssets(
@@ -131,9 +143,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     )
     val uiState: State<QuranUiState> = state
 
-    private val targetWords: List<QuranWord>
-        get() = state.value.allAyahs.flatMap { it.words }
-
     init {
         previewLoadJob = loadPreview()
         loadAssets(if (BuildConfig.OFFLINE_DISTRIBUTION) AssetMode.DOWNLOAD else AssetMode.STREAM)
@@ -192,6 +201,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     state.value = state.value.copy(
                         ayahs = firstPage,
                         allAyahs = previewAyahs,
+                        totalWordCount = previewAyahs.sumOf { it.words.size },
                         metadata = previewMetadata,
                         wordReferenceLayout = previewLayout,
                         currentPage = 1,
@@ -220,18 +230,35 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 // Heavy assets are deliberately loaded after the preview has been
                 // published. quran_page_layout.json is not used by the active
                 // renderer and is therefore not parsed during startup.
+                // These independent reads run concurrently on IO dispatchers;
+                // the UI is updated only after all validated results are ready.
                 val parsedRepository = withContext(Dispatchers.IO) { QuranRepository(context) }
-                val allAyahs = withContext(Dispatchers.IO) { parsedRepository.allAyahs() }
-                val parsedMetadata = withContext(Dispatchers.IO) { metadataRepository.load() }
-                val wordReferenceLayout = withContext(Dispatchers.IO) { WordReferenceLayout.load(context) }
-                val pronunciationReference = withContext(Dispatchers.IO) { PronunciationReference.load(context) }
-                withContext(Dispatchers.IO) { timingRepository.loadBundled(context) }
-                val bundledModelReady = withContext(Dispatchers.IO) {
-                    if (BuildConfig.OFFLINE_DISTRIBUTION) {
-                        assetManager.prepareBundledOfflineModel()
-                        true
-                    } else false
+                val loaded = coroutineScope {
+                    val allAyahsDeferred = async(Dispatchers.IO) { parsedRepository.allAyahs() }
+                    val metadataDeferred = async(Dispatchers.IO) { metadataRepository.load() }
+                    val layoutDeferred = async(Dispatchers.IO) { WordReferenceLayout.load(context) }
+                    val pronunciationDeferred = async(Dispatchers.IO) { PronunciationReference.load(context) }
+                    val timingDeferred = async(Dispatchers.IO) { timingRepository.loadBundled(context) }
+                    val modelDeferred = async(Dispatchers.IO) {
+                        if (BuildConfig.OFFLINE_DISTRIBUTION) {
+                            assetManager.prepareBundledOfflineModel()
+                            true
+                        } else false
+                    }
+                    timingDeferred.await()
+                    LoadedAssetInputs(
+                        allAyahs = allAyahsDeferred.await(),
+                        metadata = metadataDeferred.await(),
+                        wordReferenceLayout = layoutDeferred.await(),
+                        pronunciationReference = pronunciationDeferred.await(),
+                        bundledModelReady = modelDeferred.await(),
+                    )
                 }
+                val allAyahs = loaded.allAyahs
+                val parsedMetadata = loaded.metadata
+                val wordReferenceLayout = loaded.wordReferenceLayout
+                val pronunciationReference = loaded.pronunciationReference
+                val bundledModelReady = loaded.bundledModelReady
                 val prepared = withContext(Dispatchers.Default) {
                     parsedMetadata.requireCompatible(allAyahs)
                     check(wordReferenceLayout.pageCount == parsedMetadata.pages.size) { "Word reference page count does not match Quran metadata" }
@@ -270,6 +297,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 state.value = state.value.copy(
                     ayahs = finalVisible,
                     allAyahs = prepared.allAyahs,
+                    totalWordCount = prepared.allAyahs.sumOf { it.words.size },
                     metadata = prepared.metadata,
                     pageLayout = null,
                     wordReferenceLayout = prepared.wordReferenceLayout,
@@ -448,7 +476,10 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val local = assetManager.cachedAudioFile(1, 1)
-        if (state.value.mode == AssetMode.DOWNLOAD && local == null) {
+        val bundledAssetPath = if (BuildConfig.OFFLINE_DISTRIBUTION) {
+            assetManager.bundledAudioAssetPath(1, 1)
+        } else null
+        if (!BuildConfig.OFFLINE_DISTRIBUTION && state.value.mode == AssetMode.DOWNLOAD && local == null) {
             state.value = state.value.copy(notice = "نزّل صوت الفاتحة أولاً لتشغيل البِسملة في وضع التنزيل، أو اختر وضع البث المباشر.")
             return
         }
@@ -458,10 +489,13 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         referenceAudioPlayer.playQueue(
             items = listOf(
                 ReferenceAudioPlayer.QueueItem(
-                    source = local?.absolutePath ?: assetManager.audioUrl(1, 1),
-                    startMs = first.startMs,
+                    source = if (BuildConfig.OFFLINE_DISTRIBUTION) "" else local?.absolutePath ?: assetManager.audioUrl(1, 1),
+                    // Full-file playback must include any audio before the
+                    // first QUL word cue; word clips remain timing-bounded.
+                    startMs = 0,
                     endMs = last.endMs,
                     key = key,
+                    assetPath = bundledAssetPath,
                 ),
             ),
             pauseBetweenMs = 0,
@@ -557,7 +591,10 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             return ReferenceAudioPlayer.QueueItem(
                 source = "",
                 assetPath = assetManager.bundledAudioAssetPath(target.surah, target.ayah),
-                startMs = first.startMs,
+                // This QueueItem represents the complete ayah file, not a
+                // word clip. Start at file offset zero so a late first cue
+                // cannot remove the first spoken word.
+                startMs = 0,
                 endMs = last.endMs,
                 key = "${target.surah}:${target.ayah}",
             )
@@ -566,7 +603,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         if (state.value.mode == AssetMode.DOWNLOAD && local == null) return null
         return ReferenceAudioPlayer.QueueItem(
             source = local?.absolutePath ?: assetManager.audioUrl(target.surah, target.ayah),
-            startMs = first.startMs,
+            // This QueueItem represents the complete ayah file, not a word
+            // clip. A late first QUL cue must not clip its opening audio.
+            startMs = 0,
             endMs = last.endMs,
             key = "${target.surah}:${target.ayah}",
         )
@@ -779,7 +818,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                         rawTranscript = rawSpeechTextForDisplay(update),
                         transcript = "",
                         openingBasmalaEvaluation = basmalaProgress.evaluation,
-                        openingBasmalaWordIndex = basmalaProgress.currentWordInBasmala,
+                        openingBasmalaWordIndex = basmalaProgress.currentWordInAyah,
                         currentSpokenWord = basmalaProgress.spokenWord,
                         currentSpokenWordIndex = -1,
                         openingBasmalaActive = true,
@@ -859,8 +898,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val correction = result.correction
                 if (result.correctedErrors.isNotEmpty()) correctedErrorStore.appendAll(result.correctedErrors)
                 val correctedErrors = if (result.correctedErrors.isNotEmpty()) correctedErrorStore.list() else previousState.correctedErrors
-                val currentTarget = correction?.let { tracker.globalWordIndex(it.ayahIndex, it.localWordIndex) }
-                    ?: result.currentGlobalWordIndex.takeIf { it < targetWords.size }
+                                    val currentTarget = correction?.let { tracker.globalWordIndex(it.ayahIndex, it.localWordIndex) }
+                        ?: result.currentGlobalWordIndex.takeIf { it < previousState.totalWordCount }
+
                 // Keep the word shown as "current" exactly as observed by the
                 // recognizer. Canonical Quran text belongs only to the expected
                 // display/evaluation layers, never to raw speech presentation.
@@ -882,7 +922,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     currentAyahIndex = result.currentAyahIndex,
                     currentWordInAyah = result.currentWordInAyah,
                     currentAyahLocked = result.currentAyahLocked,
-                    recitationCursor = result.currentGlobalWordIndex.coerceIn(0, targetWords.size),
+                    recitationCursor = result.currentGlobalWordIndex.coerceIn(0, previousState.totalWordCount),
                     openingBasmalaActive = false,
                     correctionMessage = correction?.let(::correctionMessage) ?: previousState.correctionMessage,
                     correctionAyahIndex = correction?.ayahIndex ?: previousState.correctionAyahIndex,
@@ -1031,6 +1071,22 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         )
         startRecognitionSession()
     }
+
+    /**
+     * Keep the recognizer's primary candidate as observed data. In particular,
+     * do not replace it with canonical Word spelling before judgement or display.
+     */
+    private fun recognizerTextForComparison(update: RecognitionUpdate.Text): String =
+        update.providerText.ifBlank { update.value }
+
+    private fun rawSpeechTextForDisplay(update: RecognitionUpdate.Text): String =
+        recognizerTextForComparison(update)
+
+    private fun rawSpeechWordForDisplay(update: RecognitionUpdate.Text): String? =
+        rawSpeechTextForDisplay(update)
+            .trim()
+            .split(Regex("\\s+"))
+            .lastOrNull(String::isNotBlank)
 
     private fun openingBasmalaSpeechResult(transcript: String, isFinal: Boolean, segmentCompleted: Boolean): OpeningBasmalaSpeechResult {
         if (openingBasmalaConsumed) {

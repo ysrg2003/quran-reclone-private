@@ -54,18 +54,59 @@ class PronunciationReference private constructor(
             PronunciationReference(ayahs.associateBy { "${it.surah}:${it.ayah}" })
 
         /**
-         * Builds expected speech directly from Word reference JSON. The JSON is
-         * the extracted Word canonical content; no quran_content or audio
-         * transcript is consulted, and no provider output is stored here.
+         * Loads the precomputed speech-only reference. SpeechRecognizer output
+         * is still the observed runtime value; this asset supplies only the
+         * expected spoken forms and the explicit madd/waqf rules.
          */
         fun load(context: Context): PronunciationReference {
             val raw = context.applicationContext.assets
-                .open("quran/word_reference_ayahs.json")
+                .open("quran/pronunciation_reference.json")
                 .bufferedReader(Charsets.UTF_8)
                 .use { it.readText() }
-            return fromWordReferenceJson(raw)
+            return fromPronunciationJson(raw)
         }
 
+        fun fromPronunciationJson(raw: String): PronunciationReference {
+            if (raw.isBlank()) return empty()
+            val root = JSONObject(raw)
+            val rows = root.getJSONArray("ayahs")
+            val result = buildMap(rows.length()) {
+                for (index in 0 until rows.length()) {
+                    val row = rows.getJSONObject(index)
+                    val wordsJson = row.getJSONArray("words")
+                    val words = buildList(wordsJson.length()) {
+                        for (wordIndex in 0 until wordsJson.length()) {
+                            val word = wordsJson.getJSONObject(wordIndex)
+                            val spoken = word.optString("spoken", word.optString("spokenForm", ""))
+                            add(
+                                PronunciationWord(
+                                    index = word.optInt("index", wordIndex),
+                                    spoken = spoken,
+                                    spokenTokens = jsonStringList(word, "spokenTokens").ifEmpty { listOf(spoken) },
+                                    maddPositions = jsonIntSet(word, "maddPositions"),
+                                    audioStartMs = word.optIntNullable("audioStartMs"),
+                                    audioEndMs = word.optIntNullable("audioEndMs"),
+                                    audioWordStart = word.optIntNullable("audioWordStart"),
+                                    audioWordEnd = word.optIntNullable("audioWordEnd"),
+                                    recognizedForms = jsonStringSet(word, "recognizedForms"),
+                                    waqfForms = jsonStringSet(word, "waqfForms"),
+                                ),
+                            )
+                        }
+                    }
+                    val pronunciation = PronunciationAyah(
+                        surah = row.getInt("surah"),
+                        ayah = row.getInt("ayah"),
+                        spoken = row.optString("spoken", words.joinToString(" ") { it.spoken }),
+                        words = words,
+                    )
+                    put("${pronunciation.surah}:${pronunciation.ayah}", pronunciation)
+                }
+            }
+            return PronunciationReference(result)
+        }
+
+        /** Compatibility parser for the minimal Word-only fixture format. */
         fun fromWordReferenceJson(raw: String): PronunciationReference {
             if (raw.isBlank()) return empty()
             val root = JSONObject(raw)
@@ -109,6 +150,9 @@ class PronunciationReference private constructor(
             }
             return PronunciationReference(result)
         }
+
+        private fun JSONObject.optIntNullable(key: String): Int? =
+            if (has(key) && !isNull(key)) getInt(key) else null
 
         private fun jsonStringList(word: JSONObject, key: String): List<String> {
             val array = word.optJSONArray(key) ?: return emptyList()

@@ -5,9 +5,10 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-LAYOUT = Path('/home/ubuntu/quran-memorization-online/app/src/main/assets/quran/word_reference_layout.json')
-CONTENT = Path('/home/ubuntu/quran-memorization-assets/quran/quran_content.json')
-METADATA = Path('/home/ubuntu/quran-memorization-online/app/src/main/assets/quran/quran-meta-data.xml')
+PROJECT = Path(__file__).resolve().parents[1]
+LAYOUT = PROJECT / 'app/src/main/assets/quran/word_reference_layout.json'
+CONTENT = PROJECT / 'app/src/main/assets/quran/word_reference_ayahs.json'
+METADATA = PROJECT / 'app/src/main/assets/quran/quran-meta-data.xml'
 
 
 def metadata_pages(content_keys: list[tuple[int, int]]) -> list[list[tuple[int, int]]]:

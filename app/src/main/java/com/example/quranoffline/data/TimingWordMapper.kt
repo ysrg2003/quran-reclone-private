@@ -13,6 +13,11 @@ object TimingWordMapper {
     fun wholeAyah(ayah: QuranAyah, timings: List<TimingSegment>): TimingSegment? {
         val first = timings.firstOrNull() ?: return null
         val last = timings.lastOrNull() ?: first
-        return TimingSegment(0, ayah.words.size, first.startMs, last.endMs)
+        // A whole ayah is a file-level playback request, not a concatenation
+        // of word clips. QUL word timings can begin after leading recitation
+        // audio (and may be imperfect at a boundary), so seeking to the first
+        // word would clip the beginning of the ayah. Keep the measured final
+        // cue as the safe stop boundary while always starting at file offset 0.
+        return TimingSegment(0, ayah.words.size, 0, last.endMs)
     }
 }
