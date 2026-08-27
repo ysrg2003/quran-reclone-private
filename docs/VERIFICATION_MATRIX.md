@@ -29,7 +29,7 @@
 | ADB Online | basmala، pause، raw candidate، الكتابة، whole ayah first word | phone test log | مؤجل | لا يوجد سجل جهاز في هذه الجولة |
 | ADB Offline | SpeechRecognizer مع الشبكة، تشغيل M4A محلي، الكتابة، بلا crash | phone test log | مؤجل | لا يختبر ASR محلياً؛ يتطلب provider متاحاً |
 | rights | إذن صريح للتضمين/إعادة التوزيع/البث/cache/commercial | وثائق الحقوق المؤرشفة | blocked | Word/KFGQPC/Husary/QUL-derived timing unresolved |
-| GitHub Release | tag مستقل وassets متطابقة مع هذه القيم | release metadata | pending | ينشأ بعد commit النهائي ولا يستبدل الإصدارات القديمة |
+| GitHub Release | tag مستقل وassets متطابقة مع هذه القيم | [quran-v1-writing-mode-fix](https://github.com/ysrg2003/quran-memorization-online/releases/tag/quran-v1-writing-mode-fix) | مثبت | prerelease منشور؛ digest وحجم كل asset يطابقان APK المحلي؛ لا يستبدل الإصدارات القديمة |
 
 ## Artifacts النهائية بعد الإصلاح
 

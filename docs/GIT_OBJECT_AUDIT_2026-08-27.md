@@ -2,10 +2,10 @@
 
 ## النتيجة الحالية
 
-فُحصت شجرة الـtag الجديد `quran-v1-writing-mode` قبل النشر، ثم أُجريت متابعة توثيقية على `main`. لا تحتوي شجرة الـtag أو `main` الحالية على ملفات `.mp3` أو `.m4a` أو APK أو ZIP model، ولا أسماء `sherpa` أو `onnx` أو `fastconformer`. تحقق من commit الـtag وقت الحاجة عبر `git rev-parse quran-v1-writing-mode^{}`.
+فُحصت شجرة `quran-v1-writing-mode` التاريخية ثم شجرة الإصلاح `quran-v1-writing-mode-fix` و`main`. لا تحتوي هذه الأشجار على ملفات `.mp3` أو `.m4a` أو APK أو ZIP model، ولا أسماء `sherpa` أو `onnx` أو `fastconformer`. يشير tag الإصلاح إلى commit `2d73c53727a44001443aa5e1deb6cb4a19c17bbc`، ونُشر كـGitHub prerelease مستقل بعد رفع APKين خارج Git.
 
 ```text
-git ls-tree -r --name-only quran-v1-writing-mode | grep -E '\.(mp3|m4a|apk|zip)$|sherpa|onnx|fastconformer'
+git ls-tree -r --name-only quran-v1-writing-mode-fix | grep -E '\.(mp3|m4a|apk|zip)$|sherpa|onnx|fastconformer'
 # no output
 ```
 
@@ -17,10 +17,11 @@ git ls-tree -r --name-only quran-v1-writing-mode | grep -E '\.(mp3|m4a|apk|zip)$
 |---|---|
 | `quran-v1` | `1c7d2dd9f9eff507cfe7048feacfa452ec8d2f0f` |
 | `quran-v1-postfix` | `50eb22e4faaafcb758b03c53a6102690880b69c0` |
-| `quran-v1-writing-mode` | commit artifact المنشور؛ تحقق به: `git rev-parse quran-v1-writing-mode^{}` |
-| `main` | قد يحتوي commits توثيقية لاحقة؛ تحقق به: `git rev-parse main` |
+| `quran-v1-writing-mode` | artifact السابق؛ تحقق به: `git rev-parse quran-v1-writing-mode^{}` |
+| `quran-v1-writing-mode-fix` | `2d73c53727a44001443aa5e1deb6cb4a19c17bbc`؛ GitHub prerelease مستقل |
+| `main` | قد يحتوي متابعة توثيقية لاحقة؛ تحقق به وقت الفحص عبر `git rev-parse main` |
 
-لا يجوز تغيير أو حذف الـtagين التاريخيين. رفع الإصدار الحالي يجب أن يكون محدوداً إلى `main` و`quran-v1-writing-mode` فقط.
+لا يجوز تغيير أو حذف الـtagين التاريخيين أو `quran-v1-writing-mode`. رُفع الإصلاح محدوداً إلى `main` و`quran-v1-writing-mode-fix` فقط، بينما بقيت APKs الكبيرة Release assets خارج Git history.
 
 ## حالة reflog/التخزين المحلي
 

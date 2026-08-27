@@ -126,7 +126,7 @@ app/src/offline/assets/quran/audio/husary_aac/*.m4a
 
 ## 9. Git ونقطة quran V1
 
-النقطة المرجعية المحلية المطلوبة محفوظة باسم tag annotated `quran-v1` وتشير إلى commit `1c7d2dd` برسالة `quran V1 snapshot before audio boundary fixes`. المرشح السابق محفوظ باسم `quran-v1-postfix` ويشير إلى `50eb22e`، ولا يمثل العقد الحالي. المرشح السابق محفوظ في tag annotated منفصل `quran-v1-writing-mode`؛ الإصلاح الحالي سيُحفظ في tag annotated جديد مستقل `quran-v1-writing-mode-fix` بعد commit. MP3 المصدر خارج repository وM4A ignored. لا يُستبدل أي tag تاريخي.
+النقطة المرجعية المحلية المطلوبة محفوظة باسم tag annotated `quran-v1` وتشير إلى commit `1c7d2dd` برسالة `quran V1 snapshot before audio boundary fixes`. المرشح السابق محفوظ باسم `quran-v1-postfix` ويشير إلى `50eb22e`، ولا يمثل العقد الحالي. الإصدار السابق لعقد الكتابة محفوظ في tag annotated `quran-v1-writing-mode`. الإصلاح الحالي محفوظ في tag annotated مستقل `quran-v1-writing-mode-fix` ويشير إلى commit `2d73c53727a44001443aa5e1deb6cb4a19c17bbc`، مع GitHub prerelease مستقل. MP3 المصدر خارج repository وM4A ignored. لا يُستبدل أي tag تاريخي.
 
 قبل أي push يجب تشغيل:
 
