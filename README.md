@@ -149,7 +149,7 @@ git rev-list --objects --all > /tmp/quran-reachable-objects.txt
 | ADB/اختبار ميكروفون/MediaPlayer حي | مؤجل؛ لا يُدّعى نجاحه |
 | SpeechRecognizer في Offline مع الشبكة متاحة | مؤجل؛ لا يوجد هاتف في هذه الجولة |
 | final APK hashes/size/permissions للعقد الجديد | مثبت؛ Online `23,413,744` bytes وOffline `1,300,250,950` bytes؛ التفاصيل في `docs/APK_CONTENT_AUDIT_2026-08-27.md` |
-| GitHub push وRelease للعقد الجديد | مؤجل حتى commit/tag/رفع منفصل؛ لا يستبدل `quran-v1` أو `quran-v1-postfix`، ومع ذلك الحالة internal testing only |
+| GitHub push وRelease للعقد الجديد | تم التنفيذ على tag `quran-v1-writing-mode` كـprerelease؛ لا يستبدل `quran-v1` أو `quran-v1-postfix`، والحالة internal testing only |
 
 ## مراجع
 

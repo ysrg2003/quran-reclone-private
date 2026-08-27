@@ -28,7 +28,7 @@
 | ADB Online | basmala omission، pause، raw candidate، whole ayah first word | phone test log | مؤجل | لا يوجد سجل جهاز في هذه الجولة |
 | ADB Offline | SpeechRecognizer مع الشبكة متاحة، تشغيل M4A محلي، بلا crash | phone test log | مؤجل | لا يختبر ASR محلياً؛ يتطلب provider متاحاً |
 | rights | إذن صريح للتضمين/إعادة التوزيع/البث/cache/commercial | وثائق حقوق مؤرشفة | blocked | Word/KFGQPC/Husary/QUL-derived timing unresolved |
-| GitHub Release للعقد الجديد | history نظيف، artifacts جديدة، notes وhashes محدثة | push/release بعد final gates | مؤجل | لا يرفع قبل commit وtag الجديدين |
+| GitHub Release للعقد الجديد | history نظيف، artifacts جديدة، notes وhashes محدثة | GitHub Release `quran-v1-writing-mode` | مثبت | prerelease منشور؛ لا يستبدل tagي V1 التاريخيين |
 
 ## Artifacts النهائية لعقد الكتابة وSpeechRecognizer المشترك
 

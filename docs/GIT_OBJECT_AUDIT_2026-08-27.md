@@ -2,7 +2,7 @@
 
 ## النتيجة الحالية
 
-فُحصت الشجرة القابلة للدفع للـ`main` والـtag الجديد `quran-v1-writing-mode`. كلاهما يشير إلى commit الذي يعيده `git rev-parse quran-v1-writing-mode^{}` وقت التدقيق، ولا تحتوي شجرتهما الحالية على ملفات `.mp3` أو `.m4a` أو APK أو ZIP model، ولا أسماء `sherpa` أو `onnx` أو `fastconformer`.
+فُحصت شجرة الـtag الجديد `quran-v1-writing-mode` قبل النشر، ثم أُجريت متابعة توثيقية على `main`. لا تحتوي شجرة الـtag أو `main` الحالية على ملفات `.mp3` أو `.m4a` أو APK أو ZIP model، ولا أسماء `sherpa` أو `onnx` أو `fastconformer`. تحقق من commit الـtag وقت الحاجة عبر `git rev-parse quran-v1-writing-mode^{}`.
 
 ```text
 git ls-tree -r --name-only quran-v1-writing-mode | grep -E '\.(mp3|m4a|apk|zip)$|sherpa|onnx|fastconformer'
@@ -17,7 +17,8 @@ git ls-tree -r --name-only quran-v1-writing-mode | grep -E '\.(mp3|m4a|apk|zip)$
 |---|---|
 | `quran-v1` | `1c7d2dd9f9eff507cfe7048feacfa452ec8d2f0f` |
 | `quran-v1-postfix` | `50eb22e4faaafcb758b03c53a6102690880b69c0` |
-| `quran-v1-writing-mode` | تحقق به: `git rev-parse quran-v1-writing-mode^{}` |
+| `quran-v1-writing-mode` | commit artifact المنشور؛ تحقق به: `git rev-parse quran-v1-writing-mode^{}` |
+| `main` | قد يحتوي commits توثيقية لاحقة؛ تحقق به: `git rev-parse main` |
 
 لا يجوز تغيير أو حذف الـtagين التاريخيين. رفع الإصدار الحالي يجب أن يكون محدوداً إلى `main` و`quran-v1-writing-mode` فقط.
 
