@@ -1,4 +1,3 @@
-.gradle/
 **/build/
 local.properties
 *.iml
@@ -6,3 +5,9 @@ local.properties
 .DS_Store
 **/__pycache__/
 *.pyc
+.cache/
+
+# Large Offline payloads are distributed as GitHub Release artifacts, not Git history.
+app/src/offline/assets/quran/audio/husary/*.mp3
+app/src/offline/assets/quran/audio/husary_aac/*.m4a
+app/src/offline/assets/models/*.zip

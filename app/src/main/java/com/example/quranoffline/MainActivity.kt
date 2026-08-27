@@ -1,6 +1,7 @@
 package com.example.quranoffline
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,7 +15,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -50,6 +53,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -71,6 +75,7 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -90,6 +95,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.example.quranoffline.BuildConfig
 import com.example.quranoffline.data.AssetMode
 import com.example.quranoffline.data.QuranAyah
 import com.example.quranoffline.data.QuranWord
@@ -162,7 +169,16 @@ private fun QuranOfflineApp(
     onExportBackup: () -> Unit,
 ) {
     val state = viewModel.uiState.value
+    val context = LocalContext.current
+    val startRecitation = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            viewModel.startListening()
+        } else {
+            onRequestMicrophone()
+        }
+    }
     var tab by remember { mutableIntStateOf(0) }
+    var showLegalNotices by rememberSaveable { mutableStateOf(false) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Scaffold(
@@ -241,8 +257,8 @@ private fun QuranOfflineApp(
                 onToggleHidden = viewModel::toggleHidden,
                 onStart = {
                     if (state.listening) viewModel.stopListening()
-                                            else if (state.assetsReady && (state.engine == RecitationEngine.ONLINE || state.modelReady)) onRequestMicrophone()
-                        else viewModel.startListening()
+                                            else if (state.assetsReady && (state.engine == RecitationEngine.ONLINE || state.modelReady)) startRecitation()
+                        else startRecitation()
 
                 },
                 onSave = viewModel::saveCurrentSession,
@@ -290,8 +306,8 @@ private fun QuranOfflineApp(
                 onToggleHidden = viewModel::toggleHidden,
                 onStart = {
                     if (state.listening) viewModel.stopListening()
-                    else if (state.assetsReady && (state.engine == RecitationEngine.ONLINE || state.modelReady)) onRequestMicrophone()
-                    else viewModel.startListening()
+                    else if (state.assetsReady && (state.engine == RecitationEngine.ONLINE || state.modelReady)) startRecitation()
+                    else startRecitation()
                 },
                 onSave = viewModel::saveCurrentSession,
                 onSetStart = viewModel::setMemorizationStart,
@@ -326,12 +342,62 @@ private fun QuranOfflineApp(
                 onDownloadModel = viewModel::downloadOfflineModel,
                 onUpdateCorrectionSettings = viewModel::updateCorrectionSettings,
                 onResetCorrectionSettings = viewModel::resetCorrectionSettings,
+                onShowLegalNotices = { showLegalNotices = true },
                 modifier = Modifier.padding(padding),
             )
+            }
+            if (showLegalNotices) {
+                LegalNoticesDialog(onDismiss = { showLegalNotices = false })
             }
         }
         }
     }
+}
+
+@Composable
+private fun LegalNoticesDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val legalFiles = remember {
+        listOf(
+            "NOTICE.md",
+            "LEGAL_LICENSE_RESEARCH.md",
+            "LEGAL_INDEPENDENT_SEARCH_ADDENDUM.md",
+            "LEGAL_INDEPENDENT_SEARCH_NOTES.md",
+            "LEGAL_GENERAL_PRINCIPLES.md",
+            "README.md",
+            "MIT-quran-align.txt",
+            "MIT-QUL-repository.txt",
+            "Apache-2.0-sherpa-onnx.txt",
+            "MIT-ONNX-Runtime.txt",
+            "CC-BY-3.0.txt",
+            "CC-BY-4.0.txt",
+            "EPL-1.0.html",
+        )
+    }
+    val notices = remember(context, legalFiles) {
+        buildString {
+            legalFiles.forEach { filename ->
+                append("\n\n========== ").append(filename).append(" ==========\n\n")
+                runCatching {
+                    context.assets.open("third_party_licenses/$filename").bufferedReader().use { it.readText() }
+                }.onSuccess { append(it) }
+                    .onFailure { append("تعذر قراءة هذا الملف من داخل التطبيق: ${it.message ?: "خطأ غير معروف"}") }
+            }
+        }.trim()
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إشعارات المصادر وحقوق الاستخدام", textAlign = TextAlign.Right) },
+        text = {
+            Text(
+                notices,
+                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                textAlign = TextAlign.Right,
+                color = Color(0xFF45404D),
+            )
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+    )
 }
 
 @Composable
@@ -593,6 +659,8 @@ private fun MemorizationScreen(
                         ayah = ayah,
                         hidden = state.hidden,
                         evaluation = state.evaluation,
+                        openingBasmalaEvaluation = state.openingBasmalaEvaluation,
+                        openingBasmalaWordIndex = state.openingBasmalaWordIndex,
                         wordOffset = wordOffset,
                         listening = state.listening,
                         currentSpokenWord = state.currentSpokenWord,
@@ -614,6 +682,22 @@ private fun MemorizationScreen(
                 }
             }
         }
+        if (state.openingBasmalaActive && (state.rawTranscript.isNotBlank() || state.openingBasmalaEvaluation != null)) {
+            item {
+                Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("تقييم البسملة الافتتاحية", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        state.openingBasmalaEvaluation?.let { basmalaEvaluation ->
+                            Text("مطابق: ${basmalaEvaluation.matched} من ${basmalaEvaluation.total} • غير مؤكد: ${basmalaEvaluation.uncertain} • يحتاج مراجعة: ${basmalaEvaluation.missing + basmalaEvaluation.unexpected}")
+                        }
+                        if (state.rawTranscript.isNotBlank()) {
+                            Text("أول نص أعاده SpeechRecognizer بدون تعديل", fontWeight = FontWeight.SemiBold)
+                            Text(state.rawTranscript, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            }
+        }
         state.evaluation?.let { evaluation ->
             item {
                 Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -623,9 +707,13 @@ private fun MemorizationScreen(
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                         Text("مطابق: ${evaluation.matched} من ${evaluation.total} • غير مؤكد: ${evaluation.uncertain} • يحتاج مراجعة: ${evaluation.missing + evaluation.unexpected}")
                         if (state.rawTranscript.isNotBlank()) {
-                            Text("الناتج الخام للتعرّف الصوتي", fontWeight = FontWeight.SemiBold)
+                            Text("أول نص أعاده SpeechRecognizer بدون تعديل", fontWeight = FontWeight.SemiBold)
                             Text(state.rawTranscript, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
-                            Text("يُقارن هذا النص الخام بمرجع النطق، ولا يُحوَّل إلى الرسم القرآني قبل الحكم.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                            Text("هذا هو المرشح النصي الأول كما وصل للتطبيق؛ لا يحوّله التطبيق إلى الرسم القرآني. وقد يطبع المزود بعض المدود والألفات بالرسم الإملائي المعتاد، لأنه تفريغ نصي وليس تمثيلاً صوتياً حرفياً.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+                        }
+                        if (state.transcript.isNotBlank()) {
+                            Text("العرض القرآني بعد الحكم", fontWeight = FontWeight.SemiBold)
+                            Text(QuranTextPresentation.annotated(state.transcript), textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
                         }
                         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Refresh, null)
@@ -756,7 +844,7 @@ private fun CorrectionSettingsCard(
             )
             Text("موضع الاستئناف بعد التصحيح", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                ResumePosition.values().forEach { position ->
+                listOf(ResumePosition.AYAH_START, ResumePosition.FIRST_ERROR).forEach { position ->
                     FilterChip(
                         selected = settings.resumePosition == position,
                         enabled = controlsEnabled,
@@ -827,7 +915,7 @@ private fun PaddingChoiceRow(
 private fun ResumePosition.label(): String = when (this) {
     ResumePosition.AYAH_START -> "أول الآية"
     ResumePosition.FIRST_ERROR -> "أول خطأ"
-    ResumePosition.WORD_AFTER_ERROR -> "بعد الخطأ"
+    ResumePosition.WORD_AFTER_ERROR -> "من أول خطأ"
 }
 
 @Composable
@@ -839,35 +927,32 @@ private fun EngineCard(
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("محرك التسميع", fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(
-                    selected = state.engine == RecitationEngine.ONLINE,
-                    onClick = { onSelectEngine(RecitationEngine.ONLINE) },
-                    label = { Text("عبر الإنترنت") },
-                )
+            if (BuildConfig.OFFLINE_DISTRIBUTION) {
                 FilterChip(
                     selected = state.engine == RecitationEngine.OFFLINE,
                     onClick = { onSelectEngine(RecitationEngine.OFFLINE) },
                     label = { Text("بدون اتصال") },
                 )
+            } else {
+                Text("هذه نسخة Online؛ محرك التسميع عبر SpeechRecognizer فقط، ولا تحتوي محركاً محلياً.", color = Color(0xFF36584B))
             }
             Text(
                 if (state.engine == RecitationEngine.ONLINE) {
                     "التعرّف الصوتي من Android؛ يحتاج الإنترنت ولا يحفظ التطبيق صوتك."
                 } else {
-                    "المحرك المحلي؛ يعالج الصوت على الجهاز بعد تنزيل النموذج."
+                    "المحرك المحلي؛ يعالج الصوت على الجهاز والنموذج مضمّن داخل هذا الإصدار."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF66736C),
             )
-            if (state.engine == RecitationEngine.OFFLINE) {
+            if (BuildConfig.OFFLINE_DISTRIBUTION && state.engine == RecitationEngine.OFFLINE) {
                 if (!state.offlineSupported) {
                     Text("هذا الهاتف يعمل بنظام 32-bit، وقد تسبب تشغيل النموذج المحلي فيه بانهيار داخلي. تم إيقاف التشغيل بدون اتصال لمنع إغلاق التطبيق.", color = Color(0xFF9B4D3C))
                 } else {
-                    Text(if (state.modelReady) "النموذج المحلي جاهز." else "النموذج المحلي غير موجود على الجهاز.", style = MaterialTheme.typography.labelMedium)
+                    Text(if (state.modelReady) "النموذج المحلي المضمّن جاهز." else "تعذر تجهيز النموذج المحلي المضمّن.", style = MaterialTheme.typography.labelMedium)
                     if (!state.modelReady) {
                         Button(onClick = onDownloadModel, enabled = !state.modelDownloading, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (state.modelDownloading) "جاري تنزيل النموذج…" else "تنزيل النموذج المحلي")
+                            Text(if (state.modelDownloading) "جاري تجهيز النموذج…" else "إعادة تجهيز النموذج المضمّن")
                         }
                     }
                 }
@@ -886,40 +971,10 @@ private fun OnlineAssetCard(
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("طريقة استخدام الأصول", fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(
-                    selected = state.mode == AssetMode.STREAM,
-                    onClick = { onModeChange(AssetMode.STREAM) },
-                    label = { Text("بث مباشر") },
-                )
-                FilterChip(
-                    selected = state.mode == AssetMode.DOWNLOAD,
-                    onClick = { onModeChange(AssetMode.DOWNLOAD) },
-                    label = { Text("تنزيل اختياري") },
-                )
-            }
-            Text(
-                if (state.mode == AssetMode.STREAM) {
-                    "النص والتوقيتات في الذاكرة فقط، والصوت يُبث من GitHub عند الحاجة دون حفظ ملفه."
-                } else {
-                    "النص والتوقيتات تُحفظ تلقائياً؛ صوت السورة يُحفظ فقط بعد ضغط زر التنزيل."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF66736C),
-            )
-            if (state.mode == AssetMode.DOWNLOAD) {
-                val total = state.totalAyahsInSurah.coerceAtLeast(1)
-                LinearProgressIndicator(
-                    progress = { state.downloadedAyahs.toFloat() / total },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text("الصوت المحلي للسورة: ${state.downloadedAyahs}/$total آيات", style = MaterialTheme.typography.labelMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = onDownload, enabled = !state.downloadInProgress, modifier = Modifier.weight(1f)) {
-                        Text(if (state.downloadInProgress) "جاري التنزيل…" else "تنزيل السورة")
-                    }
-                    OutlinedButton(onClick = onDeleteDownload, modifier = Modifier.weight(1f)) { Text("حذف المحلي") }
-                }
+            if (BuildConfig.OFFLINE_DISTRIBUTION) {
+                Text("الصوت والتوقيتات وقواعد البيانات مضمّنة داخل هذا الإصدار؛ لا يستخدم التطبيق الشبكة لتشغيل الصوت.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+            } else {
+                Text("هذا إصدار Online؛ النص والتوقيتات داخل التطبيق، والصوت يُبث من الإنترنت عند الحاجة ولا يحتوي محرك تسميع Offline.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
             }
         }
     }
@@ -1078,6 +1133,8 @@ private fun AyahBlock(
     ayah: QuranAyah,
     hidden: Boolean,
     evaluation: com.example.quranoffline.data.RecitationEvaluation?,
+    openingBasmalaEvaluation: com.example.quranoffline.data.RecitationEvaluation?,
+    openingBasmalaWordIndex: Int,
     wordOffset: Int,
     listening: Boolean,
     currentSpokenWord: String?,
@@ -1104,11 +1161,45 @@ private fun AyahBlock(
         }
         openingBasmala?.let { basmala ->
             Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp)) {
-                    IconButton(onClick = { onPlayBasmala(ayah.surah) }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل البسملة الافتتاحية", tint = Color(0xFF76552A))
+                Column(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconButton(onClick = { onPlayBasmala(ayah.surah) }) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل البسملة الافتتاحية", tint = Color(0xFF76552A))
+                        }
+                        Text("جملة مستقلة لا تُحسب من كلمات الآية", modifier = Modifier.weight(1f).padding(vertical = 6.dp), textAlign = TextAlign.Right, color = Color(0xFF76552A), style = MaterialTheme.typography.bodyMedium)
                     }
-                    Text("${basmala.text}  ·  جملة مستقلة لا تُحسب من كلمات الآية", modifier = Modifier.weight(1f).padding(vertical = 10.dp), textAlign = TextAlign.Right, color = Color(0xFF76552A), style = MaterialTheme.typography.bodyMedium)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        basmala.text.split(Regex("\\s+")).filter(String::isNotBlank).forEachIndexed { index, wordText ->
+                            val wordEvaluation = openingBasmalaEvaluation?.words?.getOrNull(index)
+                            val status = wordEvaluation?.status
+                            val revealed = wordEvaluation?.observed != null
+                            val isCurrent = listening && openingBasmalaWordIndex == index && currentSpokenWord != null
+                            val background = when (status) {
+                                WordStatus.MATCHED -> Color(0xFFDFF1E5)
+                                WordStatus.EXTRA_OR_UNEXPECTED, WordStatus.MISSING -> Color(0xFFFFDDD8)
+                                WordStatus.UNCERTAIN -> Color(0xFFFFF0C9)
+                                null -> if (isCurrent) Color(0xFFDFF1E5) else Color.Transparent
+                            }
+                            val shownText = when {
+                                !hidden -> wordText
+                                revealed -> wordText
+                                isCurrent -> currentSpokenWord.orEmpty()
+                                else -> "•"
+                            }
+                            Surface(color = background, shape = RoundedCornerShape(8.dp)) {
+                                Text(
+                                    text = QuranTextPresentation.annotated(shownText),
+                                    color = if (hidden && !revealed && !isCurrent) Color(0xFF76552A) else Color(0xFF76552A),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1268,22 +1359,6 @@ private fun RecitationCard(
                         Text("الآية الحالية مقفلة: صحّح كل الكلمات الحمراء قبل الانتقال إلى الآية التالية.", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
                     }
                 }
-            }
-            if (state.rawTranscript.isNotBlank()) {
-                Text("الناتج الخام للتعرّف الصوتي", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
-                Text(
-                    state.rawTranscript,
-                    color = Color.White,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    "يُقارن هذا النص الخام بمرجع النطق فقط؛ لا يُحوَّل إلى الرسم القرآني قبل الحكم.",
-                    color = Color(0xFFD7E9DF),
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
             if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) {
                 Text("بدون اتصال غير متاح بأمان على هذا الهاتف 32-bit؛ استخدم التعرّف عبر الإنترنت أو هاتفاً 64-bit.", color = Color(0xFFFFE1B5))
@@ -1461,6 +1536,23 @@ private fun ReaderScreen(
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("الكلمة الحالية", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
                         Text(state.currentSpokenWord.orEmpty(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF246B57), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+                    }
+                }
+            }
+        }
+        if (state.rawTranscript.isNotBlank() || state.transcript.isNotBlank()) {
+            item {
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF4EE))) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (state.rawTranscript.isNotBlank()) {
+                            Text("أول نص أعاده SpeechRecognizer بدون تعديل", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+                            Text(state.rawTranscript, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right, color = Color(0xFF183D33))
+                            Text("هذا هو المرشح النصي الأول كما وصل للتطبيق؛ لا يحوّله التطبيق إلى الرسم القرآني. وقد يطبع المزود بعض المدود والألفات بالرسم الإملائي المعتاد، لأنه تفريغ نصي وليس تمثيلاً صوتياً حرفياً.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+                        }
+                        if (state.transcript.isNotBlank()) {
+                            Text("العرض القرآني بعد الحكم", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
+                            Text(QuranTextPresentation.annotated(state.transcript), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+                        }
                     }
                 }
             }
@@ -1884,6 +1976,7 @@ private fun SettingsScreen(
     onDownloadModel: () -> Unit,
     onUpdateCorrectionSettings: ((CorrectionSettings) -> CorrectionSettings) -> Unit,
     onResetCorrectionSettings: () -> Unit,
+    onShowLegalNotices: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -1905,6 +1998,17 @@ private fun SettingsScreen(
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("قواعد البيانات في هذه النسخة", fontWeight = FontWeight.Bold)
                     Text("البسملة الافتتاحية عنصر مستقل لا يُحسب ضمن كلمات الآية، والحروف المقطعة تُطابق كلمة مرجعية واحدة مع وحدات نطق مستقلة.", color = Color(0xFF66736C))
+                }
+            }
+        }
+        item {
+            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("الحقوق وإشعارات المصادر", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+                    Text("تتضمن النسخة إشعاراً بالمكونات المفتوحة المصدر وملاحظات الأصول التي تحتاج إذناً خاصاً قبل النشر العام أو التجاري.", color = Color(0xFF66736C), textAlign = TextAlign.Right)
+                    OutlinedButton(onClick = onShowLegalNotices, modifier = Modifier.fillMaxWidth()) {
+                        Text("عرض إشعارات المصادر")
+                    }
                 }
             }
         }

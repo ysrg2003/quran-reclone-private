@@ -29,8 +29,12 @@ class WordReferenceLayout(
     val source: String,
     val fontFamily: String,
     val pages: List<WordReferencePage>,
+    /** Declared by the source even when this instance is a first-render preview. */
+    val declaredPageCount: Int = pages.size,
 ) {
-    val pageCount: Int get() = pages.size
+    val pageCount: Int get() = maxOf(declaredPageCount, pages.maxOfOrNull { it.page } ?: 0)
+
+    fun hasPage(page: Int): Boolean = pages.any { it.page == page }
     val lineCount: Int get() = pages.sumOf { it.lines.size }
 
     fun linesForPage(page: Int): List<WordReferenceLine> =
@@ -52,6 +56,11 @@ class WordReferenceLayout(
     companion object {
         fun load(context: Context): WordReferenceLayout {
             val raw = context.assets.open("quran/word_reference_layout.json").bufferedReader().use { it.readText() }
+            return fromJson(raw)
+        }
+
+        fun loadPreview(context: Context): WordReferenceLayout {
+            val raw = context.assets.open("quran/word_reference_preview_layout.json").bufferedReader().use { it.readText() }
             return fromJson(raw)
         }
 
@@ -102,6 +111,7 @@ class WordReferenceLayout(
                 source = root.optString("source"),
                 fontFamily = root.optString("fontFamily"),
                 pages = pages,
+                declaredPageCount = root.optInt("pageCount", pages.size),
             )
         }
     }

@@ -16,13 +16,29 @@ android {
         versionName = "0.1.0"
     }
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("online") {
+            dimension = "distribution"
+            applicationIdSuffix = ".online"
+            versionNameSuffix = "-online"
+            buildConfigField("boolean", "OFFLINE_DISTRIBUTION", "false")
+        }
+        create("offline") {
+            dimension = "distribution"
+            applicationIdSuffix = ".offline"
+            versionNameSuffix = "-offline"
+            buildConfigField("boolean", "OFFLINE_DISTRIBUTION", "true")
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
     }
 
     androidResources {
-        noCompress += "mp3"
+        noCompress += listOf("mp3", "m4a")
     }
 
     packaging {
@@ -57,6 +73,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation(files("libs/sherpa-onnx-1.13.6.aar"))
+    add("offlineImplementation", files("libs/sherpa-onnx-1.13.6.aar"))
     testImplementation("junit:junit:4.13.2")
 }

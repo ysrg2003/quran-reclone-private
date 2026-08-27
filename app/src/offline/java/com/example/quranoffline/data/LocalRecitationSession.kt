@@ -19,15 +19,6 @@ import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
-sealed interface RecognitionUpdate {
-    data object Started : RecognitionUpdate
-    data class Text(val value: String, val timestamps: FloatArray, val isFinal: Boolean = false, val segmentCompleted: Boolean = false) : RecognitionUpdate
-    data class Failed(val message: String) : RecognitionUpdate
-    /** A recoverable recognizer error; the session remains active while it restarts. */
-    data class Retrying(val message: String) : RecognitionUpdate
-    data object Stopped : RecognitionUpdate
-}
-
 /** Entirely local microphone + sherpa-onnx session using an extracted model directory. */
 class LocalRecitationSession(
     private val context: Context,

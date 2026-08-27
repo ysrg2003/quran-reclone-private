@@ -4,15 +4,20 @@ import android.content.Context
 import org.json.JSONObject
 
 /**
- * Canonical Quran data loaded only from the bundled Word-derived asset.
- *
- * `text` is the supplied Uthmanic Word spelling. `matchText` is a separate
- * comparison hint and is never used to render or replace the canonical text.
+ * Quran text repository whose only runtime source is the supplied Word-derived
+ * canonical asset. Speech comparison metadata is read from precomputed fields;
+ * no external text participates in this repository.
  */
 data class QuranWord(
     val index: Int,
     val text: String,
     val matchText: String,
+    /** Precomputed spoken form copied from the comparison asset. */
+    val spokenForm: String = matchText,
+    /** Precomputed Uthmani/provider forms tied to this exact word. */
+    val recognizedForms: Set<String> = emptySet(),
+    /** Precomputed pause/provider forms tied to this exact word. */
+    val waqfForms: Set<String> = emptySet(),
 )
 
 data class QuranAyah(
@@ -23,13 +28,17 @@ data class QuranAyah(
     val words: List<QuranWord>,
 )
 
-class QuranRepository(context: Context) {
+class QuranRepository(
+    context: Context,
+    private val assetPath: String = "quran/word_reference_ayahs.json",
+) {
     private val appContext = context.applicationContext
     private val ayahs: List<QuranAyah> by lazy {
-        val raw = appContext.assets.open("quran/word_reference_ayahs.json")
-            .bufferedReader()
+        val raw = appContext.assets
+            .open(assetPath)
+            .bufferedReader(Charsets.UTF_8)
             .use { it.readText() }
-        parse(raw)
+        parseWordReference(raw)
     }
 
     fun allAyahs(): List<QuranAyah> = ayahs
@@ -41,14 +50,14 @@ class QuranRepository(context: Context) {
 
     fun firstAyahs(limit: Int = 3): List<QuranAyah> = ayahs.take(limit)
 
+    fun isPreview(): Boolean = assetPath != "quran/word_reference_ayahs.json"
+
     fun surahNumbers(): List<Int> = ayahs.map { it.surah }.distinct()
 
     companion object {
-        private fun parse(raw: String): List<QuranAyah> {
-            require(raw.isNotBlank()) { "word_reference_ayahs.json is empty" }
+        private fun parseWordReference(raw: String): List<QuranAyah> {
+            if (raw.isBlank()) return emptyList()
             val root = JSONObject(raw)
-            require(root.getInt("ayahCount") == 6236) { "Unexpected Word reference ayah count" }
-            require(root.getInt("wordCount") == 77430) { "Unexpected Word reference word count" }
             val items = root.getJSONArray("ayahs")
             return buildList(items.length()) {
                 for (i in 0 until items.length()) {
@@ -57,34 +66,40 @@ class QuranRepository(context: Context) {
                     val words = buildList(wordsJson.length()) {
                         for (j in 0 until wordsJson.length()) {
                             val word = wordsJson.getJSONObject(j)
+                            val visual = word.getString("text")
+                            val matchText = word.optString("matchText", "")
                             add(
                                 QuranWord(
-                                    index = word.getInt("index"),
-                                    text = word.getString("text"),
-                                    matchText = word.optString("matchText"),
+                                    index = word.optInt("index", j),
+                                    text = visual,
+                                    matchText = matchText,
+                                    spokenForm = word.optString("spokenForm", matchText),
+                                    recognizedForms = jsonStringSet(word, "recognizedForms"),
+                                    waqfForms = jsonStringSet(word, "waqfForms"),
                                 ),
                             )
                         }
                     }
-                    require(words.map { it.index } == words.indices.toList()) {
-                        "Non-contiguous Word indices at ${item.getInt("surah")}:${item.getInt("ayah")}"
-                    }
-                    val wordText = words.joinToString(" ") { it.text }
                     add(
                         QuranAyah(
                             surah = item.getInt("surah"),
                             ayah = item.getInt("ayah"),
-                            text = wordText,
+                            text = words.joinToString(" ") { it.text },
                             matchText = words.joinToString(" ") { it.matchText },
                             words = words,
                         ),
                     )
                 }
-            }.also { result ->
-                require(result.size == 6236) { "Unexpected parsed Word reference size" }
-                require(result.zipWithNext().all { (first, second) ->
-                    second.surah > first.surah || (second.surah == first.surah && second.ayah > first.ayah)
-                }) { "Word reference ayahs are not in Quran order" }
+            }
+        }
+
+        private fun jsonStringSet(word: JSONObject, key: String): Set<String> {
+            val array = word.optJSONArray(key) ?: return emptySet()
+            return buildSet(array.length()) {
+                for (index in 0 until array.length()) {
+                    val value = array.optString(index).trim()
+                    if (value.isNotEmpty()) add(value)
+                }
             }
         }
     }

@@ -27,6 +27,11 @@ data class CorrectionSettings(
     fun normalized(): CorrectionSettings {
         val safePause = PAUSE_OPTIONS_MS.minByOrNull { kotlin.math.abs(it - pauseBetweenPartsMs) }
             ?: DEFAULT_PAUSE_BETWEEN_PARTS_MS
+        val safeResumePosition = if (resumePosition == ResumePosition.WORD_AFTER_ERROR) {
+            // The first unresolved error is a hard barrier. Keep the legacy
+            // enum for persisted settings, but never resume after that word.
+            ResumePosition.FIRST_ERROR
+        } else resumePosition
         return copy(
             wholeAyahAfterConsecutiveErrors = wholeAyahAfterConsecutiveErrors.coerceIn(MIN_ERROR_THRESHOLD, MAX_ERROR_THRESHOLD),
             wordRepeatCount = wordRepeatCount.coerceIn(MIN_REPEAT_COUNT, MAX_REPEAT_COUNT),
@@ -35,6 +40,7 @@ data class CorrectionSettings(
             clipPaddingBeforeMs = clipPaddingBeforeMs.coerceIn(MIN_PADDING_MS, MAX_PADDING_MS),
             clipPaddingAfterMs = clipPaddingAfterMs.coerceIn(MIN_PADDING_MS, MAX_PADDING_MS),
             mushafTextScale = mushafTextScale.coerceIn(MIN_MUSHAF_TEXT_SCALE, MAX_MUSHAF_TEXT_SCALE),
+            resumePosition = safeResumePosition,
         )
     }
 
@@ -79,7 +85,7 @@ private val DEFAULT_RESUME_POSITION = ResumePosition.FIRST_ERROR
 fun CorrectionSettings.displayResumePosition(): String = when (resumePosition) {
     ResumePosition.AYAH_START -> "من أول الآية"
     ResumePosition.FIRST_ERROR -> "من أول خطأ"
-    ResumePosition.WORD_AFTER_ERROR -> "من الكلمة التالية"
+    ResumePosition.WORD_AFTER_ERROR -> "من أول خطأ"
 }
 
 fun CorrectionSettings.displayPause(): String = when (pauseBetweenPartsMs) {

@@ -1,0 +1,73 @@
+# تقرير تحديث الامتثال والأداء — 2026-08-27
+
+> هذه مراجعة تقنية وامتثالية وليست رأياً قانونياً. يجب أن يراجع محامٍ أو صاحب الحق الوثائق قبل أي نشر عام أو تجاري.
+
+## القرار
+
+لم يعثر البحث العام المستقل على إذن نهائي قابل للإثبات يغطي الأصول الثلاثة الجوهرية المستخدمة فعلياً: **خط KFGQPC، ملف Word `UthmanicHafs_V20.doc`، وتسجيل محمود خليل الحصري مع بيانات QUL المشتقة**. لذلك يبقى التطبيق **للاختبار الداخلي فقط**، ولا يجوز وصف APK بأنه cleared تجارياً.
+
+## نتيجة البحث العام المستقل
+
+| الأصل | ما وجدناه خارج المصادر السابقة | الحالة | المطلوب |
+|---|---|---|---|
+| خط KFGQPC HAFS | ScanCode LicenseDB ينقل شرط الموافقة الكتابية على إعادة الإنتاج/التعديل. font.download ينقل EULA يسمح بالاستخدام والنسخ والتوزيع مجاناً لكنه يمنع البيع والتعديل ويكرر شرط الموافقة الكتابية. كلاهما موزع/قاعدة مستقلة لا صاحب الحق، ولم تُثبت مطابقة النص للـTTF ذي SHA-256 `27a0727ef2f644da13b5b254befb85a7f3539d095a94caaceea2079cf5d7be5a`. | أحمر للنشر التجاري | EULA أو إذن من KFGQPC يجيز تضمين TTF داخل Android وإعادة توزيعه، مع مطابقة الملف والبصمة والنطاق التجاري. |
+| Word المرجعي | The Albaani Site يذكر وجود ملف Word وخط عثماني مرتبطين بمصحف مجمع الملك فهد، لكنه لا يعرض إذناً لإعادة توزيعه داخل تطبيق. | أحمر | وثيقة مصدر/إذن للملف نفسه، لا مجرد صفحة تنزيل. |
+| تسجيل الحصري | QuranHub يصف مستودعاً مستقلاً لصوت الحصري ويحمل GPL-3.0 للمستودع، لكن LICENSE الخام لا يذكر مالك التسجيل أو grant صوتياً. QuranCentral وInternet Archive وAssabile وQuran.com تعرض الاستماع/التنزيل أو تعريف القارئ دون grant ظاهر لتضمين MP3 في APK أو إعادة استضافته. | أحمر | إذن من صاحب التسجيل أو موزع مخول يغطي البث والتخزين المؤقت وإعادة التوزيع التجاري. |
+| QUL segments | التوقيتات مشتقة من التسجيل؛ لم يظهر ترخيص resource-specific واضح يجيز إعادة توزيع الفهرس المشتق أو الاعتماد الإنتاجي على CDN. | أحمر | إذن يشمل البيانات المشتقة، والتخزين/self-hosting أو شروط CDN. |
+| quran-align | الكود MIT، وبيانات التوقيت القديمة CC BY 4.0 مع الإسناد. | أخضر مع الإسناد | لا تنسب توقيت quran-align القديم إلى تسجيل QUL الحالي. |
+| sherpa-onnx وONNX Runtime | Apache-2.0 لـsherpa، وMIT لـONNX Runtime 1.27.1 الموجود داخل AAR. | أخضر مع الإشعارات | إبقاء النصوص والإشعارات مع التوزيع. |
+| FastConformer | بطاقة النموذج CC BY 4.0؛ النموذج اختياري ولا يوجد داخل APK الحالي. | أصفر | تثبيت revision/hash وإضافة attribution قبل التوزيع. |
+| Tanzil metadata | metadata التنظيمية تحمل إسناد CC BY؛ لا تُستخدم كمصدر النص الحاكم. | أخضر مع الإسناد | إبقاء إشعار Tanzil. |
+| Quran-PNG وquran.com-images | مرجع تحقق خارجي فقط؛ الصور والخطوط والـglyph assets لا تُشحن. | أخضر بالنسبة للـAPK الحالي | لا تعِد توزيع الصور أو أصول الخط دون إذن منفصل. |
+
+تدعم المراجع العامة من WIPO وU.S. Copyright Office أن التسجيل الصوتي وحقوق المؤدي/المنتج قد تكون منفصلة عن النص، وأن الإتاحة على الإنترنت لا تجعل العمل في الملك العام. وتوضح Microsoft أن إذن embedding داخل مستند لا يساوي إذن شحن ملف الخط داخل تطبيق أو جهاز. هذه مبادئ عامة وليست بديلاً عن قانون بلد النشر أو عقد صاحب الحق.
+
+## إصلاح قص صوت الكلمة
+
+كان التطبيق يشغل نافذة QUL الدقيقة ثم يوقف `MediaPlayer` عند نهاية النافذة تقريباً. أضيف الآن `withCorrectionPadding`، وهو يحسب الصمت بين segment الكلمة الحالية والسابقة واللاحقة، ويستخدم نصف الفجوة بحد أقصى 120 مللي ثانية لكل طرف. إذا لم تكفِ الفجوة، يُقص الهامش؛ لذلك لا يمكن للهامش التلقائي أو اليدوي عبور segment كلمة مجاورة. لا يُضاف هامش معروف قبل أول كلمة أو بعد آخر كلمة إلا ما يسمح به طرف الملف، وتبقى إعدادات المستخدم فعالة ضمن هذه الحدود.
+
+هذا يعالج القطع الصلب لبداية/نهاية كلمة عندما توجد فجوة صمت موثقة. لكنه لا يثبت أن QUL segment نفسه يطابق كل phoneme أو أن كل تسجيل له نفس حدود segment؛ يلزم اختبار استماع فعلي على الهاتف، ولم يُنفذ اختبار ADB/هاتف في هذه الجولة.
+
+## تحسين سرعة فتح التطبيق
+
+أظهر الفحص أن التطبيق كان يحجب الواجهة أثناء قراءة وتحليل `word_reference_ayahs.json` بحجم يقارب 19 MB، و`word_reference_layout.json` بحجم يقارب 2.3 MB، و`quran_page_layout.json` بحجم يقارب 12 MB، وقراءة مرجع النطق من JSON الكامل مرة أخرى، فضلاً عن توقيتات الحصري بحجم يقارب 5.8 MB.
+
+أضيف أصلان صغيران مولدان آلياً من Word canonical: `word_reference_preview.json` و`word_reference_preview_layout.json`. يحتويان صفحات المصحف 1–5 فقط و36 آية، وتثبت الأداة `verify_word_reference_preview.py` أن كل كائن آية وكل سطر يطابق الأصل الكامل حرفياً. عند الإقلاع يقرأ التطبيق preview ويعرض الصفحة الأولى، ثم يحمّل ويفحص النص الكامل والتخطيط ومرجع النطق والتوقيتات داخل coroutine خلفية. لا تُفعّل القراءة أو التسميع قبل اكتمال التحقق الكامل. الانتقال إلى صفحات خارج preview يعرض رسالة انتظار بدلاً من إظهار صفحة فارغة، ويُحافظ التحميل الكامل على الصفحة التي اختارها المستخدم إن تغيرت أثناء التحميل.
+
+لم يُحذف النص الكامل من APK؛ بقي المصدر canonical كاملاً حتى لا يتغير النص أو سلوك التسميع. التحسين هو إزالة الانتظار من مسار أول رسم، وليس التضحية بالمصحف الكامل.
+
+## الإشعارات داخل APK
+
+تقرأ نافذة الإشعارات الآن `NOTICE.md` وملف البحث القانوني وملحقي البحث المستقل ومبادئ حقوق النشر العامة وفهارس ونصوص التراخيص من `assets/third_party_licenses/`. هذا يجعل الشروط المحددة للمكونات المفتوحة ونتائج البحث قابلة للعرض من داخل التطبيق، لكنه لا يمنح الأصول الحمراء ترخيصاً غير موجود.
+
+## الاختبارات والنسخة
+
+نجحت البوابة التالية بعد آخر تعديل: `verify_word_text_unchanged.py`، و`verify_word_audio_timings.py`، و`verify_word_reference_preview.py`، و`git diff --check`، وGradle `testDebugUnitTest` و`assembleDebug` و`lintDebug` باستخدام Gradle offline. لم يُنفذ اختبار هاتف حي لأن ADB غير متصل في هذه الجولة.
+
+- Commit: `9f746e43ee5070516d573f1343da9bdc59238029`
+- APK: `app/build/outputs/apk/debug/app-debug.apk`
+- الحجم: `70,080,835` بايت
+- SHA-256: `ccf29b72449937629850df1855d51cb15e4570c0b9810b48975e2274a277592d`
+- رابط التنزيل: https://files.manuscdn.com/user_upload_by_module/session_file/310419663030180910/JeoDrDkoXWEQToTt.apk
+
+## الخطوة المطلوبة من صاحب المشروع
+
+يجب تزويد المشروع برسالة أو وثيقة من مصدر موثوق تخص **ملف Word، خط KFGQPC، وتسجيل الحصري/QUL**. ينبغي أن تذكر الوثيقة صراحةً التضمين داخل Android، وإعادة التوزيع، والاستخدام التجاري عند الحاجة، والبث والتخزين المؤقت، والبيانات المشتقة، مع اسم صاحب الحق والتاريخ/الإصدار والرابط وبصمة الملف ونطاق الإذن. إلى أن تصل هذه الوثائق، لا أنصح بتغيير حالة المشروع من internal testing only.
+
+## المراجع العامة والمستقلة
+
+- https://scancode-licensedb.aboutcode.org/kfgqpc-uthmanic-script-hafs.html
+- https://font.download/font/kfgqpc-hafs-uthmanic-script
+- https://www.fontspace.com/kfgqpc-hafs-uthmanic-script-font-f112116
+- https://andalusi.app/en/fonts/kfgqpc-uthmanic-script-hafs
+- https://github.com/nuqayah/qpc-fonts
+- https://thealbaani.site/2011/07/10/the-mushaf-of-the-king-fahd-printing-complex-of-the-holy-quran-in-word-format/
+- https://github.com/QuranHub/quran-audio-hafs-husary
+- https://raw.githubusercontent.com/QuranHub/quran-audio-hafs-husary/main/LICENSE
+- https://qurancentral.com/audio/mahmoud-khalil-al-husary
+- https://archive.org/details/lifeways11_gmail_001_20180201
+- https://www.assabile.com/mahmoud-khalil-al-hussary-27/collection/al-mushaf-al-murattal-egyptian-radio-recordings-3217
+- https://quran.com/en/reciters/6
+- https://www.wipo.int/en/web/copyright/faq-copyright
+- https://www.copyright.gov/engage/musicians/
+- https://learn.microsoft.com/en-us/typography/fonts/font-faq
