@@ -1,6 +1,8 @@
 # سجل بحث التراخيص وشروط الاستخدام — 2026-08-27
 
 > هذا سجل بحث تقني/امتثالي وليس رأياً قانونياً. يجب مراجعة صاحب الحق أو محامٍ قبل نشر تجاري أو رفع التطبيق إلى متجر.
+>
+> **ملاحظة الحالة:** أجزاء FastConformer/Sherpa-ONNX أدناه تاريخية من تجربة سابقة وليست جزءاً من العقد النهائي أو أي APK حالي. الإصدار الحالي يستخدم Android `SpeechRecognizer` في كلا flavorين، ووضع الكتابة لا يحتاج ميكروفوناً أو شبكة.
 
 ## EveryAyah والسكربت التاريخي
 
@@ -113,8 +115,8 @@ NVIDIA base model: https://huggingface.co/nvidia/stt_ar_fastconformer_hybrid_lar
 
 Manifest الحالي يطلب:
 
-- `android.permission.INTERNET`: لبث/تنزيل صوت الحصري وتنزيل النموذج.
-- `android.permission.RECORD_AUDIO`: للتسميع؛ صلاحية خطرة runtime ويجب طلب موافقة المستخدم قبل التسجيل.
+- `android.permission.INTERNET`: لـAndroid `SpeechRecognizer` في كلا flavorين، وللبث عند الطلب في Online فقط.
+- `android.permission.RECORD_AUDIO`: للتسميع الصوتي؛ صلاحية خطرة runtime ويجب طلب موافقة المستخدم قبل التسجيل. لا يحتاج وضع الكتابة هذه الصلاحية.
 - `allowBackup=true`: يسمح بنسخ بيانات التطبيق وفق سياسات Android/الشركة المصنّعة؛ يجب مراجعة ما إذا كانت checkpoints أو إعدادات التلاوة تحتوي بيانات يريد المستخدم استبعادها.
 - النشاط الرئيسي exported للـlauncher فقط مع `MAIN/LAUNCHER`، ولا توجد خدمة أو receiver أو provider مخصص ظاهر في Manifest.
 
@@ -122,7 +124,8 @@ Manifest الحالي يطلب:
 
 ## خلاصة الحالة
 
-- **مسموح مبدئياً مع إشعارات:** quran-align code MIT، quran-align timing data CC BY 4.0، QUL repository code MIT، sherpa-onnx Apache 2.0، ONNX Runtime MIT، FastConformer model CC BY 4.0، Tanzil metadata CC BY 3.0، AndroidX/Kotlin/Compose/JUnit بعد توليد notices فعلياً.
+- **مسموح مبدئياً مع إشعارات:** quran-align code MIT، quran-align timing data CC BY 4.0، QUL repository code MIT، Tanzil metadata CC BY 3.0، AndroidX/Kotlin/Compose/JUnit بعد توليد notices فعلياً.
+- **تاريخي وغير مشحون:** Sherpa-ONNX وONNX Runtime وFastConformer؛ أزيلت من التبعيات والأصول والـAPK ولا تمنح هذه الدراسة إذناً لشحنها.
 - **مسموح للاستخدام التقني لكن حق الشحن غير مثبت:** صوت الحصري وQUL segments، خط KFGQPC/Word، Word source نفسه، ملفات CDN، EveryAyah recordings/dataset، وأي مكونات أصلية داخل AAR غير موثقة في its notices.
 - **مرجع تحقق فقط ولا يُشحن:** Quran-PNG images، quran.com-images fonts/pages/glyph assets.
 - **ممنوع الإعلان عن إطلاق تجاري أو نشر عام قبل الإغلاق:** صوت الحصري وملف توقيتاته المشتق، خط KFGQPC وWord source ما لم توجد وثائق إذن/ترخيص قابلة للإرفاق؛ وكذلك أي AAR/model notices غير مكتملة.

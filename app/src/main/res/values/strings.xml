@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">ورد — قرآن بلا اتصال</string>
-    <string name="app_description">تسميع وحفظ القرآن على جهازك دون إنترنت</string>
+    <string name="app_name">ورد — حفظ وتسميع القرآن</string>
+    <string name="app_description">قواعد القرآن محلية؛ التسميع الصوتي يستخدم Android SpeechRecognizer عبر الإنترنت</string>
 </resources>

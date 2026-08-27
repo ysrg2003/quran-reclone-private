@@ -73,6 +73,5 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    add("offlineImplementation", files("libs/sherpa-onnx-1.13.6.aar"))
     testImplementation("junit:junit:4.13.2")
 }

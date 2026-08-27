@@ -6,10 +6,10 @@
 
 | المجال | معيار القبول | الأمر/الدليل | الحالة | الملاحظة |
 |---|---|---|---|---|
-| Git snapshot | tag `quran-v1` موجود ولا يحتوي audio blobs في ref القابل للدفع | `git show quran-v1` وobject audit | محلياً مثبت، والرفع مؤجل | يشير إلى `1c7d2dd`؛ لا يُدفع قبل فحص pack/reflog |
-| Word canonical | 6236 آية و77430 كلمة دون تغيير | `scripts/validate_word_reference_content.py` | بوابة نهائية مؤجلة | يجب تشغيلها بعد آخر تعديل |
-| QUL timing | 6236 آية، 77430 نافذة canonical، raw/non-word audit | `scripts/validate_full_quran_assets.py` و`audit_husary_audio_boundaries.py` | بوابة نهائية مؤجلة | لا يُعدّل QUL JSON بصمت |
-| preview | الصفحات 1–5 وعددها 36 آية مشتقة من canonical | `scripts/verify_word_reference_preview.py` | بوابة نهائية مؤجلة | preview لا يستبدل full load |
+| Git snapshot | tag `quran-v1` موجود ولا يحتوي audio blobs في ref القابل للدفع | `git show quran-v1` وobject audit | مثبت | يشير إلى `1c7d2dd`؛ الإصلاح الجديد يحتاج tag منفصلاً |
+| Word canonical | 6236 آية و77430 كلمة دون تغيير | `scripts/validate_word_reference_content.py` | مثبت | `word-reference-content=PASS` |
+| QUL timing | 6236 آية، 77430 نافذة canonical، raw/non-word audit | `scripts/validate_full_quran_assets.py` و`scripts/audit_husary_audio_boundaries.py` | مثبت | `quran-ayahs-ok=6236`؛ anomalies موثقة ولا تعدّل JSON |
+| preview | الصفحات 1–5 وعددها 36 آية مشتقة من canonical | `scripts/verify_word_reference_preview.py` | مثبت | `word_reference_preview_exact_subset True` |
 | pronunciation asset | 6236 صفاً وحقول `spoken`/`spokenTokens`/`maddPositions` | `PronunciationReference.load()` | مثبت مصدر | يقرأ `pronunciation_reference.json` المنفصل، لا provider output |
 | basmala barrier | حذف `الرحمان` يجعل `الرحيم` `UNCERTAIN` | `OpeningBasmalaProgressTrackerTest` | مثبت | standalone basmala لا تدخل `allAyahs` |
 | whole ayah start | queue الآية الكاملة يبدأ من offset صفر | `TimingWordMapperTest` و`QuranViewModel` | مثبت مصدر/وحدة | MediaPlayer live test مؤجل |
@@ -18,25 +18,26 @@
 | audio bounds | ترتيب cues وحدودها مقابل مدة MP3/M4A | `HUSARY_AUDIO_BOUNDARY_AUDIT_2026-08-27.json` | مثبت مع anomalies مسجلة | 228 M4A و140 MP3 boundary anomaly؛ ليست حكماً لغوياً |
 | sample audio | التفريق بين نقص الملف وتأخر first cue | `HUSARY_AUDIO_SAMPLE_ASR_2026-08-27.md` | عينة محدودة مثبتة | `001001` و`002015` فقط، لا 6236 ASR |
 | Online source | SpeechRecognizer يعيد الاستماع بعد pauses/transient errors ويحافظ على raw candidate | `OnlineSpeechSession.kt` + compile | مثبت مصدر | سلوك provider على الهاتف مؤجل |
-| Offline source | sherpa/AudioRecord بلا fallback شبكي | Offline source/manifest | مثبت مصدر | inference على 64-bit phone مؤجل |
-| Online tests | JVM tests compile/run | `:app:testOnlineDebugUnitTest` | نجح في هذه الجولة | output: `BUILD SUCCESSFUL` |
-| Offline tests | JVM tests compile/run | `:app:testOfflineDebugUnitTest` | نجح في هذه الجولة | output: `BUILD SUCCESSFUL` |
-| lint | لا توجد أخطاء release-blocking | `:app:lintOnlineDebug :app:lintOfflineDebug` | نجح في هذه الجولة | warning deprecated icon فقط |
-| assemble | APKs للـflavorين | `:app:assembleOnlineDebug :app:assembleOfflineDebug` | نجح في هذه الجولة | الأحجام والبصمات أدناه |
-| APK contents | Online بلا audio/model/sherpa؛ Offline بلا INTERNET وبأصول محلية | `docs/APK_CONTENT_AUDIT_2026-08-27.md` | نجح | فحص merged APK/manifest فعلياً |
+| Offline source | Android SpeechRecognizer؛ صوت الحصري محلي بلا fallback ASR محلي | `OnlineSpeechSession` + Offline M4A assets | مثبت مصدر | SpeechRecognizer على هاتف مؤجل |
+| Online tests | JVM tests compile/run | `:app:testOnlineDebugUnitTest` | مثبت | نجح بعد إضافة وضع الكتابة والعقد الجديد |
+| Offline tests | JVM tests compile/run | `:app:testOfflineDebugUnitTest` | مثبت | نجح بعد إضافة وضع الكتابة والعقد الجديد |
+| typed recitation | النص يمر إلى نفس tracker والحاجز | `typedRecitationContractKeepsLaterWordsAndAyahUncertainAfterSkip` | مثبت unit | اختبار واجهة الهاتف مؤجل |
+| lint | لا توجد أخطاء release-blocking | `:app:lintOnlineDebug :app:lintOfflineDebug` | مثبت | `BUILD SUCCESSFUL`؛ warning deprecated icon فقط |
+| assemble | APKs للـflavorين | `:app:assembleOnlineDebug :app:assembleOfflineDebug` | مثبت | hashes الجديدة أدناه |
+| APK contents | Online بلا audio/model/sherpa؛ Offline بـM4A وبـINTERNET وبدون model/Sherpa | `docs/APK_CONTENT_AUDIT_2026-08-27.md` | مثبت | فحص aapt/unzip فعلياً |
 | ADB Online | basmala omission، pause، raw candidate، whole ayah first word | phone test log | مؤجل | لا يوجد سجل جهاز في هذه الجولة |
-| ADB Offline | network disabled، local inference/audio، بلا crash | phone test log | مؤجل | يتطلب جهاز 64-bit متوافق |
+| ADB Offline | SpeechRecognizer مع الشبكة متاحة، تشغيل M4A محلي، بلا crash | phone test log | مؤجل | لا يختبر ASR محلياً؛ يتطلب provider متاحاً |
 | rights | إذن صريح للتضمين/إعادة التوزيع/البث/cache/commercial | وثائق حقوق مؤرشفة | blocked | Word/KFGQPC/Husary/QUL-derived timing unresolved |
-| GitHub Release | history نظيف، artifacts نهائية، notes وhashes | `gh auth status` ثم push/release | مؤجل | لا ترفع قبل gates والحقوق |
+| GitHub Release للعقد الجديد | history نظيف، artifacts جديدة، notes وhashes محدثة | push/release بعد final gates | مؤجل | لا يرفع قبل commit وtag الجديدين |
 
-## Artifacts النهائية لهذه الجولة
+## Artifacts النهائية لعقد الكتابة وSpeechRecognizer المشترك
 
 | variant | path | size | SHA-256 |
 |---|---|---:|---|
-| Online | `app/build/outputs/apk/online/debug/app-online-debug.apk` | 23,407,353 bytes | `d8780e203bfada7863685af6f331ab462a97ec6c18247134c31ba82b3e6bc121` |
-| Offline | `app/build/outputs/apk/offline/debug/app-offline-debug.apk` | 1,466,812,771 bytes | `89423ce087441e8a528c0eac15ad3b9e242a3f4c02fdd5c3db4186ff3dabf0ef` |
+| Online | `app/build/outputs/apk/online/debug/app-online-debug.apk` | 23,413,744 bytes | `00da3ab68e5a5a8e0453a11da665a3eb6ecf72a8562a94318f2de5c82821573f` |
+| Offline | `app/build/outputs/apk/offline/debug/app-offline-debug.apk` | 1,300,250,950 bytes | `400e45219d9292e387dc575a9cd93c52994d780c84657cd7142d686fe70d4a2d` |
 
-الدليل التفصيلي للصلاحيات وعدّ entries هو `docs/APK_CONTENT_AUDIT_2026-08-27.md`. هذه artifacts داخلية وليست clearance قانونية.
+الدليل التفصيلي للصلاحيات وعدّ entries هو `docs/APK_CONTENT_AUDIT_2026-08-27.md`. هذه artifacts ناتجة من البناء بعد إضافة وضع الكتابة وإزالة Sherpa/model، لكنها ما زالت للاختبار الداخلي فقط.
 
 ## نتائج تدقيق الصوت
 

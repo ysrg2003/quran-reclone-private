@@ -456,6 +456,38 @@ class RecitationProgressTrackerTest {
     }
 
     @Test
+    fun typedRecitationContractKeepsLaterWordsAndAyahUncertainAfterSkip() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c"), ayah(2, "d")))
+
+        val skipped = tracker.update(final("a c"))
+
+        assertEquals(CorrectionKind.SKIPPED_WORD, skipped.correction?.kind)
+        assertEquals(WordStatus.MISSING, skipped.evaluation.words[1].status)
+        assertEquals(WordStatus.UNCERTAIN, skipped.evaluation.words[2].status)
+        assertEquals(WordStatus.UNCERTAIN, skipped.evaluation.words[3].status)
+
+        tracker.resumeFrom(0, 1)
+        val repaired = tracker.update(final("b c"))
+
+        assertEquals(WordStatus.MATCHED, repaired.evaluation.words[1].status)
+        assertEquals(WordStatus.MATCHED, repaired.evaluation.words[2].status)
+        assertEquals(1, repaired.currentAyahIndex)
+    }
+
+    @Test
+    fun typedFinalSubmissionCompletesAyahAndAdvancesOnlyAfterAllWordsMatch() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b"), ayah(2, "c")))
+
+        val result = tracker.update(final("a b"))
+
+        assertNull(result.correction)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[0].status)
+        assertEquals(WordStatus.MATCHED, result.evaluation.words[1].status)
+        assertEquals(1, result.currentAyahIndex)
+        assertEquals(0, result.currentWordInAyah)
+    }
+
+    @Test
     fun correctionKeyIsDeduplicatedUntilWordIsResolved() {
         val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c")))
 

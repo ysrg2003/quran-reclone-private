@@ -65,6 +65,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Surface
@@ -106,7 +107,7 @@ import com.example.quranoffline.data.QuranViewModel
 import com.example.quranoffline.data.CorrectionPhase
 import com.example.quranoffline.data.CorrectionSettings
 import com.example.quranoffline.data.ResumePosition
-import com.example.quranoffline.data.RecitationEngine
+import com.example.quranoffline.data.RecitationInputMode
 import com.example.quranoffline.data.WordStatus
 import com.example.quranoffline.data.displayPause
 import com.example.quranoffline.data.QuranTextPresentation
@@ -171,12 +172,15 @@ private fun QuranOfflineApp(
     val state = viewModel.uiState.value
     val context = LocalContext.current
     val startRecitation = {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+        if (state.inputMode == RecitationInputMode.TYPING) {
+            viewModel.startTypedRecitation()
+        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             viewModel.startListening()
         } else {
             onRequestMicrophone()
         }
     }
+    val resumeRecitation = startRecitation
     var tab by remember { mutableIntStateOf(0) }
     var showLegalNotices by rememberSaveable { mutableStateOf(false) }
 
@@ -209,7 +213,7 @@ private fun QuranOfflineApp(
                             ) {
                                 Icon(Icons.Default.PlayArrow, null, tint = Color.White)
                                 Spacer(Modifier.width(5.dp))
-                                Text(if (state.engine == RecitationEngine.ONLINE) "عبر الإنترنت" else "بدون اتصال", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                                Text("SpeechRecognizer", style = MaterialTheme.typography.labelMedium, color = Color.White)
                             }
                         }
                     },
@@ -256,14 +260,14 @@ private fun QuranOfflineApp(
                 focusRecitation = true,
                 onToggleHidden = viewModel::toggleHidden,
                 onStart = {
-                    if (state.listening) viewModel.stopListening()
-                                            else if (state.assetsReady && (state.engine == RecitationEngine.ONLINE || state.modelReady)) startRecitation()
-                        else startRecitation()
-
+                    if (state.listening) viewModel.stopListening() else startRecitation()
                 },
+                onInputModeChange = viewModel::setRecitationInputMode,
+                onTypedInputChange = viewModel::updateTypedInput,
+                onSubmitTyped = viewModel::submitTypedRecitation,
                 onSave = viewModel::saveCurrentSession,
                 onSetGoal = viewModel::setDailyGoal,
-                onResume = onRequestMicrophone,
+                onResume = resumeRecitation,
                 onSetStart = viewModel::setMemorizationStart,
                 onPlayAyah = viewModel::playAyah,
                 onPlayBasmala = viewModel::playOpeningBasmala,
@@ -305,17 +309,18 @@ private fun QuranOfflineApp(
                 state = state,
                 onToggleHidden = viewModel::toggleHidden,
                 onStart = {
-                    if (state.listening) viewModel.stopListening()
-                    else if (state.assetsReady && (state.engine == RecitationEngine.ONLINE || state.modelReady)) startRecitation()
-                    else startRecitation()
+                    if (state.listening) viewModel.stopListening() else startRecitation()
                 },
+                onInputModeChange = viewModel::setRecitationInputMode,
+                onTypedInputChange = viewModel::updateTypedInput,
+                onSubmitTyped = viewModel::submitTypedRecitation,
                 onSave = viewModel::saveCurrentSession,
                 onSetStart = viewModel::setMemorizationStart,
                 onMemorizeFromHere = viewModel::startMemorizationFrom,
                 onCorrection = viewModel::playCorrectionForCurrentWord,
                 onStopCorrection = viewModel::stopCorrection,
                 onPreviousAyah = viewModel::startFromPreviousAyah,
-                onResume = onRequestMicrophone,
+                onResume = resumeRecitation,
                 onPlayAyah = viewModel::playAyah,
                 onPlayBasmala = viewModel::playOpeningBasmala,
                 onReadFromHere = viewModel::playFromHere,
@@ -338,8 +343,6 @@ private fun QuranOfflineApp(
                 onModeChange = viewModel::setMode,
                 onDownload = viewModel::downloadCurrentSurah,
                 onDeleteDownload = viewModel::deleteCurrentSurah,
-                onSelectEngine = viewModel::setEngine,
-                onDownloadModel = viewModel::downloadOfflineModel,
                 onUpdateCorrectionSettings = viewModel::updateCorrectionSettings,
                 onResetCorrectionSettings = viewModel::resetCorrectionSettings,
                 onShowLegalNotices = { showLegalNotices = true },
@@ -360,18 +363,12 @@ private fun LegalNoticesDialog(onDismiss: () -> Unit) {
     val legalFiles = remember {
         listOf(
             "NOTICE.md",
-            "LEGAL_LICENSE_RESEARCH.md",
-            "LEGAL_INDEPENDENT_SEARCH_ADDENDUM.md",
-            "LEGAL_INDEPENDENT_SEARCH_NOTES.md",
-            "LEGAL_GENERAL_PRINCIPLES.md",
+            "LEGAL_LICENSE_RESEARCH_2026-08-27.md",
+            "LEGAL_INDEPENDENT_SEARCH_ADDENDUM_2026-08-27.md",
+            "LEGAL_INDEPENDENT_SEARCH_NOTES_2026-08-27.md",
+            "LEGAL_GENERAL_PRINCIPLES_2026-08-27.md",
             "README.md",
             "MIT-quran-align.txt",
-            "MIT-QUL-repository.txt",
-            "Apache-2.0-sherpa-onnx.txt",
-            "MIT-ONNX-Runtime.txt",
-            "CC-BY-3.0.txt",
-            "CC-BY-4.0.txt",
-            "EPL-1.0.html",
         )
     }
     val notices = remember(context, legalFiles) {
@@ -532,6 +529,9 @@ private fun MemorizationScreen(
     focusRecitation: Boolean,
     onToggleHidden: () -> Unit,
     onStart: () -> Unit,
+    onInputModeChange: (RecitationInputMode) -> Unit,
+    onTypedInputChange: (String) -> Unit,
+    onSubmitTyped: () -> Unit,
     onSave: () -> Unit,
     onSetGoal: (Int) -> Unit,
     onResume: () -> Unit,
@@ -566,7 +566,7 @@ private fun MemorizationScreen(
     ) {
         if (focusRecitation) {
             item {
-                RecitationCard(state, onStart, onResume, onCorrection, onStopCorrection, onPreviousAyah)
+                RecitationCard(state, onStart, onInputModeChange, onTypedInputChange, onSubmitTyped, onResume, onCorrection, onStopCorrection, onPreviousAyah)
             }
         }
         item {
@@ -619,7 +619,7 @@ private fun MemorizationScreen(
         item { MushafMetadataCard(state) }
         item { MushafPageNavigationCard(state, onPreviousPage, onNextPage) }
         if (!focusRecitation) {
-            item { RecitationCard(state, onStart, onResume, onCorrection, onStopCorrection, onPreviousAyah) }
+            item { RecitationCard(state, onStart, onInputModeChange, onTypedInputChange, onSubmitTyped, onResume, onCorrection, onStopCorrection, onPreviousAyah) }
         }
         if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
             item {
@@ -919,44 +919,12 @@ private fun ResumePosition.label(): String = when (this) {
 }
 
 @Composable
-private fun EngineCard(
-    state: com.example.quranoffline.data.QuranUiState,
-    onSelectEngine: (RecitationEngine) -> Unit,
-    onDownloadModel: () -> Unit,
-) {
+private fun EngineCard() {
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("محرك التسميع", fontWeight = FontWeight.Bold)
-            if (BuildConfig.OFFLINE_DISTRIBUTION) {
-                FilterChip(
-                    selected = state.engine == RecitationEngine.OFFLINE,
-                    onClick = { onSelectEngine(RecitationEngine.OFFLINE) },
-                    label = { Text("بدون اتصال") },
-                )
-            } else {
-                Text("هذه نسخة Online؛ محرك التسميع عبر SpeechRecognizer فقط، ولا تحتوي محركاً محلياً.", color = Color(0xFF36584B))
-            }
-            Text(
-                if (state.engine == RecitationEngine.ONLINE) {
-                    "التعرّف الصوتي من Android؛ يحتاج الإنترنت ولا يحفظ التطبيق صوتك."
-                } else {
-                    "المحرك المحلي؛ يعالج الصوت على الجهاز والنموذج مضمّن داخل هذا الإصدار."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF66736C),
-            )
-            if (BuildConfig.OFFLINE_DISTRIBUTION && state.engine == RecitationEngine.OFFLINE) {
-                if (!state.offlineSupported) {
-                    Text("هذا الهاتف يعمل بنظام 32-bit، وقد تسبب تشغيل النموذج المحلي فيه بانهيار داخلي. تم إيقاف التشغيل بدون اتصال لمنع إغلاق التطبيق.", color = Color(0xFF9B4D3C))
-                } else {
-                    Text(if (state.modelReady) "النموذج المحلي المضمّن جاهز." else "تعذر تجهيز النموذج المحلي المضمّن.", style = MaterialTheme.typography.labelMedium)
-                    if (!state.modelReady) {
-                        Button(onClick = onDownloadModel, enabled = !state.modelDownloading, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (state.modelDownloading) "جاري تجهيز النموذج…" else "إعادة تجهيز النموذج المضمّن")
-                        }
-                    }
-                }
-            }
+            Text("في Online وOffline يستخدم التطبيق Android SpeechRecognizer؛ لذلك يحتاج التسميع الصوتي إلى اتصال بالإنترنت ولا يُحفظ صوتك داخل التطبيق.", color = Color(0xFF36584B))
+            Text("Online يضمّن قواعد البيانات والـpreview ويجلب صوت الحصري عند الحاجة. Offline يضمّن قواعد البيانات وأصوات الحصري كلها داخل التطبيق. وضع التسميع بالكتابة يعمل محلياً في الإصدارين.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
         }
     }
 }
@@ -972,7 +940,7 @@ private fun OnlineAssetCard(
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("طريقة استخدام الأصول", fontWeight = FontWeight.Bold)
             if (BuildConfig.OFFLINE_DISTRIBUTION) {
-                Text("الصوت والتوقيتات وقواعد البيانات مضمّنة داخل هذا الإصدار؛ لا يستخدم التطبيق الشبكة لتشغيل الصوت.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+                Text("قواعد البيانات والتوقيتات وأصوات الحصري مضمّنة داخل هذا الإصدار. لا تحتاج قراءة الصوت إلى الشبكة، لكن التسميع عبر Android SpeechRecognizer يحتاج الإنترنت.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
             } else {
                 Text("هذا إصدار Online؛ النص والتوقيتات داخل التطبيق، والصوت يُبث من الإنترنت عند الحاجة ولا يحتوي محرك تسميع Offline.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
             }
@@ -1266,6 +1234,9 @@ private fun AyahBlock(
 private fun RecitationCard(
     state: com.example.quranoffline.data.QuranUiState,
     onStart: () -> Unit,
+    onInputModeChange: (RecitationInputMode) -> Unit,
+    onTypedInputChange: (String) -> Unit,
+    onSubmitTyped: () -> Unit,
     onResume: () -> Unit,
     onCorrection: () -> Unit,
     onStopCorrection: () -> Unit,
@@ -1279,6 +1250,44 @@ private fun RecitationCard(
                 color = Color(0xFFE9DFFF),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            Text("طريقة التسميع", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                FilterChip(
+                    selected = state.inputMode == RecitationInputMode.VOICE,
+                    onClick = { onInputModeChange(RecitationInputMode.VOICE) },
+                    label = { Text("بالصوت") },
+                    modifier = Modifier.weight(1f),
+                )
+                FilterChip(
+                    selected = state.inputMode == RecitationInputMode.TYPING,
+                    onClick = { onInputModeChange(RecitationInputMode.TYPING) },
+                    label = { Text("بالكتابة") },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (state.inputMode == RecitationInputMode.TYPING) {
+                OutlinedTextField(
+                    value = state.typedInput,
+                    onValueChange = onTypedInputChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !state.correctionPlaying,
+                    label = { Text("اكتب الكلمة أو الآية") },
+                    placeholder = { Text("اكتب من موضع الآية الحالية…") },
+                    singleLine = false,
+                    minLines = 2,
+                    maxLines = 5,
+                )
+                Button(
+                    onClick = onSubmitTyped,
+                    enabled = state.typedInput.isNotBlank() && !state.correctionPlaying,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("إرسال النص للتحقق") }
+                Text(
+                    "يُستخدم نفس ترتيب الكلمات والحواجز والتصحيح؛ لا يمكن للنص المكتوب تخطي كلمة أو فتح آية لاحقة.",
+                    color = Color(0xFFE9DFFF),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             if (state.openingBasmalaActive) {
                 Text(
                     "جلسة البسملة الافتتاحية مستقلة: تُسمع وتُصحح وحدها، ولا تُحسب آية ولا كلمة. بعد انتهائها تبدأ الآية الأولى مباشرة.",
@@ -1311,17 +1320,16 @@ private fun RecitationCard(
             )
             Text(
                 when {
-                    state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "التسميع بدون اتصال موقوف على هذا الهاتف لحماية التطبيق من الإغلاق."
-                    state.listening && state.engine == RecitationEngine.ONLINE -> "جارٍ التعرّف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
-                    state.listening -> "جارٍ التعرّف محلياً؛ لا يغادر الصوت جهازك…"
-                    state.engine == RecitationEngine.ONLINE -> "ابدأ التلاوة؛ التعرّف عبر الإنترنت والتصحيح النصي يعملان دون حفظ صوتك."
-                    else -> "ابدأ التلاوة؛ التعرّف بدون اتصال بعد تجهيز النموذج."
+                    state.inputMode == RecitationInputMode.TYPING && state.listening -> "وضع الكتابة نشط؛ أرسل النص للتحقق بالتسلسل."
+                    state.inputMode == RecitationInputMode.TYPING -> "اكتب النص ثم اضغط إرسال؛ لا يحتاج وضع الكتابة إلى ميكروفون."
+                    state.listening -> "جارٍ التعرّف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق…"
+                    else -> "ابدأ التلاوة؛ سيستخدم Android SpeechRecognizer عبر الإنترنت."
                 },
                 color = Color(0xFFD7E9DF),
             )
             Button(
                 onClick = onStart,
-                enabled = !state.correctionPlaying && (state.engine != RecitationEngine.OFFLINE || state.offlineSupported),
+                enabled = !state.correctionPlaying,
                 modifier = Modifier.fillMaxWidth(),
                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFD6B277),
@@ -1333,12 +1341,11 @@ private fun RecitationCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     when {
-                        state.engine == RecitationEngine.OFFLINE && !state.offlineSupported -> "بدون اتصال غير متاح على هذا الهاتف"
                         state.correctionPlaying -> "يعمل التصحيح الصوتي…"
                         state.listening -> "إيقاف الجلسة"
                         else -> "ابدأ التسميع"
                     },
-                    color = if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported || state.correctionPlaying) Color(0xFFC9D9D1) else Color(0xFF183D33),
+                    color = if (state.correctionPlaying) Color(0xFFC9D9D1) else Color(0xFF183D33),
                 )
             }
             state.correctionMessage?.let { message ->
@@ -1359,9 +1366,6 @@ private fun RecitationCard(
                         Text("الآية الحالية مقفلة: صحّح كل الكلمات الحمراء قبل الانتقال إلى الآية التالية.", color = Color(0xFFFFE1B5), fontWeight = FontWeight.SemiBold)
                     }
                 }
-            }
-            if (state.engine == RecitationEngine.OFFLINE && !state.offlineSupported) {
-                Text("بدون اتصال غير متاح بأمان على هذا الهاتف 32-bit؛ استخدم التعرّف عبر الإنترنت أو هاتفاً 64-bit.", color = Color(0xFFFFE1B5))
             }
             if (state.listening && !state.correctionPlaying && state.currentAyahIndex > 0) {
                 val previousAyah = state.allAyahs.getOrNull(state.currentAyahIndex - 1)
@@ -1472,6 +1476,9 @@ private fun ReaderScreen(
     state: com.example.quranoffline.data.QuranUiState,
     onToggleHidden: () -> Unit,
     onStart: () -> Unit,
+    onInputModeChange: (RecitationInputMode) -> Unit,
+    onTypedInputChange: (String) -> Unit,
+    onSubmitTyped: () -> Unit,
     onSave: () -> Unit,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
@@ -1512,7 +1519,7 @@ private fun ReaderScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            RecitationCard(state, onStart, onResume, onCorrection, onStopCorrection, onPreviousAyah)
+            RecitationCard(state, onStart, onInputModeChange, onTypedInputChange, onSubmitTyped, onResume, onCorrection, onStopCorrection, onPreviousAyah)
         }
         item {
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -1990,8 +1997,6 @@ private fun SettingsScreen(
     onModeChange: (AssetMode) -> Unit,
     onDownload: () -> Unit,
     onDeleteDownload: () -> Unit,
-    onSelectEngine: (RecitationEngine) -> Unit,
-    onDownloadModel: () -> Unit,
     onUpdateCorrectionSettings: ((CorrectionSettings) -> CorrectionSettings) -> Unit,
     onResetCorrectionSettings: () -> Unit,
     onShowLegalNotices: () -> Unit,
@@ -2009,7 +2014,7 @@ private fun SettingsScreen(
         item { Text("الحفظ والتسميع والتصحيح", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
         item { CorrectionSettingsCard(state.correctionSettings, onUpdateCorrectionSettings, onResetCorrectionSettings) }
         item { Text("المحرك والملفات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
-        item { EngineCard(state, onSelectEngine, onDownloadModel) }
+        item { EngineCard() }
         item { OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload) }
         item {
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {

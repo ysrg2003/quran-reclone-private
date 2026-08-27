@@ -1,30 +1,30 @@
 # Git object audit — 2026-08-27
 
-## النتيجة
+## النتيجة الحالية
 
-تم فحص المستودع `/home/ubuntu/quran-github-restore` قبل أي push. tag `quran-v1` موجود محلياً ويشير إلى commit `1c7d2dd`. ناتج:
+فُحصت الشجرة القابلة للدفع للـ`main` والـtag الجديد `quran-v1-writing-mode`. كلاهما يشير إلى commit الذي يعيده `git rev-parse quran-v1-writing-mode^{}` وقت التدقيق، ولا تحتوي شجرتهما الحالية على ملفات `.mp3` أو `.m4a` أو APK أو ZIP model، ولا أسماء `sherpa` أو `onnx` أو `fastconformer`.
 
 ```text
-git ls-tree -r --name-only quran-v1 | grep -E 'husary(_aac)?/.*\.(mp3|m4a)$'
+git ls-tree -r --name-only quran-v1-writing-mode | grep -E '\.(mp3|m4a|apk|zip)$|sherpa|onnx|fastconformer'
 # no output
 ```
 
-أي أن snapshot نفسه لا يحتوي ملفات MP3 أو M4A في tree. كما فُحصت كل objects المرتبطة بالـrefs عبر `git rev-list --objects --all` و`git cat-file --batch-check`؛ أكبر blob مرتبط بالـrefs هو sherpa AAR بحجم 37,751,439 bytes، ثم pronunciation/timing/layout، ولم يظهر صوت MP3/M4A في هذه المجموعة.
+أُجري أيضاً `git rev-list --objects main quran-v1-writing-mode` مع `git cat-file --batch-check` لفحص الكائنات reachable. تظهر في history القديمة بعض blobs غير المطلوبة للعقد الحالي، وأكبرها AAR Sherpa القديم بحجم `37,751,439` bytes، لأنه تاريخياً جزء من parent commit قبل حذفه. هذا لا يجعله جزءاً من tree أو APK الحالي، ولا ينبغي إعادة إضافته أو استخدام `git push --mirror` لمحاولة نشر refs غير مطلوبة.
+
+## المراجع
+
+| ref | commit المستهدف |
+|---|---|
+| `quran-v1` | `1c7d2dd9f9eff507cfe7048feacfa452ec8d2f0f` |
+| `quran-v1-postfix` | `50eb22e4faaafcb758b03c53a6102690880b69c0` |
+| `quran-v1-writing-mode` | تحقق به: `git rev-parse quran-v1-writing-mode^{}` |
+
+لا يجوز تغيير أو حذف الـtagين التاريخيين. رفع الإصدار الحالي يجب أن يكون محدوداً إلى `main` و`quran-v1-writing-mode` فقط.
 
 ## حالة reflog/التخزين المحلي
 
-`git rev-list --objects --all --reflog` كشف blobs صوتية كبيرة، منها MP3 وM4A، لأن محاولة سابقة أنشأت commit صوتياً ثم أُعيد reset قبل إنشاء snapshot. لذلك حجم `.git` المحلي ما زال تقريباً `3.4G`، وpack size تقريباً `3.36 GiB`. هذه objects ليست ضمن refs الحالية التي سيدفعها Git عادةً، لكن لا ينبغي تشغيل `git push --mirror` أو إنشاء ref جديد إليها.
+الفحص عبر `git rev-list --objects --all --reflog` في جلسات البناء السابقة كشف blobs صوتية كبيرة في reflog المحلي بسبب محاولة قديمة أنشأت commit صوتياً ثم أُعيد reset قبل snapshot. هذه objects ليست ضمن الشجرة الحالية أو الـrefs التي سيُدفع إليها هذا الإصدار، لكن حجم `.git` المحلي بقي كبيراً؛ لذلك لا يُستخدم `git push --mirror` ولا تُنشأ refs جديدة إلى تلك objects.
 
-```text
-reachable refs: no audio paths in quran-v1 tree
-largest ref-reachable blob: 37,751,439 bytes sherpa AAR
-including reflogs: old MP3/M4A blobs present
-.git: 3.4G
-pack: 3.36 GiB
-```
+## حدود التدقيق
 
-## قرار الرفع
-
-لا يوجد audio blob في `main` أو `quran-v1` بحسب الفحص الحالي، لذلك لا توجد بوابة تمنع push بسبب tree الحالية. مع ذلك، يجب استخدام push محدود للفرع والـtags المطلوبة فقط، وعدم دفع reflog أو refs محلية غير معروفة. لا تُخزن MP3/M4A داخل Git history؛ تبقى أصول Offline ignored وتُوزع، إن سمحت الحقوق، كـRelease artifact خارجي.
-
-قبل الرفع النهائي أعد تشغيل الفحص بعد commit الإصلاح، وسجّل أي object جديد يتجاوز حجم الأصول المتوقعة. لا تحذف reflog أو تعمل prune قسرياً ضمن هذه الجولة لأن ذلك إجراء destructive غير مطلوب لإثبات سلامة refs.
+هذا فحص أسماء ومسارات وأحجام كائنات Git، وليس فحص حقوق ملكية. حذف Sherpa من الـtree وAPK لا يثبت حقوق Word أو خط KFGQPC أو تسجيل الحصري أو توقيتاته المشتقة. حالة التطبيق بقيت `internal testing only`.

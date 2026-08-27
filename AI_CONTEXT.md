@@ -2,7 +2,7 @@
 
 ## 1. الهوية والحدود
 
-هذا مستودع تطبيق Android عربي لحفظ وتسميع القرآن وقراءة صفحات المصحف بالنص العثماني المشتق حرفياً من ملف Word المرجعي. الحزمة هي `com.example.quranoffline`، والواجهة Kotlin/Jetpack Compose، والحد الأدنى Android 26، و`compileSdk/targetSdk` يساويان 35. يدعم المشروع variantين مستقلين: `online` للتعرف عبر Android `SpeechRecognizer`، و`offline` للتعرف المحلي عبر sherpa-onnx/FastConformer والصوت المضمّن.
+هذا مستودع تطبيق Android عربي لحفظ وتسميع القرآن وقراءة صفحات المصحف بالنص العثماني المشتق حرفياً من ملف Word المرجعي. الحزمة هي `com.example.quranoffline`، والواجهة Kotlin/Jetpack Compose، والحد الأدنى Android 26، و`compileSdk/targetSdk` يساويان 35. يدعم المشروع variantين مستقلين: `online` و`offline` يستخدمان Android `SpeechRecognizer` للتسميع الصوتي، بينما يختلفان في أصول صوت الحصري المضمّنة.
 
 > **القاعدة الذهبية:** `line.text` والنصوص والرموز من Word canonical هي مصدر العرض. لا تُعدّل طبقة العرض النص الحاكم لتناسب نتيجة التعرف، ولا تُدخل صور Quran-PNG أو quran.com-images في APK.
 
@@ -24,13 +24,12 @@ export ANDROID_SDK_ROOT=/home/ubuntu/tools/android-sdk
 
 | المسار | المسؤولية الفعلية | العقد أو الاختبار المرتبط |
 |---|---|---|
-| `app/build.gradle.kts` | SDK، Compose، flavor dimensions، اعتماد sherpa في Offline فقط | assemble/test variantين |
-| `app/src/main/AndroidManifest.xml` | `INTERNET` و`RECORD_AUDIO` للـmain source set | فحص aapt |
-| `app/src/offline/AndroidManifest.xml` | إزالة `INTERNET` بواسطة `tools:node="remove"` | فحص Offline APK |
-| `app/src/main/assets/quran/word_reference_ayahs.json` | النص الحاكم والكلمات و`matchText` | `verify_word_text_unchanged.py` |
+| `app/build.gradle.kts` | SDK، Compose، flavor dimensions، وتوزيع الأصول | assemble/test variantين |
+| `app/src/main/AndroidManifest.xml` | `INTERNET` و`RECORD_AUDIO` مشتركان لأن SpeechRecognizer يحتاج الشبكة والتسميع الصوتي يحتاج الميكروفون | فحص APKs |
+| `app/src/main/assets/quran/word_reference_ayahs.json` | النص الحاكم والكلمات و`matchText` | `scripts/validate_word_reference_content.py` |
 | `app/src/main/assets/quran/pronunciation_reference.json` | expected spoken tokens وmadd وبيانات ربط الصوت | اختبارات matcher/حجم 6236 |
-| `app/src/main/assets/quran/word_reference_layout.json` | 604 صفحة ومواضع/أسطر Word | `verify_word_reference_preview.py` |
-| `app/src/main/assets/quran/audio_timing/Husary_Murattal.json` | توقيت QUL للكلمات والآيات | `verify_word_audio_timings.py` وتدقيق الحدود |
+| `app/src/main/assets/quran/word_reference_layout.json` | 604 صفحة ومواضع/أسطر Word | `scripts/validate_word_reference_layout.py` |
+| `app/src/main/assets/quran/audio_timing/Husary_Murattal.json` | توقيت QUL للكلمات والآيات | `scripts/validate_full_quran_assets.py` و`scripts/audit_husary_audio_boundaries.py` |
 | `app/src/main/assets/quran/quran-meta-data.xml` | metadata التنظيمية للسور والآيات والصفحات والأجزاء | `QuranMetadataRepository` |
 | `app/src/main/java/.../data/QuranRepository.kt` | قراءة Word canonical إلى `QuranAyah/QuranWord` | word text tests |
 | `.../PronunciationReference.kt` | قراءة asset pronunciation التفصيلي، لا قراءة provider output | pronunciation tests |
@@ -39,7 +38,7 @@ export ANDROID_SDK_ROOT=/home/ubuntu/tools/android-sdk
 | `.../OpeningBasmala.kt` | كشف البسملة الافتتاحية وعزلها عن ayah list | `OpeningBasmalaTest` |
 | `.../OpeningBasmalaProgressTracker.kt` | tracker مستقل للبِسملة باستخدام كلمات 1:1 دون إدخالها في allAyahs | omitted-middle regression |
 | `.../OnlineSpeechSession.kt` | جلسة Android SpeechRecognizer وتراكم partial/final وإعادة التشغيل | hardware only for provider behavior |
-| `app/src/offline/.../LocalRecitationSession.kt` | AudioRecord + sherpa local، لا شبكة | Offline device gate |
+| `.../QuranViewModel.kt` | يمرر نص الكتابة النهائي إلى نفس مسار التقييم دون تشغيل الميكروفون | typed tracker tests |
 | `.../ReferenceAudioPlayer.kt` | MediaPlayer، AssetFileDescriptor، queue، word padding، clamp duration | audio boundary review |
 | `.../TimingWordMapper.kt` | تحويل timing إلى word/whole-ayah windows | `TimingWordMapperTest` |
 | `app/src/main/java/.../WordReferenceLineView.kt` | عرض `line.text` وتلوين spans فقط | canonical text invariant |
@@ -54,15 +53,15 @@ export ANDROID_SDK_ROOT=/home/ubuntu/tools/android-sdk
 | Gradle flavor | `online` | `offline` |
 | application id suffix | `.online` | `.offline` |
 | `OFFLINE_DISTRIBUTION` | `false` | `true` |
-| ASR | `OnlineSpeechSession` / Android provider | `LocalRecitationSession` / sherpa-onnx |
-| sherpa AAR | غير مضاف إلى variant | `offlineImplementation` |
-| النص والتوقيتات | assets محلية | assets محلية |
-| صوت الحصري | HTTPS عند الحاجة أو cache بحسب mode | M4A داخل APK عبر `AssetFileDescriptor` |
-| model | غير موجود | ZIP داخل APK، يُستخرج إلى `filesDir` |
-| INTERNET | موجود من main manifest | محذوف في Offline manifest |
-| RECORD_AUDIO | موجود | موجود |
+| ASR الصوتي | `OnlineSpeechSession` / Android SpeechRecognizer | `OnlineSpeechSession` / Android SpeechRecognizer |
+| التسميع بالكتابة | محلي عبر `RecitationProgressTracker` | محلي عبر `RecitationProgressTracker` |
+| النص والتوقيتات وpronunciation | assets محلية | assets محلية |
+| صوت الحصري | يُجلب HTTPS عند الحاجة أو من cache بحسب mode | 6236 M4A داخل APK عبر `AssetFileDescriptor` |
+| model/Sherpa | غير موجود | غير موجود |
+| INTERNET | موجود | موجود؛ مطلوب لـSpeechRecognizer فقط أثناء التسميع الصوتي |
+| RECORD_AUDIO | مطلوب للتسميع الصوتي فقط | مطلوب للتسميع الصوتي فقط |
 
-`online` هنا ليس مجرد APK فارغ: قاعدة النص/التخطيط/timing/pronunciation محلية، بينما صوت القراءة وprovider ASR هما الحدّ الخارجي. `offline` يعيد توزيع صوت M4A والنموذج فعلياً داخل APK، ولذلك وضع الحقوق فيه أشد حساسية.
+`online` هنا ليس APK فارغاً: قاعدة النص/التخطيط/timing/pronunciation والـpreview محلية، بينما صوت القراءة وprovider ASR هما الحدّ الخارجي. `offline` يعيد توزيع صوت M4A فعلياً داخل APK، بينما يبقى provider ASR الجزء الخارجي الوحيد في التسميع الصوتي؛ لذلك وضع الحقوق فيه أشد حساسية.
 
 ## 5. العقود والحالة والبيانات
 
@@ -98,7 +97,7 @@ app/src/offline/assets/quran/audio/husary_aac/*.m4a
 
 ## 6. دورة التسميع والحكم
 
-`OnlineSpeechSession` يعيد contract النسخة العاملة السابقة: partial لا ينهي الجلسة، وfinal يُضاف إلى `committedText`، وبعد النتائج أو أخطاء provider العابرة يعاد فتح segment تلقائياً. `value` هو النص التراكمي الخام الذي يمر إلى state machine، و`providerText` هو أحدث candidate خام للعرض؛ لا تُضاف canonical spelling إلى observed text. لم تُضف extras جديدة خارج extras النسخة العاملة السابقة؛ يلزم اختبار الهاتف لإثبات سلوك provider الحقيقي.
+`OnlineSpeechSession` يعيد contract النسخة العاملة السابقة: partial لا ينهي الجلسة، وfinal يُضاف إلى `committedText`، وبعد النتائج أو أخطاء provider العابرة يعاد فتح segment تلقائياً. `value` هو النص التراكمي الخام الذي يمر إلى state machine، و`providerText` هو أحدث candidate خام للعرض؛ لا تُضاف canonical spelling إلى observed text. وضع الكتابة لا ينشئ جلسة SpeechRecognizer، بل يصنع `RecognitionUpdate.Text` نهائياً ويمرره إلى نفس handler والمتعقب. لم تُضف extras جديدة خارج extras النسخة العاملة السابقة؛ يلزم اختبار الهاتف لإثبات سلوك provider الحقيقي.
 
 `RecitationProgressTracker` يطابق الكلمة في موضعها لا بمجرد وجودها في الجملة. عند missing أو skipped word يثبت correction barrier، وتبقى الكلمات اللاحقة `UNCERTAIN` حتى تُصحح الكلمة الأولى الخاطئة. pause أو partial غير النهائي لا ينهي جلسة الحكم. سجل الأخطاء يحفظ عبر `LocalRecitationErrorStore`.
 
@@ -117,7 +116,7 @@ app/src/offline/assets/quran/audio/husary_aac/*.m4a
 | المشكلة | الإجراء | حدود الإثبات |
 |---|---|---|
 | إعادة parsing أو انتظار كل الأصول قبل ظهور UI | preview pages 1–5 أولاً على `Dispatchers.IO`، ثم full load | يلزم قياس هاتف فعلي |
-| قراءة full assets بالتتابع | allAyahs، metadata، layout، pronunciation، timing، وmodel tasks مستقلة داخل `coroutineScope`/`async(Dispatchers.IO)` ثم validation قبل UI | الاختبارات تثبت compile فقط |
+| قراءة full assets بالتتابع | allAyahs، metadata، layout، pronunciation، وtiming مستقلة داخل `coroutineScope`/`async(Dispatchers.IO)` ثم validation قبل UI | الاختبارات تثبت compile فقط |
 | `flatMap` لكل 77430 كلمة في كل callback | `QuranUiState.totalWordCount` يحسب أثناء التحميل ويستخدم في cursor bounds | لا يوجد benchmark device بعد |
 | بحث `allAyahs.firstOrNull` لكل Word line | خرائط `ayahsByKey` وindex وoffset تُبنى مرة في `MushafPageSurface` وتُمرر إلى السطور | يحافظ على line.text |
 | إنشاء خرائط كبيرة داخل كل line | أزيل من `WordReferenceLineView`؛ الصفحة هي مالكة cache | يلزم profile Compose |
@@ -127,7 +126,7 @@ app/src/offline/assets/quran/audio/husary_aac/*.m4a
 
 ## 9. Git ونقطة quran V1
 
-النقطة المرجعية المحلية المطلوبة محفوظة باسم tag annotated `quran-v1` وتشير إلى commit `1c7d2dd` برسالة `quran V1 snapshot before audio boundary fixes`. لا ينبغي دفعها قبل إعادة فحص reachable objects لأن محاولة سابقة أنشأت pack صوتياً ضخماً ثم أُعيد reset؛ MP3 المصدر خارج repository وM4A ignored. العمل الحالي غير ملتزم بعد ويحتوي إصلاحات ما بعد V1 وتقارير التدقيق.
+النقطة المرجعية المحلية المطلوبة محفوظة باسم tag annotated `quran-v1` وتشير إلى commit `1c7d2dd` برسالة `quran V1 snapshot before audio boundary fixes`. المرشح السابق محفوظ باسم `quran-v1-postfix` ويشير إلى `50eb22e`، ولا يمثل العقد الحالي. المرشح الحالي محفوظ في tag annotated منفصل `quran-v1-writing-mode`؛ MP3 المصدر خارج repository وM4A ignored. لا يُستبدل أي tag تاريخي.
 
 قبل أي push يجب تشغيل:
 
@@ -164,7 +163,7 @@ python3 scripts/audit_husary_audio_boundaries.py \
 git diff --check
 ```
 
-بعد البناء يجب استعمال `aapt dump permissions` و`unzip -l` للتحقق من: Online يحتوي `INTERNET` و`RECORD_AUDIO` ولا يحتوي M4A/model/sherpa native؛ Offline يحتوي `RECORD_AUDIO` ولا يحتوي `INTERNET` ويحتوي M4A/model/sherpa. يجب حفظ SHA-256 وحجم APK بعد البناء النهائي فقط.
+بعد البناء يجب استعمال `aapt dump permissions` و`unzip -l` للتحقق من: Online يحتوي `INTERNET` و`RECORD_AUDIO` ولا يحتوي M4A أو MP3 أو model أو Sherpa؛ Offline يحتوي `INTERNET` و`RECORD_AUDIO` ويحتوي 6236 M4A، ولا يحتوي model أو Sherpa. يجب حفظ SHA-256 وحجم APK بعد البناء النهائي فقط.
 
 ## 11. ما هو مثبت وما هو مؤجل
 
@@ -175,12 +174,12 @@ git diff --check
 | مثبت | 6236 audio containers present/probed | `HUSARY_AUDIO_BOUNDARY_AUDIT_2026-08-27.*` |
 | مثبت | full-file reader starts at zero in source | `QuranViewModel` و`TimingWordMapperTest` |
 | مثبت | omitted middle basmala word barrier | `OpeningBasmalaProgressTrackerTest` |
-| مثبت | legal warning/internal-only wording | `third_party_notices/NOTICE.md` و`docs/source-lock.md` |
+| مثبت | legal warning/internal-only wording | `app/src/main/assets/third_party_licenses/NOTICE.md` و`docs/source-lock.md` |
 | deferred | ADB/hardware Online basmala and full-ayah test | لا يوجد جهاز ظاهر في هذه الجولة |
-| deferred | Offline on compatible 64-bit phone with network disabled | لا يوجد device/inference run |
+| deferred | Offline voice flow على هاتف متوافق مع Internet متاح لـSpeechRecognizer وتشغيل M4A محلي | لا يوجد device/provider run |
 | deferred | full linguistic listening/ASR audit of all 6236 files | metadata audit + two controlled samples فقط |
-| مثبت | final APK permissions/content/size/SHA | `docs/APK_CONTENT_AUDIT_2026-08-27.md` |
-| مثبت محلياً | Git object audit | `docs/GIT_OBJECT_AUDIT_2026-08-27.md`؛ push/Release ما زال مؤجلاً للحقوق والمراجعة النهائية |
+| مثبت | final APK permissions/content/size/SHA | `docs/APK_CONTENT_AUDIT_2026-08-27.md`؛ Online 23,413,744 bytes وOffline 1,300,250,950 bytes |
+| مثبت سابقاً | Git object audit ورفع المرشح السابق | `docs/GIT_OBJECT_AUDIT_2026-08-27.md` وGitHub Release؛ بعد commit الجديد يجب إعادة الفحص قبل push |
 
 ## 12. بروتوكول agent قبل التعديل
 

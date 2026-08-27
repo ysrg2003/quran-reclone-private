@@ -2,13 +2,13 @@
 
 ## ما هذا المشروع؟
 
-هذا تطبيق Android عربي لقراءة المصحف بالنص العثماني المحفوظ من ملف Word المرجعي، ولحفظ وتسميع الآيات مع تصحيح محافظ على ترتيب الكلمات. العرض لا يستخدم صور المصحف داخل APK؛ بل يعرض `line.text` من Word مع خط KFGQPC المضمّن في المشروع. توجد نسختان منفصلتان من Gradle: `online` تعتمد على Android `SpeechRecognizer`، و`offline` تعتمد على sherpa-onnx/FastConformer والصوت المحلي.
+هذا تطبيق Android عربي لقراءة المصحف بالنص العثماني المحفوظ من ملف Word المرجعي، ولحفظ وتسميع الآيات مع تصحيح محافظ على ترتيب الكلمات. العرض لا يستخدم صور المصحف داخل APK؛ بل يعرض `line.text` من Word مع خط KFGQPC المضمّن في المشروع. توجد نسختان منفصلتان من Gradle: `online` و`offline` تستخدمان Android `SpeechRecognizer` للتسميع الصوتي، ويختلفان في تضمين صوت الحصري.
 
 > **مهم:** المشروع مرشح **للاختبار الداخلي فقط**. لم تُثبت وثائق صريحة تسمح بإعادة توزيع Word أو خط KFGQPC أو تسجيل محمود خليل الحصري أو بيانات توقيت QUL المشتقة تجارياً أو علنياً.
 
 ## ماذا ستحقق في أول تشغيل؟
 
-بعد بناء APK مناسب، ستظهر صفحات Word الأولى 1–5 سريعاً من preview، ثم يكتمل تحميل النص والتخطيط والتوقيتات في الخلفية. يمكنك فتح السورة، التنقل RTL، إخفاء النص للتسميع، تشغيل الآية/السورة، واستخدام البسملة الافتتاحية كجملة مستقلة. في Online يحتاج صوت القراءة وSpeechRecognizer إلى الإنترنت. في Offline تكون قاعدة البيانات والصوت والنموذج داخل APK، ولا يحتوي Offline على صلاحية `INTERNET`.
+بعد بناء APK مناسب، ستظهر صفحات Word الأولى 1–5 سريعاً من preview، ثم يكتمل تحميل النص والتخطيط والتوقيتات في الخلفية. يمكنك فتح السورة، التنقل RTL، إخفاء النص للتسميع، تشغيل الآية/السورة، واستخدام البسملة الافتتاحية كجملة مستقلة. في Online يحتاج صوت القراءة وSpeechRecognizer إلى الإنترنت. في Offline تكون قاعدة البيانات وأصوات الحصري داخل APK، بينما يحتاج التسميع الصوتي فقط إلى الإنترنت عبر SpeechRecognizer. وضع التسميع بالكتابة يعمل محلياً في الإصدارين.
 
 ## المتطلبات
 
@@ -16,9 +16,9 @@
 |---|---|---|
 | JDK | 17+؛ الاختبارات الأخيرة استُخدمت مع JDK 21 | نفسه |
 | Android SDK | platform/build tools 35 | نفسه |
-| جهاز Android | مطلوب للتجربة الحية، مع Internet للتعرف/الصوت | جهاز 64-bit متوافق؛ يتطلب اختبار inference فعلياً |
-| صلاحية runtime | `RECORD_AUDIO`، وتطبيق Online يعلن `INTERNET` | `RECORD_AUDIO` فقط |
-| حجم الأصول | صغير نسبياً لأنه لا يحزم audio/model | كبير جداً بسبب 6236 M4A وmodel |
+| جهاز Android | مطلوب للتجربة الحية، مع Internet للتعرف/الصوت | مطلوب للتجربة الحية؛ Internet للتعرف فقط، ولا يحتاج Internet لتشغيل الصوت المحلي |
+| صلاحية runtime | `RECORD_AUDIO` للتسميع الصوتي؛ `INTERNET` معلنة لـSpeechRecognizer والصوت | `RECORD_AUDIO` للتسميع الصوتي؛ `INTERNET` معلنة لـSpeechRecognizer فقط |
+| حجم الأصول | صغير نسبياً لأنه لا يحزم audio | كبير بسبب 6236 ملف M4A |
 
 ## خريطة المشروع
 
@@ -64,17 +64,21 @@ export ANDROID_SDK_ROOT=/home/ubuntu/tools/android-sdk
 /home/ubuntu/tools/gradle-8.10.2/bin/gradle :app:assembleOfflineDebug --no-daemon
 ```
 
-يتطلب Offline وجود `app/src/offline/assets/models/fastconformer-quran-ar-onnx-int8.zip` و6236 ملف M4A محلياً. MP3 المصدر للتدقيق/التحويل موجود خارج repository في `../quran-husary-mp3-source/`، ولا يدخل APK. الملفات الكبيرة لا تدخل Git history، بل تُجهز في بيئة البناء أو تُنشر كـRelease artifact عندما تسمح الحقوق.
+يتطلب Offline وجود 6236 ملف M4A محلياً في `app/src/offline/assets/quran/audio/husary_aac/`. لا يحتاج هذا العقد إلى Sherpa أو FastConformer أو model. MP3 المصدر للتدقيق/التحويل موجود خارج repository في `../quran-husary-mp3-source/`، ولا يدخل APK. الملفات الكبيرة لا تدخل Git history، بل تُجهز في بيئة البناء أو تُنشر كـRelease artifact عندما تسمح الحقوق.
 
-إذا ظهر `SDK location not found`، تحقق من `ANDROID_SDK_ROOT` ووجود `platforms/android-35`. إذا ظهر خطأ `javac`، استخدم JDK كاملاً لا JRE. إذا ظهر نقص M4A/model في Offline، شغّل validators قبل إعادة البناء ولا تنشئ ملفات placeholder.
+إذا ظهر `SDK location not found`، تحقق من `ANDROID_SDK_ROOT` ووجود `platforms/android-35`. إذا ظهر خطأ `javac`، استخدم JDK كاملاً لا JRE. إذا ظهر نقص M4A في Offline، شغّل validators قبل إعادة البناء ولا تنشئ ملفات placeholder.
 
 ## السلوك المهم في التسميع
 
-`RecognitionUpdate.value` هو النص التراكمي الخام القادم من SpeechRecognizer أو النموذج، و`providerText` أحدث candidate خام للعرض؛ لا يُستبدل observed بنص Word قبل الحكم. المطابقة موضعية: إذا حُذفت كلمة وسطية، تكون الكلمة المفقودة `MISSING` وتبقى الكلمات التالية `UNCERTAIN` حتى التصحيح، ولا تنتقل الجلسة إلى آية لاحقة قبل إزالة barrier. الأخطاء تحفظ محلياً في `LocalRecitationErrorStore`.
+`RecognitionUpdate.value` هو النص التراكمي الخام القادم من Android SpeechRecognizer، و`providerText` أحدث candidate خام للعرض؛ لا يُستبدل observed بنص Word قبل الحكم. في وضع الكتابة يصنع التطبيق نتيجة نهائية من النص الذي أدخله المستخدم ويمررها إلى نفس مسار المقارنة. المطابقة موضعية: إذا حُذفت كلمة وسطية، تكون الكلمة المفقودة `MISSING` وتبقى الكلمات التالية `UNCERTAIN` حتى التصحيح، ولا تنتقل الجلسة إلى آية لاحقة قبل إزالة barrier. الأخطاء تحفظ محلياً في `LocalRecitationErrorStore`.
 
-البسملة الافتتاحية مستقلة في جميع السور التي تحتاجها، ولا تُضاف إلى `allAyahs`. الفاتحة لها صفها القرآني الخاص، والتوبة لا تُفتتح ببسملة مستقلة. `OpeningBasmalaProgressTrackerTest` يثبت أن `بسم الله الرحيم` لا يجعل `الرحيم` صحيحة عند حذف `الرحمان`.
+البسملة الافتتاحية مستقلة في جميع السور التي تحتاجها، ولا تُضاف إلى `allAyahs`. الفاتحة لها صفها القرآني الخاص، والتوبة لا تُفتتح ببسملة مستقلة. ينطبق ذلك على الصوت والكتابة؛ `OpeningBasmalaProgressTrackerTest` يثبت أن `بسم الله الرحيم` لا يجعل `الرحيم` صحيحة عند حذف `الرحمان`.
 
 عند تشغيل آية كاملة يبدأ المشغل من offset صفر، لا من أول QUL word cue؛ هذا يمنع قص بداية الآية عندما يبدأ أول cue متأخراً. تصحيح كلمة منفردة يبقى مقيداً بنافذة QUL وبـgap-aware padding لا يتجاوز 120ms داخل الصمت. مدة `MediaPlayer` الفعلية تقيد النهاية إذا اختلفت مدة M4A/MP3 قليلاً عن cue integer.
+
+### وضع التسميع بالكتابة
+
+اختر «بالكتابة» داخل بطاقة «حفظ وتسميع القرآن» في تبويب الحفظ أو القراءة. اضغط «ابدأ التسميع» لتهيئة الموضع من دون طلب الميكروفون، ثم اكتب كلمة أو عدة كلمات أو آية واضغط «إرسال النص للتحقق». يستخدم التطبيق نفس `RecitationProgressTracker` المستخدم للصوت، ولذلك لا يسمح بالتخطي أو فتح آية لاحقة، ويحافظ على barrier والتصحيح وسجل الأخطاء. يمكن تبديل الوضع إلى «بالصوت» في أي وقت؛ عندها يطلب التطبيق `RECORD_AUDIO` ويستخدم Android SpeechRecognizer.
 
 ## التحقق من المصدر والأصول
 
@@ -112,7 +116,7 @@ $AAPT dump permissions app/build/outputs/apk/offline/debug/app-offline-debug.apk
 unzip -l app/build/outputs/apk/offline/debug/app-offline-debug.apk | grep -E 'm4a|mp3|fastconformer|sherpa|third_party_licenses'
 ```
 
-Online المتوقع أن يحتوي `INTERNET` و`RECORD_AUDIO` وألا يحتوي M4A أو model أو sherpa native. Offline المتوقع ألا يحتوي `INTERNET`، وأن يحتوي `RECORD_AUDIO` وM4A وmodel وruntime المحلي. لا تسجل SHA أو الحجم في Release Notes إلا بعد final assemble ناجح.
+Online المتوقع أن يحتوي `INTERNET` و`RECORD_AUDIO` وألا يحتوي M4A أو MP3 أو model أو Sherpa. Offline المتوقع أن يحتوي `INTERNET` و`RECORD_AUDIO` و6236 ملف M4A، وألا يحتوي model أو Sherpa أو MP3. في Offline تُستخدم الشبكة للتسميع الصوتي عبر SpeechRecognizer فقط. لا تسجل SHA أو الحجم في Release Notes إلا بعد final assemble ناجح.
 
 ## Git ونقطة quran V1
 
@@ -130,21 +134,22 @@ git rev-list --objects --all > /tmp/quran-reachable-objects.txt
 
 ## الحقوق والخصوصية
 
-راجع `third_party_notices/NOTICE.md` و`app/src/main/assets/third_party_licenses/` و`docs/source-lock.md`. وجود MIT/Apache/CC BY لمكوّن معين لا يمنح حقاً تلقائياً لإعادة توزيع Word أو الخط أو التسجيل أو timing المشتق. Online يرسل صوت المستخدم إلى provider النظام وفق إعداد الجهاز؛ Offline يعالج الصوت محلياً بعد توفر النموذج، لكن لم يُختبر inference Offline على هاتف في هذه الجولة.
+راجع `app/src/main/assets/third_party_licenses/NOTICE.md` و`docs/source-lock.md`. وجود MIT/CC BY لمكوّن معين لا يمنح حقاً تلقائياً لإعادة توزيع Word أو الخط أو التسجيل أو timing المشتق. في كلا الإصدارين يرسل التسميع الصوتي صوت المستخدم إلى provider نظام Android وفق إعداد الجهاز؛ وضع الكتابة لا يرسل صوتاً. Offline يشغل صوت الحصري محلياً، ولم يُختبر SpeechRecognizer أو MediaPlayer على هاتف في هذه الجولة.
 
 ## الحالة المثبتة والمؤجلة
 
 | الحالة | الدليل |
 |---|---|
-| compile/unit tests للـOnline | نجحت `:app:testOnlineDebugUnitTest` |
-| compile/unit tests للـOffline | نجحت `:app:testOfflineDebugUnitTest` |
+| compile/unit tests للـOnline | نجحت `:app:testOnlineDebugUnitTest` بعد عقد الكتابة النهائي |
+| compile/unit tests للـOffline | نجحت `:app:testOfflineDebugUnitTest` بعد عقد الكتابة النهائي |
+| وضع الكتابة يستخدم نفس tracker والحاجز | `RecitationProgressTrackerTest` و`typedRecitationContractKeepsLaterWordsAndAyahUncertainAfterSkip` |
 | tracker يمنع تخطي كلمة وسط البسملة | `OpeningBasmalaProgressTrackerTest` |
 | whole-ayah يبدأ من صفر في المصدر | `TimingWordMapperTest` وqueue في `QuranViewModel` |
 | تدقيق كل containers/timing | `docs/HUSARY_AUDIO_BOUNDARY_AUDIT_2026-08-27.*` |
 | ADB/اختبار ميكروفون/MediaPlayer حي | مؤجل؛ لا يُدّعى نجاحه |
-| inference Offline مع الشبكة معطلة | مؤجل؛ لا يوجد جهاز مناسب في هذه الجولة |
-| final APK hashes/size/permissions | مؤجل حتى final assemble/lint |
-| GitHub push وRelease | مؤجل حتى object audit وfinal gates وقرار الحقوق |
+| SpeechRecognizer في Offline مع الشبكة متاحة | مؤجل؛ لا يوجد هاتف في هذه الجولة |
+| final APK hashes/size/permissions للعقد الجديد | مثبت؛ Online `23,413,744` bytes وOffline `1,300,250,950` bytes؛ التفاصيل في `docs/APK_CONTENT_AUDIT_2026-08-27.md` |
+| GitHub push وRelease للعقد الجديد | مؤجل حتى commit/tag/رفع منفصل؛ لا يستبدل `quran-v1` أو `quran-v1-postfix`، ومع ذلك الحالة internal testing only |
 
 ## مراجع
 

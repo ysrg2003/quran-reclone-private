@@ -8,10 +8,7 @@
 | quran-align timing data | CC BY 4.0 | https://creativecommons.org/licenses/by/4.0/ |
 | QUL repository code | MIT | https://github.com/TarteelAI/quranic-universal-library/blob/main/LICENSE |
 | QUL Husary audio/segments | ترخيص المورد غير ظاهر بوضوح؛ يلزم إذن أو شروط خاصة بالمورد؛ Online يبث MP3 وOffline يضم M4A مشتقة | https://qul.tarteel.ai/resources/recitation/112 |
-| sherpa-onnx | Apache 2.0 | https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE |
-| ONNX Runtime 1.27.1 داخل AAR | MIT | https://github.com/microsoft/onnxruntime/blob/main/LICENSE |
-| FastConformer Quran model | CC BY 4.0 | https://huggingface.co/mohammed/fastconformer-quran-ar-onnx-int8 |
-| NVIDIA FastConformer base model | CC BY 4.0 | https://huggingface.co/nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0 |
+| Android SpeechRecognizer | خدمة Android/مزود النظام؛ قد تحتاج الشبكة وفق المزود ولا يملك التطبيق ترخيص خدمة المزود | https://developer.android.com/reference/android/speech/SpeechRecognizer |
 | Tanzil metadata | CC BY 3.0 مع منع تغيير النص حسب إشعار Tanzil | https://tanzil.net/docs/text_license |
 | AndroidX/Kotlin/Compose | Apache 2.0 | https://www.apache.org/licenses/LICENSE-2.0 |
 | JUnit 4.13.2 | EPL 1.0 | https://www.eclipse.org/legal/epl-v10.html |

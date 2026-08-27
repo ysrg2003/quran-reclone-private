@@ -30,16 +30,15 @@ app/build/outputs/apk/online/debug/app-online-debug.apk
 | `pronunciation_reference.json` | موجود محلياً |
 | QUL Husary timing | موجود محلياً |
 | MP3/M4A الحصري | غير محزم؛ يطلب URL عند الحاجة |
-| FastConformer model | غير موجود |
-| sherpa AAR/native | غير موجود في variant Online |
+| local ASR model/runtime | غير موجود؛ يعتمد التسميع الصوتي على Android SpeechRecognizer |
 | `INTERNET` | موجود |
 | `RECORD_AUDIO` | موجود |
 
-لا يوجد في Online وضع Offline صامت. flavor يحدد engine؛ لذلك لا ينبغي توثيق Online على أنه يضم نموذجاً محلياً أو ملفات الصوت الكبيرة.
+لا يحتوي Online على صوت الحصري أو أي محرك ASR محلي. وضع الكتابة متاح داخل التطبيق ويعمل محلياً باستخدام نفس `RecitationProgressTracker` المستخدم للتسميع الصوتي.
 
 ## التشغيل الأول
 
-بعد تثبيت `app-online-debug.apk` وفتح التطبيق، تظهر واجهة preview للصفحات 1–5 أولاً، ثم يكتمل تحميل المصحف والتوقيتات في الخلفية. اختر بدء التسميع بعد منح `RECORD_AUDIO`. صمت أو نفس قصير لا ينهي الجلسة: `OnlineSpeechSession` يراكم partial/final ويعيد فتح مقطع provider بعد النتائج أو الخطأ العابر. قد يعالج مزود Android الصوت خارج الجهاز، لذلك لا يوصف Online بأنه معالجة خاصة بالكامل.
+بعد تثبيت `app-online-debug.apk` وفتح التطبيق، تظهر واجهة preview للصفحات 1–5 أولاً، ثم يكتمل تحميل المصحف والتوقيتات في الخلفية. في وضع الصوت اختر بدء التسميع بعد منح `RECORD_AUDIO`؛ وقد يحتاج Android SpeechRecognizer إلى الإنترنت. صمت أو نفس قصير لا ينهي الجلسة: `OnlineSpeechSession` يراكم partial/final ويعيد فتح مقطع provider بعد النتائج أو الخطأ العابر. في وضع الكتابة اختر «بالكتابة»، ابدأ الجلسة، اكتب كلمة أو آية ثم اضغط «إرسال النص للتحقق» من دون ميكروفون. قد يعالج مزود Android الصوت خارج الجهاز، لذلك لا يوصف Online بأنه معالجة خاصة بالكامل.
 
 عند قراءة آية كاملة، يبدأ المشغل من offset `0` حتى لا يقص صوتاً يسبق أول QUL cue. عند تصحيح كلمة منفردة، يستخدم المشغل نافذة الكلمة مع padding محدود داخل الصمت. البسملة الافتتاحية مستقلة ولا تُحسب من آيات السورة، ويجب تصحيح كلمة البسملة المفقودة قبل السماح بانتقال الكلمات اللاحقة.
 
@@ -70,7 +69,7 @@ python3 scripts/validate_full_quran_assets.py --mp3-dir ../quran-husary-mp3-sour
 git diff --check
 ```
 
-تثبت unit tests صحة المصدر والـstate machine، لكنها لا تثبت عمل microphone provider على هاتف بعينه. يلزم اختبار حي منفصل للبِسملة، omitted `الرحمان`، توقف النفس، بداية الآية من الكلمة الأولى، و`ERROR_NO_MATCH`.
+تثبت unit tests صحة المصدر والـstate machine، ومنها حاجز وضع الكتابة عند تخطي كلمة، لكنها لا تثبت عمل microphone provider على هاتف بعينه. يلزم اختبار حي منفصل للبِسملة، omitted `الرحمان`، توقف النفس، بداية الآية من الكلمة الأولى، و`ERROR_NO_MATCH`.
 
 ## الصوت والمصادر
 
@@ -84,11 +83,11 @@ git diff --check
 | `ERROR_NO_MATCH` | provider أنهى segment بلا نتيجة | contract السابق يعيد الاستماع تلقائياً ما دام المستخدم لم يضغط إيقافاً |
 | الصوت يبدأ بعد أول كلمة | seek استُخدم كـword window | تحقق أن مسار القراءة الكاملة يرسل `startMs=0`؛ لا تعدّل timing JSON |
 | correction يعبر كلمة أخرى | padding غير gap-aware | راجع `withCorrectionPadding` وحد 120ms واختبار window |
-| Download أو model في Online | build variant خاطئ | استخدم `assembleOnlineDebug` وافحص `applicationId` ومحتوى APK |
+| Download أو صوت/ASR محلي في Online | build variant أو مسار أصول خاطئ | استخدم `assembleOnlineDebug` وافحص `applicationId` ومحتوى APK |
 
 ## الحقوق والخصوصية
 
-راجع `third_party_notices/NOTICE.md` و`docs/source-lock.md`. النص Word، خط KFGQPC، تسجيل الحصري، وتوقيتات QUL المشتقة هي نقاط مراجعة إلزامية قبل أي نشر عام أو تجاري. Online يطلب `INTERNET` و`RECORD_AUDIO`؛ صوت المستخدم يمر إلى provider Android حسب إعداد الجهاز، ولا يرفع التطبيق الصوت إلى خادم خاص به.
+راجع `app/src/main/assets/third_party_licenses/NOTICE.md` و`docs/source-lock.md`. النص Word، خط KFGQPC، تسجيل الحصري، وتوقيتات QUL المشتقة هي نقاط مراجعة إلزامية قبل أي نشر عام أو تجاري. Online يطلب `INTERNET` و`RECORD_AUDIO` للتسميع الصوتي؛ صوت المستخدم يمر إلى provider Android حسب إعداد الجهاز، ولا يرفع التطبيق الصوت إلى خادم خاص به.
 
 ## المراجع
 

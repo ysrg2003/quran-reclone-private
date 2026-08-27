@@ -16,8 +16,8 @@
 | صوت الحصري Online | `https://audio-cdn.tarteel.ai/quran/husary/{surah:03d}{ayah:03d}.mp3` | قراءة وتصحيح Online | استُحضر 2026-08-27؛ CDN لا يثبت وحده ترخيص إعادة التوزيع |
 | صوت الحصري Offline | `app/src/offline/assets/quran/audio/husary_aac/*.m4a` | AAC-LC/M4A مشتقة من MP3، داخل Offline APK عند البناء | 6236 ملفاً، `1,274,873,643` bytes بحسب manifest الحالي؛ خارج Git history |
 | manifests | `husary_manifest.json` و`husary_aac_manifest.json` | hash/size للمصدر والمشتق | يعاد توليدها بالـscripts ولا تُعدّل يدوياً |
-| نموذج Offline | `app/src/offline/assets/models/fastconformer-quran-ar-onnx-int8.zip` | FastConformer local ASR | SHA-256 سابق موثق في NOTICE/source-lock؛ يتطلب بوابة APK النهائية |
-| sherpa AAR | `app/libs/sherpa-onnx-1.13.6.aar` | runtime Offline فقط | Apache-2.0 للمكتبة؛ لا يدخل Online variant |
+| ASR الصوتي | Android `SpeechRecognizer` من النظام | يستخدم في كلا flavorين، وقد يحتاج Internet وفق المزود |
+| التسميع بالكتابة | `RecitationProgressTracker` | محلي في كلا flavorين، دون ميكروفون أو شبكة |
 | مراجع الصور | Quran-PNG وquran.com-images | مقارنة بنيوية خارجية للصفحات | لا تُشحن الصور أو أصول الخط منها |
 
 ## فصل الإصدارين
@@ -25,12 +25,12 @@
 | الخاصية | Online | Offline |
 |---|---|---|
 | flavor flag | `BuildConfig.OFFLINE_DISTRIBUTION=false` | `BuildConfig.OFFLINE_DISTRIBUTION=true` |
-| ASR | `OnlineSpeechSession` / Android provider | `LocalRecitationSession` من Offline source set |
-| sherpa AAR | غير مضاف إلى variant | `offlineImplementation` فقط |
-| audio | HTTPS أو cache بحسب mode | `AssetFileDescriptor` من M4A المضمّنة |
-| model | غير موجود | ZIP داخل APK، يُستخرج إلى `filesDir` |
-| `INTERNET` | موجود | محذوف بواسطة `app/src/offline/AndroidManifest.xml` |
-| fallback | لا fallback إلى Offline | لا fallback شبكي |
+| ASR الصوتي | `OnlineSpeechSession` / Android provider | `OnlineSpeechSession` / Android provider |
+| التسميع بالكتابة | `RecitationProgressTracker` محلي | `RecitationProgressTracker` محلي |
+| audio | HTTPS أو cache بحسب mode | `AssetFileDescriptor` من 6236 M4A المضمّنة |
+| model/Sherpa | غير موجود | غير موجود |
+| `INTERNET` | موجود لـSpeechRecognizer والصوت | موجود لـSpeechRecognizer فقط أثناء التسميع الصوتي |
+| fallback | لا fallback إلى ASR محلي | لا fallback إلى ASR محلي |
 
 ## سياسة runtime
 
@@ -42,7 +42,7 @@
 
 ## أذونات وحقوق
 
-Online يحتاج `RECORD_AUDIO` و`INTERNET`. Offline يحتاج `RECORD_AUDIO` فقط. كلاهما يخزّن sessions وcheckpoints وerrors وsettings محلياً، و`allowBackup=true` يحتاج قرار منتج قبل أي توزيع عام.
+Online وOffline يحتاجان `INTERNET` لـAndroid SpeechRecognizer، و`RECORD_AUDIO` للتسميع الصوتي فقط. لا يحتاج وضع الكتابة أياً منهما، ولا يحتاج تشغيل صوت الحصري المحلي في Offline إلى الشبكة. كلاهما يخزّن sessions وcheckpoints وerrors وsettings محلياً، و`allowBackup=true` يحتاج قرار منتج قبل أي توزيع عام.
 
 التراخيص MIT وApache-2.0 وCC BY الموثقة تخص مكونات معينة. لا توجد وثيقة كافية تثبت حق إعادة توزيع Word أو خط KFGQPC أو تسجيل الحصري أو segments المشتقة. لذلك حالة الإصدارين **internal testing only** إلى حين إذن صريح يغطي Android embedding وإعادة التوزيع والبث والتخزين والاستخدام التجاري والتوقيتات المشتقة.
 
@@ -77,11 +77,11 @@ aapt dump permissions app/build/outputs/apk/offline/debug/app-offline-debug.apk
 unzip -l app/build/outputs/apk/offline/debug/app-offline-debug.apk | grep -E 'm4a|mp3|fastconformer|sherpa|third_party_licenses'
 ```
 
-Online يجب أن يحتوي `INTERNET` و`RECORD_AUDIO` ولا يحتوي M4A أو model أو sherpa native. Offline يجب ألا يحتوي `android.permission.INTERNET`، ويجب أن يحتوي `RECORD_AUDIO` وM4A والنموذج وruntime المحلي.
+Online يجب أن يحتوي `INTERNET` و`RECORD_AUDIO` ولا يحتوي M4A أو MP3 أو model أو Sherpa native. Offline يجب أن يحتوي `INTERNET` و`RECORD_AUDIO` و6236 M4A، ولا يحتوي MP3 أو model أو Sherpa native.
 
 ## حالة النشر
 
-نجاح unit test أو assemble يثبت artifact/source فقط. اختبار الهاتف وADB وMediaPlayer وinference Offline وSpeechRecognizer وغياب الشبكة يجب أن يسجل منفصلاً. لا تُرفع `quran-v1` قبل فحص reachable Git objects؛ ولا يُرفع Release عام أو تجاري قبل حل حقوق Word/KFGQPC/Husary/QUL المشتقة.
+نجاح unit test أو assemble يثبت artifact/source فقط. اختبار الهاتف وADB وMediaPlayer وSpeechRecognizer في كلا flavorين يجب أن يسجل منفصلاً. وضع الكتابة قابل للاختبار آلياً عبر tracker، لكن لا يُعد ذلك اختبار واجهة على هاتف. لا يُرفع Release عام أو تجاري قبل حل حقوق Word/KFGQPC/Husary/QUL المشتقة.
 
 ## مراجع
 

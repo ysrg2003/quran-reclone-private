@@ -16,7 +16,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 enum class AssetMode { STREAM, DOWNLOAD }
-enum class RecitationEngine { ONLINE, OFFLINE }
+enum class RecitationEngine { ONLINE }
+enum class RecitationInputMode { VOICE, TYPING }
 enum class ReaderScope { AYAH, SURAH, JUZ, HIZB, PAGES, QURAN }
 
 data class QuranUiState(
@@ -71,9 +72,8 @@ data class QuranUiState(
     val downloadInProgress: Boolean = false,
     val downloadedAyahs: Int = 0,
     val engine: RecitationEngine = RecitationEngine.ONLINE,
-    val modelReady: Boolean = false,
-    val modelDownloading: Boolean = false,
-    val offlineSupported: Boolean = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
+    val inputMode: RecitationInputMode = RecitationInputMode.VOICE,
+    val typedInput: String = "",
 )
 
 private data class LoadedAssetInputs(
@@ -81,7 +81,6 @@ private data class LoadedAssetInputs(
     val metadata: QuranMetadata,
     val wordReferenceLayout: WordReferenceLayout,
     val pronunciationReference: PronunciationReference,
-    val bundledModelReady: Boolean,
 )
 
 private data class PreparedAssets(
@@ -95,7 +94,6 @@ private data class PreparedAssets(
     val selectedSurah: Int,
     val totalAyahs: Int,
     val downloadedAyahs: Int,
-    val modelReady: Boolean,
 )
 
 class QuranViewModel(application: Application) : AndroidViewModel(application) {
@@ -111,7 +109,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val referenceAudioPlayer = ReferenceAudioPlayer(application)
     private var pronunciationReference = PronunciationReference.empty()
     private var onlineSession: OnlineSpeechSession? = null
-    private var localSession: LocalRecitationSession? = null
+    private var writingModeActive = false
     private var progressTracker: RecitationProgressTracker? = null
     private var openingBasmalaTracker: OpeningBasmalaProgressTracker? = null
     private var recognitionGeneration = 0L
@@ -137,8 +135,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             checkpoint = memorizationProgressStore.read(),
             correctionSettings = correctionSettingsStore.current(),
             mode = if (BuildConfig.OFFLINE_DISTRIBUTION) AssetMode.DOWNLOAD else AssetMode.STREAM,
-            engine = if (BuildConfig.OFFLINE_DISTRIBUTION) RecitationEngine.OFFLINE else RecitationEngine.ONLINE,
-            offlineSupported = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
+            engine = RecitationEngine.ONLINE,
+            inputMode = RecitationInputMode.VOICE,
         ),
     )
     val uiState: State<QuranUiState> = state
@@ -157,31 +155,22 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         loadAssets(mode)
     }
 
-    fun setEngine(engine: RecitationEngine) {
-        if (BuildConfig.OFFLINE_DISTRIBUTION && engine != RecitationEngine.OFFLINE) return
-        if (!BuildConfig.OFFLINE_DISTRIBUTION && engine != RecitationEngine.ONLINE) return
-        if (state.value.engine == engine) return
-        stopListening()
-        val notice = when {
-            engine == RecitationEngine.ONLINE -> "سيستخدم التسميع SpeechRecognizer عبر الإنترنت."
-            !state.value.offlineSupported -> offlineUnavailableMessage()
-            BuildConfig.OFFLINE_DISTRIBUTION -> "سيستخدم التسميع نموذج FastConformer المضمّن داخل التطبيق."
-            else -> "سيستخدم التسميع نموذج FastConformer المحلي؛ نزّله مرة واحدة أولاً."
-        }
-        state.value = state.value.copy(engine = engine, notice = notice, correctionMessage = null)
+    fun setEngine(@Suppress("UNUSED_PARAMETER") engine: RecitationEngine) {
+        state.value = state.value.copy(engine = RecitationEngine.ONLINE, notice = "سيستخدم التسميع Android SpeechRecognizer عبر الإنترنت.")
     }
 
-    fun downloadOfflineModel() {
-        if (!BuildConfig.OFFLINE_DISTRIBUTION || state.value.modelReady || state.value.modelDownloading) return
-        state.value = state.value.copy(modelDownloading = true, notice = "جاري تجهيز نموذج التسميع Offline المضمّن…")
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                assetManager.prepareBundledOfflineModel()
-                withContext(Dispatchers.Main) { state.value = state.value.copy(modelReady = true, modelDownloading = false, notice = "اكتمل تجهيز النموذج المضمّن. يمكنك التسميع Offline دون إنترنت.") }
-            } catch (error: Throwable) {
-                withContext(Dispatchers.Main) { state.value = state.value.copy(modelDownloading = false, notice = "تعذر تجهيز النموذج المضمّن: ${error.message ?: "ملف Offline ناقص"}") }
-            }
-        }
+    fun setRecitationInputMode(mode: RecitationInputMode) {
+        if (state.value.inputMode == mode && !state.value.listening) return
+        stopListening()
+        writingModeActive = false
+        state.value = state.value.copy(
+            inputMode = mode,
+            typedInput = "",
+            rawTranscript = "",
+            transcript = "",
+            evaluation = null,
+            notice = if (mode == RecitationInputMode.TYPING) "وضع الكتابة جاهز؛ اكتب كلمة أو آية ثم اضغط إرسال." else "وضع الصوت جاهز؛ سيستخدم Android SpeechRecognizer.",
+        )
     }
 
     private fun readBundledAsset(path: String): String =
@@ -239,26 +228,18 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     val layoutDeferred = async(Dispatchers.IO) { WordReferenceLayout.load(context) }
                     val pronunciationDeferred = async(Dispatchers.IO) { PronunciationReference.load(context) }
                     val timingDeferred = async(Dispatchers.IO) { timingRepository.loadBundled(context) }
-                    val modelDeferred = async(Dispatchers.IO) {
-                        if (BuildConfig.OFFLINE_DISTRIBUTION) {
-                            assetManager.prepareBundledOfflineModel()
-                            true
-                        } else false
-                    }
                     timingDeferred.await()
                     LoadedAssetInputs(
                         allAyahs = allAyahsDeferred.await(),
                         metadata = metadataDeferred.await(),
                         wordReferenceLayout = layoutDeferred.await(),
                         pronunciationReference = pronunciationDeferred.await(),
-                        bundledModelReady = modelDeferred.await(),
                     )
                 }
                 val allAyahs = loaded.allAyahs
                 val parsedMetadata = loaded.metadata
                 val wordReferenceLayout = loaded.wordReferenceLayout
                 val pronunciationReference = loaded.pronunciationReference
-                val bundledModelReady = loaded.bundledModelReady
                 val prepared = withContext(Dispatchers.Default) {
                     parsedMetadata.requireCompatible(allAyahs)
                     check(wordReferenceLayout.pageCount == parsedMetadata.pages.size) { "Word reference page count does not match Quran metadata" }
@@ -282,7 +263,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                         selectedSurah = visiblePage.firstOrNull()?.surah ?: selectedSurah,
                         totalAyahs = parsedRepository.ayahsForSurah(visiblePage.firstOrNull()?.surah ?: selectedSurah).size,
                         downloadedAyahs = assetManager.downloadedAyahCount(visiblePage.firstOrNull()?.surah ?: selectedSurah, totalAyahs),
-                        modelReady = bundledModelReady || assetManager.isModelDownloaded(),
                     )
                 }
                 repository = prepared.repository
@@ -309,9 +289,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     loadingAssets = false,
                     assetsReady = true,
                     downloadedAyahs = assetManager.downloadedAyahCount(finalSurah, finalSurahAyahs.size),
-                    modelReady = prepared.modelReady,
                     checkpoint = memorizationProgressStore.read()?.validatedAgainst(prepared.allAyahs),
-                    notice = if (mode == AssetMode.STREAM) "نص Word العثماني محلي؛ التوقيتات والصوت عبر البث المباشر." else "نص Word العثماني محلي؛ الصوت يُحفظ فقط عندما تختار تنزيله.",
+                    notice = if (mode == AssetMode.STREAM) "نص Word العثماني والتوقيتات محليان؛ صوت الحصري يُجلب عند الحاجة." else "نص Word العثماني والتوقيتات وصوت الحصري مضمّنة داخل إصدار Offline؛ يحتاج التسميع الصوتي للإنترنت فقط.",
                 )
             } catch (error: CancellationException) {
                 throw error
@@ -623,11 +602,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     fun startListening() {
         if (!state.value.assetsReady) { state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً."); return }
         if (state.value.allAyahs.isEmpty() || state.value.metadata == null) { state.value = state.value.copy(notice = "تعذر تجهيز ترتيب صفحات المصحف."); return }
-        if (state.value.engine == RecitationEngine.OFFLINE && !state.value.offlineSupported) {
-            state.value = state.value.copy(listening = false, notice = offlineUnavailableMessage())
-            return
-        }
-        if (state.value.engine == RecitationEngine.OFFLINE && !state.value.modelReady) { state.value = state.value.copy(notice = "تعذر تجهيز نموذج FastConformer المضمّن؛ أعد فتح التطبيق أو تحقق من سلامة إصدار Offline."); return }
         if (state.value.listening || state.value.correctionPlaying || state.value.readerPlaying) return
         openingBasmalaNotice = null
         openingBasmalaDetected = false
@@ -693,9 +667,40 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             correctionMessage = null,
             correctionAyahIndex = -1,
             correctionFirstWordInAyah = -1,
-            notice = if (state.value.engine == RecitationEngine.ONLINE) "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق." else "جارٍ التعرف محلياً؛ لا يغادر الصوت جهازك.",
+            notice = if (state.value.inputMode == RecitationInputMode.TYPING) "وضع الكتابة جاهز؛ أدخل النص ثم اضغط إرسال." else "جارٍ التعرف عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق.",
         )
-        startRecognitionSession()
+        if (!writingModeActive) startRecognitionSession()
+    }
+
+    fun startTypedRecitation() {
+        if (state.value.inputMode != RecitationInputMode.TYPING || state.value.listening || state.value.correctionPlaying) return
+        writingModeActive = true
+        startListening()
+    }
+
+    fun updateTypedInput(text: String) {
+        if (state.value.inputMode == RecitationInputMode.TYPING) state.value = state.value.copy(typedInput = text)
+    }
+
+    fun submitTypedRecitation() {
+        if (state.value.inputMode != RecitationInputMode.TYPING || state.value.correctionPlaying) return
+        if (!state.value.listening) startTypedRecitation()
+        if (!state.value.listening) return
+        val text = state.value.typedInput.trim()
+        if (text.isBlank()) {
+            state.value = state.value.copy(notice = "اكتب كلمة أو جزءاً من الآية ثم اضغط إرسال.")
+            return
+        }
+        state.value = state.value.copy(typedInput = "")
+        handleRecognitionUpdate(
+            RecognitionUpdate.Text(
+                value = text,
+                timestamps = FloatArray(0),
+                isFinal = true,
+                segmentCompleted = true,
+                providerText = text,
+            ),
+        )
     }
 
     private fun startRecognitionSession() {
@@ -703,13 +708,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val guardedUpdate: (RecognitionUpdate) -> Unit = { update ->
             if (generation == recognitionGeneration) handleRecognitionUpdate(update)
         }
-        if (state.value.engine == RecitationEngine.ONLINE) {
-            onlineSession = OnlineSpeechSession(getApplication(), guardedUpdate)
-            onlineSession?.start()
-        } else {
-            localSession = LocalRecitationSession(getApplication(), assetManager.modelDirectory(), guardedUpdate)
-            localSession?.start()
-        }
+        onlineSession = OnlineSpeechSession(getApplication(), guardedUpdate)
+        onlineSession?.start()
     }
 
     fun startFromPreviousAyah() {
@@ -723,7 +723,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         referenceAudioPlayer.stop()
         recognitionGeneration++
         onlineSession?.stop(); onlineSession = null
-        localSession?.stop(); localSession = null
         val tracker = RecitationProgressTracker(
             state.value.allAyahs,
             pronunciationReference = pronunciationReference,
@@ -770,7 +769,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             correctionFirstWordInAyah = -1,
             notice = "بدأت جلسة جديدة من السورة ${state.value.allAyahs[previousAyahIndex].surah}، الآية ${state.value.allAyahs[previousAyahIndex].ayah}.",
         )
-        startRecognitionSession()
+        if (!writingModeActive) startRecognitionSession()
     }
 
     private fun handleRecognitionUpdate(update: RecognitionUpdate) {
@@ -927,7 +926,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     correctionMessage = correction?.let(::correctionMessage) ?: previousState.correctionMessage,
                     correctionAyahIndex = correction?.ayahIndex ?: previousState.correctionAyahIndex,
                     correctionFirstWordInAyah = correction?.localWordIndex ?: previousState.correctionFirstWordInAyah,
-                    notice = openingBasmalaNotice ?: if (previousState.engine == RecitationEngine.ONLINE) "يتم التحقق عبر الإنترنت؛ الصوت لا يُخزن محلياً." else "يتم التحقق محلياً؛ لا يغادر الصوت جهازك.",
+                    notice = openingBasmalaNotice ?: "يتم التحقق عبر Android SpeechRecognizer عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق.",
                 )
                 if (update.isFinal || update.segmentCompleted) persistCheckpoint(result.currentAyahIndex, result.currentWordInAyah)
                 if (correction != null && (update.isFinal || update.segmentCompleted) && activeCorrection == null) {
@@ -956,7 +955,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         readerGeneration++
         referenceAudioPlayer.stop()
         onlineSession?.stop(); onlineSession = null
-        localSession?.stop(); localSession = null
         state.value = state.value.copy(
             listening = false,
             correctionPlaying = true,
@@ -1039,7 +1037,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 readerCurrentKey = null,
                 notice = message,
             )
-            startRecognitionSession()
+            if (!writingModeActive) startRecognitionSession()
         } else {
             state.value = state.value.copy(
                 listening = false,
@@ -1059,7 +1057,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         openingBasmalaNeedsCorrection = false
         recognitionGeneration++
         onlineSession?.stop(); onlineSession = null
-        localSession?.stop(); localSession = null
         state.value = state.value.copy(
             listening = true,
             openingBasmalaActive = false,
@@ -1069,7 +1066,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentSpokenWordIndex = -1,
             notice = "تمت البسملة كجملة مستقلة؛ ابدأ الآن بالآية الأولى.",
         )
-        startRecognitionSession()
+        if (!writingModeActive) startRecognitionSession()
     }
 
     /**
@@ -1182,7 +1179,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             },
         )
         onlineSession?.stop(); onlineSession = null
-        localSession?.stop(); localSession = null
     }
 
     fun playCorrectionForCurrentWord() {
@@ -1297,7 +1293,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 currentWordIndex = trackerGlobalIndex(request),
                 notice = "انتهى التصحيح؛ ابدأ من أول الآية أو من أي كلمة داخلها.",
             )
-            startRecognitionSession()
+            if (!writingModeActive) startRecognitionSession()
         } else {
             state.value = state.value.copy(listening = false, correctionPlaying = false, correctionPhase = CorrectionPhase.LISTENING)
         }
@@ -1353,7 +1349,6 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         readerGeneration++
         referenceAudioPlayer.stop()
         onlineSession?.stop(); onlineSession = null
-        localSession?.stop(); localSession = null
         progressTracker = null
         openingBasmalaTracker = null
         activeCorrection = null
@@ -1364,6 +1359,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         openingBasmalaNeedsCorrection = false
         openingBasmalaCommittedRaw = ""
         openingBasmalaContinuation = false
+        writingModeActive = false
         state.value = state.value.copy(
             listening = false,
             correctionPlaying = false,
@@ -1546,9 +1542,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         state.value = state.value.copy(correctedErrors = emptyList(), notice = "حُذف سجل الأخطاء المصححة المحلي.")
     }
 
-    override fun onCleared() { recognitionGeneration++; onlineSession?.stop(); localSession?.stop(); progressTracker = null; referenceAudioPlayer.stop(); super.onCleared() }
-
-    private fun offlineUnavailableMessage(): String = "التسميع Offline غير متاح بأمان على هذا الهاتف؛ النظام يعمل 32-bit، وظهر انهيار native داخل محرك FastConformer. استخدم Online أو هاتفاً 64-bit."
+    override fun onCleared() { recognitionGeneration++; onlineSession?.stop(); progressTracker = null; referenceAudioPlayer.stop(); super.onCleared() }
 
     private fun page(ayahs: List<QuranAyah>, metadata: QuranMetadata, pageNumber: Int): List<QuranAyah> =
         QuranPageLayout.ayahsOnPage(ayahs, metadata, pageNumber)

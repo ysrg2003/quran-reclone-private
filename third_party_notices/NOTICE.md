@@ -45,23 +45,9 @@ The Arabic Mushaf-organization metadata in `app/src/main/assets/quran/quran-meta
 - The GitHub repository metadata inspected for the reference did not declare a license (`license: null`), and no clear LICENSE file was found in the inspected clone.
 - The local clone is used only for deterministic validation of page filenames, dimensions, and limited raster signals. The `001.png`–`604.png` files are not copied into the Android project and are not redistributed by this application. No permission to redistribute them should be inferred.
 
-## sherpa-onnx
+## ASR runtime boundary
 
-- Source: https://github.com/k2-fsa/sherpa-onnx
-- The project and local AAR are used as the on-device ONNX runtime/JNI layer.
-- AAR source used in this build: https://huggingface.co/csukuangfj2/sherpa-onnx-libs
-- The exact AAR checksum is recorded in `docs/source-lock.md`. Keep its upstream license and notices with every distribution.
-
-## Quranic ASR model
-
-The `offline` flavor embeds the local model pack. The `online` flavor intentionally excludes the model and the sherpa-onnx AAR. The current embedded candidate is:
-
-- Model: https://huggingface.co/mohammed/fastconformer-quran-ar-onnx-int8
-- License shown by the model card: CC-BY-4.0
-- Runtime files: encoder, decoder, joiner, tokens, and metadata.
-- Model-card status: on-device verification is pending, so application accuracy must be benchmarked on real Android hardware before making educational accuracy claims.
-
-No model file is silently substituted by a cloud service. If the model pack is absent or fails validation, the app must report that local recognition is unavailable rather than using Android/Google online speech recognition.
+This release does **not** bundle Sherpa-ONNX, ONNX Runtime, FastConformer, or any other local ASR model. Both flavors use Android `SpeechRecognizer` for voice recitation; the system/provider may process recognition audio outside the application and the voice-recitation path therefore requires Internet access according to the installed provider. The writing-recitation path needs neither microphone nor network.
 
 ## Mahmoud Khalil Al-Husary audio and QUL segments
 
@@ -80,14 +66,6 @@ Independent public search results do not cure this gap. QuranHub publishes a sep
 
 The application uses AndroidX Core KTX 1.15.0, Activity Compose 1.10.0, Lifecycle Runtime KTX 2.8.7, Compose BOM 2024.12.01 with Compose UI 1.7.6 and Material3, DataStore Preferences 1.1.1, Kotlin 2.0.21, and JUnit 4.13.2 for tests. AndroidX, Kotlin, and Compose components are Apache-2.0; JUnit 4.13.2 is distributed under the Eclipse Public License 1.0. The Android SDK and Android system APIs are build/runtime platform components and are not redistributed as application assets.
 
-The local `app/libs/sherpa-onnx-1.13.6.aar` is from https://huggingface.co/csukuangfj/sherpa-onnx-libs and is marked Apache-2.0. The AAR was inspected and contains `libonnxruntime.so`; the embedded binary reports ONNX Runtime 1.27.1. ONNX Runtime is MIT-licensed by Microsoft: https://github.com/microsoft/onnxruntime/blob/main/LICENSE. Both Apache-2.0 and MIT notices must be retained in any distribution of the APK.
-
-The sherpa-onnx project license is https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE. Its license does not automatically license any ASR model or training dataset used with it.
-
-## Optional FastConformer model
-
-The optional model pack is `https://huggingface.co/mohammed/fastconformer-quran-ar-onnx-int8` and is marked CC BY 4.0. The base model is `https://huggingface.co/mohammed/fastconformer-quran-ar`, also marked CC BY 4.0. The model card requests attribution and identifies NVIDIA FastConformer and `tarteel-ai/everyayah` as upstream inputs. Model files must be distributed with their exact revision/hash and attribution; the reported WER is not a guarantee for this application. The NVIDIA base model page is https://huggingface.co/nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0.
-
 ## Licensing status and release gate
 
 This project is cleared for internal development and testing only. It is **not cleared for public or commercial release** until the project owner has a written, archivable permission or applicable EULA for the supplied KFGQPC font and Word reference, and resource-specific redistribution terms or permission for the Mahmoud Khalil Al-Husary audio and the derived Husary QUL timing index. A QUL repository MIT license, a QUL FAQ statement that commercial use may be possible subject to resource-specific licenses, or a working CDN URL is not by itself a grant to redistribute a recording.
@@ -96,7 +74,7 @@ Quran-PNG and quran.com-images remain comparison references only. Their images, 
 
 ## Privacy and permission disclosure
 
-The `online` flavor requires `INTERNET` for Android SpeechRecognizer operation and Husary streaming, and requires `RECORD_AUDIO` for recitation. The `offline` flavor removes `INTERNET` in `app/src/offline/AndroidManifest.xml` and requires `RECORD_AUDIO` for local recitation. The online recognizer is a system/provider service and may process audio outside the application; the app must disclose this in its privacy notice and must not claim that online mode is fully offline or fully private. The application does not request location, contacts, camera, phone, storage, notification, or background-service permissions in its manifest.
+Both `online` and `offline` flavors require `INTERNET` for Android SpeechRecognizer and require `RECORD_AUDIO` only for voice recitation. The `offline` flavor keeps the Quran databases, QUL timing index, and 6,236 Husary M4A files inside the APK, so Quran display and reference-audio playback do not need the network. The writing-recitation mode needs neither permission. Android SpeechRecognizer is a system/provider service and may process audio outside the application; the app must disclose this and must not claim that either flavor is fully offline or fully private. The application does not request location, contacts, camera, phone, storage, notification, or background-service permissions in its manifest.
 
 `android:allowBackup="true"` permits Android backup behavior for application data according to the device/OS backup policy. Before public release, decide whether checkpoints, session history, and correction history may be included in backup, and document or configure this choice.
 
