@@ -4,6 +4,7 @@ import com.example.quranoffline.data.QuranWord
 import com.example.quranoffline.data.RecitationMatcher
 import com.example.quranoffline.data.WordEvaluation
 import com.example.quranoffline.data.canonicalizeRecognizedTranscript
+import com.example.quranoffline.data.quranWordMatchesAllowCanonicalSpelling
 import com.example.quranoffline.data.WordStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -140,12 +141,10 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun droppingPronouncedAlifFromAlRahmanIsRejected() {
-        val expectedWord = listOf(WordReferenceFixtures.fatihaBasmala[2])
-        val result = RecitationMatcher.evaluate(expectedWord, "الرحمن", hasFinalResult = true)
-        assertEquals(0, result.matched)
-        assertEquals(1, result.unexpected)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.words.single().status)
+    fun canonicalAlRahmanAndSpokenAlRahmanAreBothAcceptedInTypedMode() {
+        val expectedWord = WordReferenceFixtures.fatihaBasmala[2]
+        assertTrue(quranWordMatchesAllowCanonicalSpelling(expectedWord, "الرحمان"))
+        assertTrue(quranWordMatchesAllowCanonicalSpelling(expectedWord, "الرحمن"))
     }
 
     @Test

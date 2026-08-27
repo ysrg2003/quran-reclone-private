@@ -55,6 +55,8 @@ class RecitationProgressTracker(
     private val ayahs: List<QuranAyah>,
     /** Null is reserved for synthetic unit tests; production passes the loaded reference explicitly. */
     private val pronunciationReference: PronunciationReference? = null,
+    /** Text mode accepts canonical Quran spelling alongside spoken comparison forms. */
+    private val allowCanonicalQuranSpelling: Boolean = false,
     private val rollbackWindow: Int = 3,
     private val jumpConfirmationWords: Int = 2,
     correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
@@ -612,7 +614,12 @@ class RecitationProgressTracker(
         if (tokens.isEmpty() || nextWordInAyah != 0 || awaitingResume || committedTokens.isNotEmpty()) return false
         val ayah = ayahs.getOrNull(currentAyahIndex) ?: return false
         val reference = pronunciationReference?.ayah(ayah.surah, ayah.ayah) ?: return false
-        if (!PronunciationSpeechMatcher.matchesAyahPhrase(reference, tokens)) return false
+        if (!PronunciationSpeechMatcher.matchesAyahPhrase(
+                reference,
+                tokens,
+                visualWords = ayah.words,
+                allowCanonicalQuranSpelling = allowCanonicalQuranSpelling,
+            )) return false
         val observedUnits = tokens.flatMap { it.split(' ').filter(String::isNotBlank) }
         var observedIndex = 0
         ayah.words.indices.forEach { localIndex ->
@@ -636,9 +643,12 @@ class RecitationProgressTracker(
             // speech asset. The app always injects the complete local asset.
             quranWordMatches(word, observed)
         } else {
-            // A loaded-but-incomplete asset fails closed; visual Quran text is
-            // never an observed speech fallback.
-            PronunciationSpeechMatcher.matches(word = word, pronunciation = referenceWord, observed = observed)
+            PronunciationSpeechMatcher.matches(
+                word = word,
+                pronunciation = referenceWord,
+                observed = observed,
+                allowCanonicalQuranSpelling = allowCanonicalQuranSpelling,
+            )
         }
     }
 

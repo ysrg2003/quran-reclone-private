@@ -1,6 +1,6 @@
 {
   "root": "/home/ubuntu/quran-github-restore",
-  "file_count": 6543,
+  "file_count": 6544,
   "files": [
     ".cache/qul_segments/001.json",
     ".cache/qul_segments/002.json",
@@ -6449,6 +6449,7 @@
     "build.gradle.kts",
     "docs/APK_CONTENT_AUDIT_2026-08-27.md",
     "docs/ARABIC_MATCH_DIAGNOSIS.md",
+    "docs/AUDIO_CLIP_INVESTIGATION_2026-08-27.md",
     "docs/COMPLIANCE_AND_PERFORMANCE_UPDATE_2026-08-27.md",
     "docs/CORRECTION_SETTINGS_SPEC.md",
     "docs/DESIGN_BRIEF.md",
@@ -6557,12 +6558,14 @@
   "environment_like_names": [
     "AI_CONTEXT",
     "ANDROID_SDK_ROOT",
+    "APK_CONTENT_AUDIT",
     "APK_CONTENT_AUDIT_2026",
     "ARABIC_DIACRITICS",
     "ARABIC_DIGITS",
     "ARABIC_MARKS",
     "ARABIC_MATCH_DIAGNOSIS",
     "ASSET_VERSION",
+    "AUDIO_CLIP_INVESTIGATION_2026",
     "AUDIO_DIR",
     "BASE_LETTERS",
     "BASE_URL",

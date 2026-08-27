@@ -67,7 +67,7 @@ export ANDROID_SDK_ROOT=/home/ubuntu/tools/android-sdk
 
 ### 5.1 النص والتخطيط
 
-`word_reference_ayahs.json` يحتوي 6236 آية و77430 كلمة. كل Word يحافظ على `text` العثماني و`matchText` المخصص للمقارنة؛ asset الحالي لا يُفترض أن يحتوي حقول pronunciation التفصيلية. `word_reference_layout.json` يحفظ خطوط الصفحة. `word_reference_preview.json` و`word_reference_preview_layout.json` مشتقان للصفحات 1–5 وعددها 36 آية لتقديم واجهة مبكرة.
+`word_reference_ayahs.json` يحتوي 6236 آية و77430 كلمة. كل Word يحافظ على `text` العثماني و`matchText` المخصص للمقارنة؛ asset الحالي لا يُفترض أن يحتوي حقول pronunciation التفصيلية. `word_reference_layout.json` يحفظ خطوط الصفحة. `word_reference_preview.json` و`word_reference_preview_layout.json` مشتقان للصفحات 1–5 وعددها 36 آية لتقديم واجهة مبكرة. في وضع الكتابة يضيف tracker قبول الرسم القرآني المطبّع إلى الصيغة المنطوقة؛ لذلك `الرحمن` و`الرحمان` صحيحان للكلمة `ٱلرَّحۡمَٰنِ` دون تغيير `text`. الصوت لا يفعّل هذا الخيار.
 
 `QuranViewModel` لا يضع `assetsReady=true` إلا بعد تحميل النسخة الكاملة والتحقق من compatibility. preview يعرض صفحة أولى فقط عندما لا توجد القائمة الكاملة، ثم يستبدلها بالمصدر الكامل. القراءة لا تستخدم صور Quran-PNG كأصل runtime.
 
@@ -77,7 +77,7 @@ export ANDROID_SDK_ROOT=/home/ubuntu/tools/android-sdk
 
 ### 5.3 توقيتات وصوت الحصري
 
-`Husary_Murattal.json` ناتج build-time من QUL recitation 20/recitation 112 بحسب script ومثبت على 6236 آية، و77430 نافذة canonical، و77897 segment خام، منها 366 segment غير كلمة محفوظة للتدقيق. لا يعيد runtime تقسيم segment أو تخمينه.
+`Husary_Murattal.json` ناتج build-time من QUL recitation 20/recitation 112 بحسب script ومثبت على 6236 آية، و77430 نافذة canonical، و77897 segment خام، منها 366 segment غير كلمة محفوظة للتدقيق. لا يعيد runtime تقسيم التوقيتات العادية. عند cue أول/أخير قصير جداً مع فجوة كبيرة، يستخدم `TimingWordMapper` تقديراً edge محدوداً من حدود الجار لتجنب تشغيل الصمت أو tail القصير، ولا يستخدم توقيت Alafasy بديلاً لتسجيل Husary.
 
 مجلد MP3 المصدر الخارجي الذي لا يدخل Git ولا APK هو:
 
@@ -105,7 +105,7 @@ app/src/offline/assets/quran/audio/husary_aac/*.m4a
 
 ## 7. دورة تشغيل الصوت
 
-`TimingWordMapper.wholeAyah()` يعيد window كاملة تبدأ عند `0`، مع نهاية آخر cue المتاح. `QuranViewModel` يرسل `startMs=0` في queue الخاصة بقراءة الآية/السورة/القرآن والبِسملة؛ لا يُستخدم first word cue لقص القراءة الكاملة. تصحيح كلمة منفردة لا يزال يستخدم cue الخاص بالكلمة وpadding gap-aware بحد أقصى 120ms داخل الصمت ولا يعبر كلمة مجاورة.
+`TimingWordMapper.wholeAyah()` يعيد window كاملة تبدأ عند `0`، مع نهاية آخر cue المتاح. `QuranViewModel` يرسل `startMs=0` في queue الخاصة بقراءة الآية/السورة/القرآن والبِسملة؛ لا يُستخدم first word cue لقص القراءة الكاملة. تصحيح كلمة منفردة يستخدم cue الخاص بالكلمة وpadding gap-aware بحد أقصى 120ms داخل الصمت ولا يعبر كلمة مجاورة. `TimingWordMapper` يصلح فقط cue أول/أخير أصغر من 120ms إذا كانت الفجوة إلى الجار 600ms أو أكثر، وإلا يحافظ على cue الأصلي.
 
 `ReferenceAudioPlayer` يقرأ مدة `MediaPlayer` بعد prepare ويقيد start/end إليها. هذا يعالج فروق حاوية AAC وQUL integer cues مثل نهاية 1:1 التي تتجاوز مدة الملف ببضعة milliseconds، من دون تعديل JSON. Offline للبِسملة يمرر `assetPath` إلى M4A المضمّن، بينما Online يستخدم cache/URL.
 
@@ -126,7 +126,7 @@ app/src/offline/assets/quran/audio/husary_aac/*.m4a
 
 ## 9. Git ونقطة quran V1
 
-النقطة المرجعية المحلية المطلوبة محفوظة باسم tag annotated `quran-v1` وتشير إلى commit `1c7d2dd` برسالة `quran V1 snapshot before audio boundary fixes`. المرشح السابق محفوظ باسم `quran-v1-postfix` ويشير إلى `50eb22e`، ولا يمثل العقد الحالي. المرشح الحالي محفوظ في tag annotated منفصل `quran-v1-writing-mode`؛ MP3 المصدر خارج repository وM4A ignored. لا يُستبدل أي tag تاريخي.
+النقطة المرجعية المحلية المطلوبة محفوظة باسم tag annotated `quran-v1` وتشير إلى commit `1c7d2dd` برسالة `quran V1 snapshot before audio boundary fixes`. المرشح السابق محفوظ باسم `quran-v1-postfix` ويشير إلى `50eb22e`، ولا يمثل العقد الحالي. المرشح السابق محفوظ في tag annotated منفصل `quran-v1-writing-mode`؛ الإصلاح الحالي سيُحفظ في tag annotated جديد مستقل `quran-v1-writing-mode-fix` بعد commit. MP3 المصدر خارج repository وM4A ignored. لا يُستبدل أي tag تاريخي.
 
 قبل أي push يجب تشغيل:
 
@@ -163,7 +163,7 @@ python3 scripts/audit_husary_audio_boundaries.py \
 git diff --check
 ```
 
-بعد البناء يجب استعمال `aapt dump permissions` و`unzip -l` للتحقق من: Online يحتوي `INTERNET` و`RECORD_AUDIO` ولا يحتوي M4A أو MP3 أو model أو Sherpa؛ Offline يحتوي `INTERNET` و`RECORD_AUDIO` ويحتوي 6236 M4A، ولا يحتوي model أو Sherpa. يجب حفظ SHA-256 وحجم APK بعد البناء النهائي فقط.
+بعد البناء يجب استعمال `aapt dump permissions` و`unzip -l` للتحقق من: Online يحتوي `INTERNET` و`RECORD_AUDIO` ولا يحتوي M4A أو MP3 أو model أو Sherpa؛ Offline يحتوي `INTERNET` و`RECORD_AUDIO` ويحتوي 6236 M4A، ولا يحتوي MP3 أو model أو Sherpa أو ONNX. في هذه الجولة: Online هو 23,415,576 bytes وSHA-256 `d39c19f778ef6135591b4d3ee390e58f6b67e6137defc09466c11966181aab5e`، وOffline هو 1,300,252,702 bytes وSHA-256 `94aa4c3432a62f6191f3f5ac97637c1b12f9e0e8bdb9dd39c084e788e88df88c`. يجب حفظ SHA-256 وحجم APK بعد البناء النهائي فقط.
 
 ## 11. ما هو مثبت وما هو مؤجل
 
@@ -178,7 +178,7 @@ git diff --check
 | deferred | ADB/hardware Online basmala and full-ayah test | لا يوجد جهاز ظاهر في هذه الجولة |
 | deferred | Offline voice flow على هاتف متوافق مع Internet متاح لـSpeechRecognizer وتشغيل M4A محلي | لا يوجد device/provider run |
 | deferred | full linguistic listening/ASR audit of all 6236 files | metadata audit + two controlled samples فقط |
-| مثبت | final APK permissions/content/size/SHA | `docs/APK_CONTENT_AUDIT_2026-08-27.md`؛ Online 23,413,744 bytes وOffline 1,300,250,950 bytes |
+| مثبت | final APK permissions/content/size/SHA | `docs/VERIFICATION_MATRIX.md` و`docs/RELEASE_NOTES_2026-08-27.md`؛ Online 23,415,576 bytes وOffline 1,300,252,702 bytes |
 | مثبت سابقاً | Git object audit ورفع المرشح السابق | `docs/GIT_OBJECT_AUDIT_2026-08-27.md` وGitHub Release؛ بعد commit الجديد يجب إعادة الفحص قبل push |
 
 ## 12. بروتوكول agent قبل التعديل

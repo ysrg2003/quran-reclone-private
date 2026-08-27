@@ -13,11 +13,13 @@ class OpeningBasmalaProgressTracker(
     sourceAyah: QuranAyah,
     pronunciationReference: PronunciationReference? = null,
     correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
+    allowCanonicalQuranSpelling: Boolean = false,
 ) {
     private val delegate = RecitationProgressTracker(
         ayahs = listOf(sourceAyah),
         pronunciationReference = pronunciationReference,
         correctionSettings = correctionSettings,
+        allowCanonicalQuranSpelling = allowCanonicalQuranSpelling,
     )
 
     fun updateSettings(newSettings: CorrectionSettings) = delegate.updateSettings(newSettings)

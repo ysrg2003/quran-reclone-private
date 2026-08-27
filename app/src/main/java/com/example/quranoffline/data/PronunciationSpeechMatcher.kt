@@ -5,13 +5,21 @@ object PronunciationSpeechMatcher {
     /**
      * Matches the raw recognizer token against the speech-only reference.
      *
-     * The visible Quran spelling is deliberately not a fallback here. For
-     * example, Word renders الرَّحۡمَٰنِ while the expected spoken form is
-     * الرحمان; accepting the visual spelling would turn a recognizer result
-     * of الرحمن into a false positive or compare the wrong string.
+     * Typed recitation may accept both the canonical Quran/provider spelling
+     * and the pronunciation form. Voice matching remains explicit about the
+     * spoken reference unless the typed-mode flag is enabled.
      */
-    fun matches(word: QuranWord, pronunciation: PronunciationWord?, observed: String): Boolean {
+    fun matches(
+        word: QuranWord,
+        pronunciation: PronunciationWord?,
+        observed: String,
+        allowCanonicalQuranSpelling: Boolean = false,
+    ): Boolean {
         val reference = pronunciation ?: return false
+        // Typed recitation may use either the canonical Quran spelling or the
+        // spoken spelling. Voice mode keeps the stricter pronunciation contract
+        // unless the caller explicitly opts into canonical spelling.
+        if (allowCanonicalQuranSpelling && quranWordMatchesAllowCanonicalSpelling(word, observed)) return true
         val expected = normalizeArabicForComparison(reference.spoken)
         val actual = normalizeArabicForComparison(observed)
         if (expected == actual) return true
@@ -50,6 +58,8 @@ object PronunciationSpeechMatcher {
     fun matchesAyahPhrase(
         reference: PronunciationAyah,
         observedTokens: List<String>,
+        visualWords: List<QuranWord> = emptyList(),
+        allowCanonicalQuranSpelling: Boolean = false,
     ): Boolean {
         val expectedWords = reference.words
         if (expectedWords.isEmpty() || observedTokens.isEmpty()) return false
@@ -61,8 +71,11 @@ object PronunciationSpeechMatcher {
         return expectedUnits.indices.all { index ->
             val (word, expectedUnit) = expectedUnits[index]
             val expected = normalizeArabicForComparison(expectedUnit)
-            val actual = normalizeArabicForComparison(flattenedObserved[index])
-            expected == actual ||
+            val actualRaw = flattenedObserved[index]
+            val actual = normalizeArabicForComparison(actualRaw)
+            val visualWord = visualWords.firstOrNull { it.index == word.index }
+            val canonicalOrSpoken = allowCanonicalQuranSpelling && visualWord != null && word.spokenTokens.size == 1 && quranWordMatchesAllowCanonicalSpelling(visualWord, actualRaw)
+            canonicalOrSpoken || expected == actual ||
                 (word.spokenTokens.size > 1 && collapseLongVowelRepeats(actual, expected) == expected) ||
                 (word.maddPositions.isNotEmpty() && collapseValidMaddRepeats(actual, expected, word.maddPositions) == expected)
         }

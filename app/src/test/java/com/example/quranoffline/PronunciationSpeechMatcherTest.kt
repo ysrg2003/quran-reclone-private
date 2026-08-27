@@ -55,19 +55,39 @@ class PronunciationSpeechMatcherTest {
     }
 
     @Test
-    fun rawRecognizerTextUsesSpokenReferenceNotVisualRasm() {
+    fun rawRecognizerTextAcceptsSpokenAndVisualRasmForms() {
         val word = WordReferenceFixtures.fatihaBasmala[2]
         val reference = PronunciationWord(2, "الرحمان", listOf("الرحمان"), setOf(5), null, null, null, null)
         assertTrue(PronunciationSpeechMatcher.matches(word, reference, "الرحمان"))
         assertFalse(PronunciationSpeechMatcher.matches(word, reference, "الرحمن"))
+        assertTrue(PronunciationSpeechMatcher.matches(word, reference, "الرحمن", allowCanonicalQuranSpelling = true))
     }
 
     @Test
-    fun pronouncedDaggerAlifIsRequiredInPronunciationReference() {
+    fun pronouncedDaggerAlifStillRejectsMissingPronouncedAlif() {
         val word = WordReferenceFixtures.alamin
         val reference = PronunciationWord(0, "العالمين", listOf("العالمين"), setOf(3, 6), null, null, null, null)
         assertTrue(PronunciationSpeechMatcher.matches(word, reference, "العالمين"))
         assertFalse(PronunciationSpeechMatcher.matches(word, reference, "العلمين"))
+    }
+
+    @Test
+    fun wholeAyahAcceptsCanonicalVisualDaggerAlifForm() {
+        val word = WordReferenceFixtures.fatihaBasmala[2]
+        val reference = PronunciationAyah(
+            1,
+            1,
+            "الرحمان",
+            listOf(PronunciationWord(2, "الرحمان", listOf("الرحمان"), setOf(5), null, null, null, null)),
+        )
+        assertTrue(
+            PronunciationSpeechMatcher.matchesAyahPhrase(
+                reference,
+                listOf("الرحمن"),
+                listOf(word),
+                allowCanonicalQuranSpelling = true,
+            ),
+        )
     }
 
     @Test

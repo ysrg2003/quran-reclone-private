@@ -175,10 +175,13 @@ class RecitationProgressTrackerTest {
         assertEquals(WordStatus.MATCHED, accepted.evaluation.words.single().status)
         assertEquals("الرحمان", accepted.evaluation.words.single().observed)
 
-        val rejected = RecitationProgressTracker(listOf(ayah), pronunciationReference = expectedSpoken)
-            .update(final("الرحمن"))
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, rejected.evaluation.words.single().status)
-        assertEquals("الرحمن", rejected.evaluation.words.single().observed)
+        val canonicalSpelling = RecitationProgressTracker(
+            listOf(ayah),
+            pronunciationReference = expectedSpoken,
+            allowCanonicalQuranSpelling = true,
+        ).update(final("الرحمن"))
+        assertEquals(WordStatus.MATCHED, canonicalSpelling.evaluation.words.single().status)
+        assertEquals("الرحمن", canonicalSpelling.evaluation.words.single().observed)
     }
 
     @Test

@@ -70,11 +70,11 @@ export ANDROID_SDK_ROOT=/home/ubuntu/tools/android-sdk
 
 ## السلوك المهم في التسميع
 
-`RecognitionUpdate.value` هو النص التراكمي الخام القادم من Android SpeechRecognizer، و`providerText` أحدث candidate خام للعرض؛ لا يُستبدل observed بنص Word قبل الحكم. في وضع الكتابة يصنع التطبيق نتيجة نهائية من النص الذي أدخله المستخدم ويمررها إلى نفس مسار المقارنة. المطابقة موضعية: إذا حُذفت كلمة وسطية، تكون الكلمة المفقودة `MISSING` وتبقى الكلمات التالية `UNCERTAIN` حتى التصحيح، ولا تنتقل الجلسة إلى آية لاحقة قبل إزالة barrier. الأخطاء تحفظ محلياً في `LocalRecitationErrorStore`.
+`RecognitionUpdate.value` هو النص التراكمي الخام القادم من Android SpeechRecognizer، و`providerText` أحدث candidate خام للعرض؛ لا يُستبدل observed بنص Word قبل الحكم. في وضع الكتابة يصنع التطبيق نتيجة نهائية من النص الذي أدخله المستخدم ويمررها إلى نفس مسار المقارنة مع تفعيل قبول الرسم القرآني المطبّع، ولذلك تكون `الرحمن` و`الرحمان` صحيحتين للكلمة `ٱلرَّحۡمَٰنِ`. في وضع الصوت يبقى observed الخام مقابل مرجع النطق الصارم. المطابقة موضعية: إذا حُذفت كلمة وسطية، تكون الكلمة المفقودة `MISSING` وتبقى الكلمات التالية `UNCERTAIN` حتى التصحيح، ولا تنتقل الجلسة إلى آية لاحقة قبل إزالة barrier. الأخطاء تحفظ محلياً في `LocalRecitationErrorStore`.
 
 البسملة الافتتاحية مستقلة في جميع السور التي تحتاجها، ولا تُضاف إلى `allAyahs`. الفاتحة لها صفها القرآني الخاص، والتوبة لا تُفتتح ببسملة مستقلة. ينطبق ذلك على الصوت والكتابة؛ `OpeningBasmalaProgressTrackerTest` يثبت أن `بسم الله الرحيم` لا يجعل `الرحيم` صحيحة عند حذف `الرحمان`.
 
-عند تشغيل آية كاملة يبدأ المشغل من offset صفر، لا من أول QUL word cue؛ هذا يمنع قص بداية الآية عندما يبدأ أول cue متأخراً. تصحيح كلمة منفردة يبقى مقيداً بنافذة QUL وبـgap-aware padding لا يتجاوز 120ms داخل الصمت. مدة `MediaPlayer` الفعلية تقيد النهاية إذا اختلفت مدة M4A/MP3 قليلاً عن cue integer.
+عند تشغيل آية كاملة يبدأ المشغل من offset صفر، لا من أول QUL word cue؛ هذا يمنع قص بداية الآية عندما يبدأ أول cue متأخراً. تصحيح كلمة منفردة يبقى مقيداً بنافذة QUL وبـgap-aware padding لا يتجاوز 120ms داخل الصمت. وإذا كان cue الأول أو الأخير قصيراً جداً وتفصله فجوة كبيرة عن جاره، يستخدم `TimingWordMapper` نافذة تقديرية آمنة من حدود الجار بدلاً من تشغيل صمت أو tail قصير. مدة `MediaPlayer` الفعلية تقيد النهاية إذا اختلفت مدة M4A/MP3 قليلاً عن cue integer. هذا تحسين آلي محدود وليس إثباتاً لاستماع بشري لكل الكلمات.
 
 ### وضع التسميع بالكتابة
 
@@ -148,8 +148,8 @@ git rev-list --objects --all > /tmp/quran-reachable-objects.txt
 | تدقيق كل containers/timing | `docs/HUSARY_AUDIO_BOUNDARY_AUDIT_2026-08-27.*` |
 | ADB/اختبار ميكروفون/MediaPlayer حي | مؤجل؛ لا يُدّعى نجاحه |
 | SpeechRecognizer في Offline مع الشبكة متاحة | مؤجل؛ لا يوجد هاتف في هذه الجولة |
-| final APK hashes/size/permissions للعقد الجديد | مثبت؛ Online `23,413,744` bytes وOffline `1,300,250,950` bytes؛ التفاصيل في `docs/APK_CONTENT_AUDIT_2026-08-27.md` |
-| GitHub push وRelease للعقد الجديد | تم التنفيذ على tag `quran-v1-writing-mode` كـprerelease؛ لا يستبدل `quran-v1` أو `quran-v1-postfix`، والحالة internal testing only |
+| final APK hashes/size/permissions للإصلاح التصحيحي | مثبت؛ Online `23,415,576` bytes وOffline `1,300,252,702` bytes؛ التفاصيل في `docs/APK_CONTENT_AUDIT_2026-08-27.md` |
+| GitHub push وRelease للإصلاح التصحيحي | يُنشر بعد commit على tag مستقل `quran-v1-writing-mode-fix` كـprerelease؛ لا يستبدل `quran-v1` أو `quran-v1-postfix` أو `quran-v1-writing-mode`، والحالة internal testing only |
 
 ## مراجع
 

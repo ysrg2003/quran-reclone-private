@@ -33,6 +33,46 @@ class TimingWordMapperTest {
     }
 
     @Test
+    fun tinyFirstCueWithLargeLeadingGapUsesEstimatedSpokenWindow() {
+        val ayah = QuranAyah(
+            2,
+            6,
+            "word0 word1",
+            "word0 word1",
+            listOf(QuranWord(0, "word0", "word0"), QuranWord(1, "word1", "word1")),
+        )
+        val timings = listOf(
+            TimingSegment(0, 1, 0, 70),
+            TimingSegment(1, 2, 2600, 3040),
+        )
+
+        val first = TimingWordMapper.forWord(ayah, timings, 0)
+
+        assertEquals(1335, first!!.startMs)
+        assertEquals(2600, first.endMs)
+    }
+
+    @Test
+    fun tinyLastCueWithLargeGapUsesPreviousSpokenBoundary() {
+        val ayah = QuranAyah(
+            2,
+            6,
+            "word0 word1",
+            "word0 word1",
+            listOf(QuranWord(0, "word0", "word0"), QuranWord(1, "word1", "word1")),
+        )
+        val timings = listOf(
+            TimingSegment(0, 1, 12000, 14200),
+            TimingSegment(1, 2, 19250, 19300),
+        )
+
+        val last = TimingWordMapper.forWord(ayah, timings, 1)
+
+        assertEquals(14200, last!!.startMs)
+        assertEquals(19300, last.endMs)
+    }
+
+    @Test
     fun wholeAyahStartsAtFileOffsetZeroEvenWhenFirstWordCueStartsLater() {
         val ayah = QuranAyah(
             13,

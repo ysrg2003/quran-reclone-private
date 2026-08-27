@@ -630,6 +630,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val tracker = RecitationProgressTracker(
             state.value.allAyahs,
             pronunciationReference = pronunciationReference,
+            allowCanonicalQuranSpelling = state.value.inputMode == RecitationInputMode.TYPING,
             correctionSettings = state.value.correctionSettings,
         )
         tracker.startFromPosition(startAyahIndex, startWordIndex)
@@ -726,6 +727,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val tracker = RecitationProgressTracker(
             state.value.allAyahs,
             pronunciationReference = pronunciationReference,
+            allowCanonicalQuranSpelling = state.value.inputMode == RecitationInputMode.TYPING,
             correctionSettings = state.value.correctionSettings,
         )
         tracker.startFromAyah(previousAyahIndex)
@@ -849,6 +851,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val tracker = progressTracker ?: RecitationProgressTracker(
                     previousState.allAyahs,
                     pronunciationReference = pronunciationReference,
+                    allowCanonicalQuranSpelling = previousState.inputMode == RecitationInputMode.TYPING,
                     correctionSettings = previousState.correctionSettings,
                 ).also { progressTracker = it }
                 val result = tracker.update(
@@ -1157,6 +1160,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             sourceAyah = basmalaSourceAyah() ?: return null,
             pronunciationReference = pronunciationReference,
             correctionSettings = state.value.correctionSettings,
+            allowCanonicalQuranSpelling = state.value.inputMode == RecitationInputMode.TYPING,
         )
     }
 

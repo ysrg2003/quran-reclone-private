@@ -34,11 +34,11 @@
 
 ## سياسة runtime
 
-يقرأ `QuranRepository` Word canonical، ويقرأ `PronunciationReference` asset النطق التفصيلي المنفصل. لا ينشئ runtime expected spelling جديدة ولا يستخدم `quran_content.json` مصدراً للنص. `RecognitionUpdate.Text.value` هو النص التراكمي الخام للمقارنة، و`providerText` هو أحدث candidate خام للعرض؛ لا يُحوّل observed إلى Word canonical قبل الحكم.
+يقرأ `QuranRepository` Word canonical، ويقرأ `PronunciationReference` asset النطق التفصيلي المنفصل. لا ينشئ runtime expected spelling جديدة ولا يستخدم `quran_content.json` مصدراً للنص. `RecognitionUpdate.Text.value` هو النص التراكمي الخام للمقارنة، و`providerText` هو أحدث candidate خام للعرض؛ لا يُحوّل observed إلى Word canonical قبل الحكم. في وضع الكتابة يفعّل tracker قبول الرسم القرآني المطبّع بالإضافة إلى الصيغة المنطوقة، لذلك تقبل `الرحمن` و`الرحمان` في موضع الكلمة ذاتها.
 
 يقرأ `QuranViewModel` preview أولاً في الخلفية لعرض الصفحة الأولى، ثم يقرأ النص الكامل والتخطيط والتوقيتات وطبقة النطق في مهام IO مستقلة، ويضع `assetsReady` بعد التحقق. لا تُجلب بيانات النص أو metadata من الشبكة.
 
-`ReferenceAudioPlayer` يشغل URL/path في Online، ويفتح `AssetFileDescriptor` في Offline. تصحيح كلمة واحدة يستعمل window QUL للكلمة مع padding gap-aware بحد أقصى 120ms داخل نصف الصمت المتاح، ولا يمدد إلى كلمة مجاورة. قراءة الآية الكاملة ترسل `startMs=0` وتُقيد نهايتها بمدة `MediaPlayer` الفعلية حتى لا تقص first cue المتأخر ولا تتجاوز AAC duration.
+`ReferenceAudioPlayer` يشغل URL/path في Online، ويفتح `AssetFileDescriptor` في Offline. تصحيح كلمة واحدة يستعمل window QUL للكلمة مع padding gap-aware بحد أقصى 120ms داخل نصف الصمت المتاح، ولا يمدد إلى كلمة مجاورة. إذا كان cue الأول أو الأخير أصغر من 120ms مع فجوة لا تقل عن 600ms، يصلح `TimingWordMapper` النافذة تقديرياً من حدود الجار فقط. قراءة الآية الكاملة ترسل `startMs=0` وتُقيد نهايتها بمدة `MediaPlayer` الفعلية حتى لا تقص first cue المتأخر ولا تتجاوز AAC duration.
 
 ## أذونات وحقوق
 

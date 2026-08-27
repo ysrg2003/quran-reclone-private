@@ -79,15 +79,22 @@ fun arabicWordsEquivalent(first: String, second: String): Boolean {
 fun arabicSpellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean): Set<String> {
     val base = normalizeArabicForMatch(value)
     val pronounced = normalizeArabicWithSmallAlif(value)
-    // A written dagger alif is a pronounced carrier. When expanding it changes
-    // the comparison spelling, keep only the expanded form; do not let a
-    // legacy matchText that dropped it make the word green.
+    // Voice comparison keeps the pronunciation form authoritative for drawn
+    // alifs. Typed mode opts into the additional canonical Quran spelling via
+    // quranWordMatchesAllowCanonicalSpelling below.
     val baseForms = if (pronounced != base) setOf(pronounced) else setOf(base, pronounced)
     return if (allowSpeechTaMarbutaSubstitution) {
         baseForms + baseForms.map { it.replace('ة', 'ه') }
     } else {
         baseForms
     }
+}
+
+fun quranWordMatchesAllowCanonicalSpelling(word: QuranWord, observed: String): Boolean {
+    if (quranWordMatches(word, observed)) return true
+    val canonical = normalizeArabicForMatch(word.text)
+    val actual = normalizeArabicForComparison(observed)
+    return canonical.isNotBlank() && canonical == actual
 }
 
 fun quranWordMatches(word: QuranWord, observed: String): Boolean {
