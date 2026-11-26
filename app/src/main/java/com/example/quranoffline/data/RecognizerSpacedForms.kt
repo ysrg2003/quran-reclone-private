@@ -10,7 +10,7 @@ object RecognizerSpacedForms {
 
     private fun fold(value: String): String = value
         .replace('ٱ', 'ا').replace('آ', 'ا').replace('أ', 'ا').replace('إ', 'ا')
-        .replace('ؤ', 'و').replace('ئ', 'ي').replace("ء", "")
+        .replace('ؤ', 'و').replace('ئ', 'ي').replace('ى', 'ي').replace("ء", "")
         .replace(Regex("[\\u0610-\\u061a\\u064b-\\u065f\\u06d6-\\u06ed\\u0670\\u0640]"), "")
         .trim()
 

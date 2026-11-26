@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -1803,6 +1804,10 @@ private fun MushafPageSurface(
                         color = Color(0xFF8A6A45),
                     )
                 } else {
+                    // One shared horizontal scroller for the whole page (was one per line:
+                    // 15 scrollable nodes competing with the vertical list and page swipe).
+                    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState(), reverseScrolling = true)) {
+                    Column(Modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     wordReferenceLines.forEach { line ->
                         WordReferenceLineView(
                             line = line,
@@ -1825,6 +1830,8 @@ private fun MushafPageSurface(
                             onTapAyah = onTapAyah,
                             onLongPressAyah = onLongPressAyah,
                         )
+                    }
+                    }
                     }
                 }
             }

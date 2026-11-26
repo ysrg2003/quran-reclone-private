@@ -52,7 +52,7 @@ class ImlaeiCorpusAuditTest {
                 }
             }
             if (plain.length >= 3) {
-                mutate("drop-last-letter", plain.dropLast(1))
+                if (!Regex("ً\\p{M}*ا\\p{M}*$").containsMatchIn(c[2]) && !Regex("ا\\p{M}*ً\\p{M}*$").containsMatchIn(c[2])) mutate("drop-last-letter", plain.dropLast(1))
                 mutate("drop-first-letter", plain.drop(1))
                 mutate("drop-middle-letter", plain.removeRange(plain.length / 2, plain.length / 2 + 1))
                 mutate("swap-adjacent-middle", plain.toCharArray().also { a -> val i = a.size / 2; if (i + 1 < a.size) { val t = a[i]; a[i] = a[i + 1]; a[i + 1] = t } }.concatToString())

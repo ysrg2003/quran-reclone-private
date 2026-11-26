@@ -82,8 +82,7 @@ internal fun WordReferenceLineView(
                         onClick = { pageAyahs.firstOrNull()?.let { onPlayBasmala(it.surah) } },
                         onLongClick = { pageAyahs.firstOrNull()?.let { onPlayBasmala(it.surah) } },
                     )
-                    .padding(vertical = 8.dp)
-                    .horizontalScroll(rememberScrollState(), reverseScrolling = true),
+                    .padding(vertical = 8.dp),
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
                 color = textColor,
@@ -112,8 +111,7 @@ internal fun WordReferenceLineView(
                     },
                     onLongClick = { primary?.let { onLongPressAyah(it.surah, it.ayah) } },
                 )
-                .padding(vertical = 2.dp)
-                .horizontalScroll(rememberScrollState(), reverseScrolling = true),
+                .padding(vertical = 2.dp),
         ) {
             Text(
                 text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets) {

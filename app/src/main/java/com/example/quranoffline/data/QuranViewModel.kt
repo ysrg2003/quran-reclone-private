@@ -244,6 +244,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     parsedMetadata.requireCompatible(allAyahs)
                     check(wordReferenceLayout.pageCount == parsedMetadata.pages.size) { "Word reference page count does not match Quran metadata" }
                     check(pronunciationReference.size() == allAyahs.size) { "Word-derived pronunciation ayah count does not match Word Quran text" }
+                    // Build the 77k-word tracker tables here, off the main thread.
+                    RecitationProgressTracker.prewarm(allAyahs)
                     val requestedSurahAyahs = parsedRepository.ayahsForSurah(requestedSurah).ifEmpty { parsedRepository.ayahsForSurah(1) }
                     val selectedSurah = requestedSurahAyahs.firstOrNull()?.surah ?: 1
                     val totalAyahs = parsedRepository.ayahsForSurah(selectedSurah).size

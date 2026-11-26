@@ -62,7 +62,8 @@ class RecitationProgressTracker(
     correctionSettings: CorrectionSettings = CorrectionSettings.DEFAULTS,
 ) {
     private var settings = correctionSettings.normalized()
-    private val words = ayahs.flatMap { it.words }
+    private val cache = sharedFor(ayahs)
+    private val words = cache.words
     private val ayahStarts = IntArray(ayahs.size).also { starts ->
         var offset = 0
         ayahs.forEachIndexed { index, ayah ->
@@ -71,7 +72,9 @@ class RecitationProgressTracker(
         }
     }
     private val committedTokens = mutableListOf<String>()
-    private val evaluationWords = words.map { word -> WordEvaluation(word.text, null, WordStatus.UNCERTAIN) }.toMutableList()
+    // Copying the shared pristine list is a cheap array copy; building 77k
+    // WordEvaluation objects on the main thread at every start caused stutter.
+    private val evaluationWords = ArrayList(cache.pristine)
     private val openErrorKinds = mutableMapOf<Int, CorrectionKind>()
     private val correctedErrors = mutableListOf<CorrectedRecitationError>()
     private var matchedCount = 0
@@ -101,9 +104,8 @@ class RecitationProgressTracker(
 
     fun reset() {
         committedTokens.clear()
-        evaluationWords.forEachIndexed { index, word ->
-            evaluationWords[index] = WordEvaluation(word.expected, null, WordStatus.UNCERTAIN)
-        }
+        evaluationWords.clear()
+        evaluationWords.addAll(cache.pristine)
         openErrorKinds.clear()
         correctedErrors.clear()
         matchedCount = 0
@@ -669,5 +671,25 @@ class RecitationProgressTracker(
         var index = 0
         while (index < limit && first[index] == second[index]) index++
         return index
+    }
+
+    private class Shared(val words: List<QuranWord>, val pristine: List<WordEvaluation>)
+
+    companion object {
+        @Volatile private var shared: Pair<List<QuranAyah>, Shared>? = null
+
+        private fun sharedFor(ayahs: List<QuranAyah>): Shared {
+            shared?.let { if (it.first === ayahs) return it.second }
+            synchronized(this) {
+                shared?.let { if (it.first === ayahs) return it.second }
+                val words = ayahs.flatMap { it.words }
+                val built = Shared(words, words.map { WordEvaluation(it.text, null, WordStatus.UNCERTAIN) })
+                shared = ayahs to built
+                return built
+            }
+        }
+
+        /** Build the shared word tables off the main thread before the first recitation starts. */
+        fun prewarm(ayahs: List<QuranAyah>) { sharedFor(ayahs) }
     }
 }

@@ -104,6 +104,7 @@ private fun foldSpelling(value: String): String = value
     .replace('إ', 'ا')
     .replace('ؤ', 'و')
     .replace('ئ', 'ي')
+    .replace('ى', 'ي') // alif maqsura and ya are the same sound; recognizers write either
     .replace("ء", "")
     .replace(Regex("\\s+"), " ")
     .trim()
@@ -122,6 +123,11 @@ fun writtenSpellingForms(wordText: String): Set<String> {
     // error, so only the alif-written form is accepted for such words.
     val forms = if (nfc.contains(smallAlif)) linkedSetOf(written) else linkedSetOf(dropped, written)
     if (nfc.contains('ة')) forms += forms.map { it.replace('ة', 'ه') }
+    // Tanween fath (ـًا): the written alif is pronounced only when stopping. Reciting on, the word
+    // ends at the consonant, and recognizers often write it that way (عذاب for عذابًا).
+    if (Regex("ً\\p{M}*ا\\p{M}*$").containsMatchIn(nfc) || Regex("ا\\p{M}*ً\\p{M}*$").containsMatchIn(nfc)) {
+        forms += forms.filter { it.length > 2 && it.endsWith("ا") }.map { it.dropLast(1) }
+    }
     return forms.filter { it.isNotBlank() }.toSet()
 }
 

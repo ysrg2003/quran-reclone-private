@@ -26,3 +26,21 @@ class WaqfFormsTest {
         assertFalse(matchesWrittenSpelling(k, "كتا"))
     }
 }
+
+class TanweenAlifTest {
+    @Test
+    fun tanweenFathAlifMayBeOmittedWhenReadingOn() {
+        val w = QuranWord(0, "عَبۡدًا", "عبدا")
+        assertTrue(matchesWrittenSpelling(w, "عبد"))
+        assertTrue(matchesWrittenSpelling(w, "عبدا"))
+        assertFalse(matchesWrittenSpelling(QuranWord(1, "ٱلۡكِتَٰبَ", "الكتاب"), "الكتب"))
+        assertFalse(matchesWrittenSpelling(QuranWord(2, "قَالُواْ", "قالوا"), "قالا"))
+    }
+
+    @Test
+    fun alifMaqsuraAndYaAreInterchangeable() {
+        val w = QuranWord(0, "عَلَىٰ", "علي", recognizedForms = setOf("على"))
+        assertTrue(matchesWrittenSpelling(w, "علي"))
+        assertTrue(matchesWrittenSpelling(w, "على"))
+    }
+}
