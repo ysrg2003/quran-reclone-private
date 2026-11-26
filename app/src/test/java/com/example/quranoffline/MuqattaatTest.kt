@@ -122,22 +122,22 @@ class MuqattaatMaddFormsTest {
     private fun m(token: String, match: String, observed: String) = quranWordMatches(QuranWord(0, token, match), observed)
 
     @Test
-    fun spelledAndMaddCutFormsAreAcceptedForEveryOpening() {
+    fun fullSpelledAndMaddFormsAreAcceptedForEveryOpening() {
         val words = mapOf(
-            "الٓمٓ" to listOf("الف لام ميم", "الف ل", "ا ل م", "ألف لاااام ميييم", "الم", "الف لا"),
-            "الٓمٓصٓ" to listOf("الف لام ميم صاد", "الف لام ميم", "الف لام ميم ص"),
-            "الٓر" to listOf("الف لام را", "الف لام", "الف لام ر"),
-            "الٓمٓر" to listOf("الف لام ميم را", "الف لام ميم"),
-            "كٓهيعٓصٓ" to listOf("كاف ها يا عين صاد", "كاف ها يا عين", "كاف ها يا"),
+            "الٓمٓ" to listOf("الف لام ميم", "ألف لاااام ميييم", "الم"),
+            "الٓمٓصٓ" to listOf("الف لام ميم صاد"),
+            "الٓر" to listOf("الف لام را"),
+            "الٓمٓر" to listOf("الف لام ميم را"),
+            "كٓهيعٓصٓ" to listOf("كاف ها يا عين صاد"),
             "طه" to listOf("طا ها", "طه"),
-            "طسٓمٓ" to listOf("طا سين ميم", "طا سين"),
+            "طسٓمٓ" to listOf("طا سين ميم"),
             "طسٓ" to listOf("طا سين", "طس"),
-            "يسٓ" to listOf("يا سين", "يس", "ي س"),
-            "صٓ" to listOf("صاد", "ص", "صااااد"),
-            "حمٓ" to listOf("حا ميم", "حم", "ح م"),
-            "عٓسٓقٓ" to listOf("عين سين قاف", "عين سين", "ع س ق"),
-            "قٓ" to listOf("قاف", "ق", "قااااف"),
-            "نٓ" to listOf("نون", "ن", "نووون"),
+            "يسٓ" to listOf("يا سين", "يس"),
+            "صٓ" to listOf("صاد", "صااااد"),
+            "حمٓ" to listOf("حا ميم", "حم"),
+            "عٓسٓقٓ" to listOf("عين سين قاف"),
+            "قٓ" to listOf("قاف", "قااااف"),
+            "نٓ" to listOf("نون", "نووون"),
         )
         words.forEach { (token, forms) ->
             val match = token.replace("ٓ", "")
@@ -146,11 +146,20 @@ class MuqattaatMaddFormsTest {
     }
 
     @Test
-    fun ordinaryWordsAndWrongLettersAreNotAccepted() {
-        assertFalse(m("الٓمٓ", "الم", "لا"))
-        assertFalse(m("الٓمٓ", "الم", "الف"))
+    fun truncatedOrWrongReadingsAreNotAccepted() {
+        listOf("الف ل", "الف لا", "الف لام", "الف", "لا", "ا ل", "ذلك", "الف سين").forEach {
+            assertFalse("الم <- $it", m("الٓمٓ", "الم", it))
+        }
+        assertFalse(m("الٓمٓصٓ", "المص", "الف لام ميم"))
+        assertFalse(m("كٓهيعٓصٓ", "كهيعص", "كاف ها يا عين"))
         assertFalse(m("حمٓ", "حم", "حا"))
-        assertFalse(m("الٓمٓ", "الم", "ذلك"))
-        assertFalse(m("الٓمٓ", "الم", "الف سين"))
+    }
+
+    @Test
+    fun truncatedReadingIsDetectedSoAnotherAlternativeCanBePreferred() {
+        assertTrue(Muqattaat.looksTruncated("الف ل"))
+        assertFalse(Muqattaat.looksTruncated("الف لام ميم"))
+        assertFalse(Muqattaat.looksTruncated("ذلك الكتاب"))
+        assertTrue(Muqattaat.startsWithFullSequence("الف لام ميم ذلك"))
     }
 }

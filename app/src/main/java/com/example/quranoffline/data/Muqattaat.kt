@@ -115,6 +115,9 @@ object Muqattaat {
     fun pronunciationFor(visualToken: String, matchToken: String = visualToken): MuqattaatPronunciation? =
         pronunciationByVisualToken[visualToken.replace(Regex("[\\u06D6-\\u06DC\\s]"), "")]
 
+    /** Full letter-name phrases handed to the recognizer as biasing hints. */
+    fun biasingPhrases(): List<String> = pronunciations.values.map { it.units.joinToString(" ") { u -> u.fullName } }
+
     fun allCanonicalSequences(): Set<String> = pronunciations.keys
 
     fun definitionForLetter(letter: String): MuqattaatLetter? = letterDefinitions[letter]
@@ -166,7 +169,6 @@ object Muqattaat {
         val observedForms = normalizeSpeech(observed).split(' ').filter(String::isNotBlank)
         val spoken = pronunciation.units.flatMap { it.spokenForms }.map(::normalizeSpeech).toSet()
         if (observedForms.size == pronunciation.units.size && observedForms.indices.all { unitMatches(pronunciation.units[it], observedForms[it]) }) return true
-        if (observedForms.isNotEmpty() && observedForms.size < pronunciation.units.size && matchedTokenCount(visualWordFor(visualToken, matchToken), observedForms, 0) == observedForms.size) return true
         return observedForms.size == 1 && canonicalLetters(observedForms.single()) == pronunciation.matchToken && observedForms.single() !in spoken
     }
 
@@ -175,16 +177,7 @@ object Muqattaat {
      * word being judged is a muqatta'at opening, never as a general word mapping ("لا", "لم" are real words).
      */
     private val looseForms: Map<String, Set<String>> = mapOf(
-        LAM to setOf("لا", "لم", "لاام", "ل"),
-        MIM to setOf("مم", "مي", "ام"),
-        ALIF to setOf("ا", "الف", "الفف", "ال"),
-        SAD to setOf("صا"),
-        KAF to setOf("كا"),
-        AIN to setOf("عي", "عيين"),
-        SIN to setOf("سي", "سيين"),
-        QAF to setOf("قا"),
-        NUN to setOf("نو", "نوو"),
-        RA to setOf("ر"), TA to setOf("ط"), HAA to setOf("ح"), HA to setOf("ه"), YA to setOf("ي"),
+        ALIF to setOf("الفف"),
     )
 
     private fun unitMatches(unit: MuqattaatLetter, observed: String): Boolean {
@@ -194,11 +187,7 @@ object Muqattaat {
     }
 
     /** Letters of a muqatta'at word that may be missing at the end when the recognizer cuts a long madd. */
-    private fun allowedMissing(unitCount: Int): Int = when {
-        unitCount >= 5 -> 2
-        unitCount >= 3 -> 1
-        else -> 0
-    }
+    private fun allowedMissing(unitCount: Int): Int = 0
 
     /**
      * Number of leading tokens (starting at [start]) that spell this muqatta'at word, accepting a
@@ -222,6 +211,26 @@ object Muqattaat {
     /** Letter units a truncated reading left unspoken (consumed if the recognizer delivers them late). */
     fun missingUnitsAfter(word: QuranWord, consumedTokens: Int): List<MuqattaatLetter> =
         pronunciationFor(word)?.units?.drop(consumedTokens).orEmpty()
+
+    /**
+     * True when the text begins like a muqatta'at spelling (a prefix of the letter-name sequence) but is
+     * not a complete one, e.g. "الف ل" for الم. Used only to prefer another recognizer alternative.
+     */
+    fun looksTruncated(text: String): Boolean {
+        val t = normalizeSpeech(text).split(' ').filter(String::isNotBlank)
+        if (t.size < 2 || t.size > 6) return false
+        return sortedSequences.any { p ->
+            val k = minOf(p.units.size, t.size)
+            (0 until k).all { unitMatches(p.units[it], t[it]) } && t.size < p.units.size
+        } && !startsWithFullSequence(text)
+    }
+
+    fun startsWithFullSequence(text: String): Boolean {
+        val t = normalizeSpeech(text).split(' ').filter(String::isNotBlank)
+        return sortedSequences.any { p ->
+            t.size >= p.units.size && p.units.indices.all { unitMatches(p.units[it], t[it]) }
+        }
+    }
 
     fun unitMatchesToken(unit: MuqattaatLetter, token: String): Boolean = unitMatches(unit, token)
 

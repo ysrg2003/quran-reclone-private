@@ -512,25 +512,42 @@ class RecitationProgressTrackerTest {
     }
 
     @Test
-    fun afterWrongWordNeitherEarlierNorLaterWordsAreAcceptedUntilItIsCorrect() {
+    fun afterWrongWordLaterWordsAreNotAcceptedUntilItIsCorrect() {
         val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d")))
         tracker.update(final("a x"))
-        // Earlier word: must not move the cursor or clear the error.
-        var r = tracker.update(final("a"))
-        assertEquals(1, r.currentWordInAyah)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, r.evaluation.words[1].status)
-        // Later word: not accepted.
-        r = tracker.update(final("c"))
+        var r = tracker.update(final("c"))
         assertEquals(1, r.currentWordInAyah)
         assertTrue(r.evaluation.words[2].status != WordStatus.MATCHED)
-        // The wrong word said correctly unlocks the next word.
         r = tracker.update(final("b"))
         assertEquals(2, r.currentWordInAyah)
         assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
     }
 
     @Test
-    fun afterPlaybackResumeOnlyTheWrongWordIsAccepted() {
+    fun restartFromAnyEarlierWordClearsLaterProgress() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d", "e", "f")))
+        tracker.update(final("a b c d e"))
+        val r = tracker.update(final("b"))
+        assertEquals(2, r.currentWordInAyah)
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[0].status)
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
+        for (i in 2..5) assertEquals("word $i", WordStatus.UNCERTAIN, r.evaluation.words[i].status)
+        val r2 = tracker.update(final("c"))
+        assertEquals(3, r2.currentWordInAyah)
+    }
+
+    @Test
+    fun restartFromEarlierWordIsAllowedEvenWhileCurrentWordIsWrongAndClearsTheError() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d", "e")))
+        tracker.update(final("a b c x"))
+        val r = tracker.update(final("a"))
+        assertEquals(1, r.currentWordInAyah)
+        assertEquals(WordStatus.UNCERTAIN, r.evaluation.words[3].status)
+        assertEquals(WordStatus.UNCERTAIN, r.evaluation.words[1].status)
+    }
+
+    @Test
+    fun afterPlaybackResumeEarlierWordRestartsAndLaterWordsAreRejected() {
         val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d")))
         tracker.update(final("a x"))
         tracker.resumeFrom(0, 1)
@@ -542,13 +559,14 @@ class RecitationProgressTrackerTest {
     }
 
     @Test
-    fun madMuqattaatCutByRecognizerIsAcceptedAndLateLetterNamesAreIgnored() {
+    fun truncatedMaddMuqattaatIsNotAcceptedAndFullNamesAre() {
         val alm = QuranWord(0, "الٓمٓ", "الم")
         val tracker = RecitationProgressTracker(listOf(QuranAyah(2, 1, "", "", listOf(alm)), ayah(2, "a", "b")))
         var r = tracker.update(final("الف ل"))
+        assertTrue(r.evaluation.words[0].status != WordStatus.MATCHED)
+        tracker.reset()
+        r = tracker.update(final("الف لام ميم a"))
         assertEquals(WordStatus.MATCHED, r.evaluation.words[0].status)
-        r = tracker.update(final("ميم a"))
-        assertNull(r.correction)
         assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
     }
 }

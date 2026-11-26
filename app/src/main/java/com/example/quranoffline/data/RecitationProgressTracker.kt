@@ -298,12 +298,14 @@ class RecitationProgressTracker(
             // recited: later or earlier words are not accepted before it is pronounced correctly.
             val anchorOpen = globalWordIndex(currentAyahIndex, resumeAnchorLocalIndex)?.let { openErrorKinds.containsKey(it) } == true
             val resumeIndex = expected.indices
-                .filter { !anchorOpen || it == resumeAnchorLocalIndex }
+                .filter { !anchorOpen || it <= resumeAnchorLocalIndex }
                 .filter { matchesWord(currentAyahIndex, it, token) }
                 .minByOrNull { kotlin.math.abs(it - resumeAnchorLocalIndex) }
             if (resumeIndex != null) {
                 awaitingResume = false
                 nextWordInAyah = resumeIndex + 1
+                // Restarting from an earlier word discards the progress after it.
+                if (resumeIndex < resumeAnchorLocalIndex) resetFollowingWordsToUncertain(resumeIndex)
                 markMatched(resumeIndex, token)
                 clearCorrectionIfResolved(globalWordIndex(currentAyahIndex, resumeIndex))
                 if (nextWordInAyah >= expected.size) advanceAyah()
@@ -328,11 +330,9 @@ class RecitationProgressTracker(
 
         val current = nextWordInAyah.coerceIn(0, expected.lastIndex)
         val exactCurrent = matchesWord(currentAyahIndex, current, token)
-        val rollbackStart = (current - rollbackWindow).coerceAtLeast(0)
-        // An unresolved error on the current word blocks going back to earlier words too:
-        // the reader must pronounce the wrong word correctly first.
-        val currentHasOpenError = globalWordIndex(currentAyahIndex, current)?.let { openErrorKinds.containsKey(it) } == true
-        val rollbackMatch = if (currentHasOpenError) null else (rollbackStart until current).firstOrNull { matchesWord(currentAyahIndex, it, token) }
+        // The reader may restart from any earlier word of the same ayah (nearest match); progress after
+        // that word is cleared. Later words are still never accepted before the current word is right.
+        val rollbackMatch = (0 until current).lastOrNull { matchesWord(currentAyahIndex, it, token) }
         val laterMatch = ((current + 1)..expected.lastIndex).firstOrNull { matchesWord(currentAyahIndex, it, token) }
 
         return when {
@@ -345,6 +345,7 @@ class RecitationProgressTracker(
             }
             rollbackMatch != null -> {
                 // A reader may go back within the same ayah to repair or restart.
+                resetFollowingWordsToUncertain(rollbackMatch)
                 markMatched(rollbackMatch, token)
                 nextWordInAyah = rollbackMatch + 1
                 clearCorrectionIfResolved(globalWordIndex(currentAyahIndex, rollbackMatch))
