@@ -133,7 +133,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.decorView.layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
         setContent {
+            androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             QuranOfflineTheme {
                 QuranOfflineApp(
                     viewModel = quranViewModel,
@@ -142,6 +144,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onExportBackup = { createBackup.launch("quran-online-backup.json") },
                 )
+            }
             }
         }
     }
@@ -452,7 +455,7 @@ private fun MushafIndexScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text("${surah.index}", color = Color(0xFF52635B), style = MaterialTheme.typography.titleMedium)
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                         Text("سورة ${surah.arabicName}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text("${revelationLabel(surah.revelationType)} • ${surah.ayahCount} آية • صفحة ${metadata?.ayah(surah.index, 1)?.page ?: "—"}", color = Color(0xFF52635B), style = MaterialTheme.typography.bodySmall)
                     }
@@ -499,7 +502,7 @@ private fun JuzIndexScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text("${juz.index}", color = Color(0xFF52635B), style = MaterialTheme.typography.titleMedium)
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                         Text("الجزء ${juz.index}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text("${surah?.arabicName ?: "السورة ${juz.surah}"} • الآية ${juz.ayah} • صفحة ${ayah?.page ?: "—"}", color = Color(0xFF52635B), style = MaterialTheme.typography.bodySmall)
                     }
@@ -516,7 +519,7 @@ private fun JuzIndexScreen(
 private fun SectionHeader(title: String, subtitle: String) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.End,
+        horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(title, color = Color(0xFF17231F), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -1139,7 +1142,7 @@ private fun AyahBlock(
                     }
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.Start),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         basmala.text.split(Regex("\\s+")).filter(String::isNotBlank).forEachIndexed { index, wordText ->
@@ -1175,7 +1178,7 @@ private fun AyahBlock(
         val wordFlow: @Composable () -> Unit = {
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.Start),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ayah.words.forEachIndexed { index, word ->
@@ -1806,7 +1809,7 @@ private fun MushafPageSurface(
                 } else {
                     // One shared horizontal scroller for the whole page (was one per line:
                     // 15 scrollable nodes competing with the vertical list and page swipe).
-                    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState(), reverseScrolling = true)) {
+                    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     Column(Modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     wordReferenceLines.forEach { line ->
                         WordReferenceLineView(
@@ -1948,7 +1951,7 @@ private fun PageAyahLine(
             }
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
+                horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.Start),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 ayah.words.forEach { word ->

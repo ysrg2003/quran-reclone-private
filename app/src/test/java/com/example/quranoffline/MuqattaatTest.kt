@@ -124,17 +124,17 @@ class MuqattaatMaddFormsTest {
     @Test
     fun fullSpelledAndMaddFormsAreAcceptedForEveryOpening() {
         val words = mapOf(
-            "الٓمٓ" to listOf("الف لام ميم", "ألف لاااام ميييم", "الم"),
+            "الٓمٓ" to listOf("الف لام ميم", "ألف لاااام ميييم"),
             "الٓمٓصٓ" to listOf("الف لام ميم صاد"),
             "الٓر" to listOf("الف لام را"),
             "الٓمٓر" to listOf("الف لام ميم را"),
             "كٓهيعٓصٓ" to listOf("كاف ها يا عين صاد"),
-            "طه" to listOf("طا ها", "طه"),
+            "طه" to listOf("طا ها"),
             "طسٓمٓ" to listOf("طا سين ميم"),
-            "طسٓ" to listOf("طا سين", "طس"),
-            "يسٓ" to listOf("يا سين", "يس"),
+            "طسٓ" to listOf("طا سين"),
+            "يسٓ" to listOf("يا سين"),
             "صٓ" to listOf("صاد", "صااااد"),
-            "حمٓ" to listOf("حا ميم", "حم"),
+            "حمٓ" to listOf("حا ميم"),
             "عٓسٓقٓ" to listOf("عين سين قاف"),
             "قٓ" to listOf("قاف", "قااااف"),
             "نٓ" to listOf("نون", "نووون"),
@@ -147,12 +147,21 @@ class MuqattaatMaddFormsTest {
 
     @Test
     fun truncatedOrWrongReadingsAreNotAccepted() {
-        listOf("الف ل", "الف لا", "الف لام", "الف", "لا", "ا ل", "ذلك", "الف سين").forEach {
+        listOf("الم", "ألم", "الف ل", "الف لا", "الف لام", "الف", "لا", "ا ل", "ذلك", "الف سين").forEach {
             assertFalse("الم <- $it", m("الٓمٓ", "الم", it))
         }
         assertFalse(m("الٓمٓصٓ", "المص", "الف لام ميم"))
         assertFalse(m("كٓهيعٓصٓ", "كهيعص", "كاف ها يا عين"))
         assertFalse(m("حمٓ", "حم", "حا"))
+        // Merged written forms are not the spoken letter names.
+        assertFalse(m("حمٓ", "حم", "حم"))
+        assertFalse(m("طه", "طه", "طه"))
+        assertFalse(m("يسٓ", "يس", "يس"))
+        assertFalse(m("طسٓ", "طس", "طس"))
+        assertFalse(m("صٓ", "ص", "ص"))
+        assertFalse(m("قٓ", "ق", "ق"))
+        assertFalse(m("نٓ", "ن", "ن"))
+        assertFalse(com.example.quranoffline.data.quranWordMatchesAllowCanonicalSpelling(QuranWord(0, "الٓمٓ", "الم"), "الم"))
     }
 
     @Test

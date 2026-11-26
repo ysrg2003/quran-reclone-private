@@ -42,7 +42,7 @@ class TrackerCorpusAuditTest {
             for (mode in listOf("full", "incr")) {
                 val tr = RecitationProgressTracker(qAyahs, ref)
                 for ((i, kv) in byAyah.withIndex()) {
-                    val words = kv.second.flatMap { marks.replace(it[4], "").trim().split(' ') }.filter { it.isNotBlank() }
+                    val words = kv.second.flatMap { (com.example.quranoffline.data.Muqattaat.pronunciationFor(it[2])?.spokenText ?: marks.replace(it[4], "").trim()).split(' ') }.filter { it.isNotBlank() }
                     ayahsTotal += if (mode == "full") 1 else 0
                     var res = tr.update(RecitationProgressInput(words.joinToString(" "), true, true))
                     if (mode == "incr") {

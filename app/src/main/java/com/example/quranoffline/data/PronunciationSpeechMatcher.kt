@@ -15,6 +15,8 @@ object PronunciationSpeechMatcher {
         observed: String,
         allowCanonicalQuranSpelling: Boolean = false,
     ): Boolean {
+        // Disjoined letters are judged only by their spoken letter names (never the merged spelling).
+        if (Muqattaat.pronunciationFor(word) != null) return Muqattaat.matches(word, observed)
         val reference = pronunciation ?: return false
         // Typed recitation may use either the canonical Quran spelling or the
         // spoken spelling. Voice mode keeps the stricter pronunciation contract

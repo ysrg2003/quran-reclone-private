@@ -91,6 +91,7 @@ fun arabicSpellingForms(value: String, allowSpeechTaMarbutaSubstitution: Boolean
 }
 
 fun quranWordMatchesAllowCanonicalSpelling(word: QuranWord, observed: String): Boolean {
+    if (Muqattaat.pronunciationFor(word) != null) return Muqattaat.matches(word, observed)
     if (quranWordMatches(word, observed)) return true
     val canonical = normalizeArabicForMatch(word.text)
     val actual = normalizeArabicForComparison(observed)
@@ -148,7 +149,7 @@ fun matchesWrittenSpelling(word: QuranWord, observed: String): Boolean {
 }
 
 fun quranWordMatches(word: QuranWord, observed: String): Boolean =
-    matchesProvidedForms(word, observed) || matchesWrittenSpelling(word, observed)
+    if (Muqattaat.pronunciationFor(word) != null) Muqattaat.matches(word, observed) else matchesProvidedForms(word, observed) || matchesWrittenSpelling(word, observed)
 
 private fun matchesProvidedForms(word: QuranWord, observed: String): Boolean {
     val markerIndex = word.text.indexOf(silentAlifMarker)

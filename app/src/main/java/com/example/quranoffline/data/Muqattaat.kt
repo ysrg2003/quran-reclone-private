@@ -49,20 +49,20 @@ object Muqattaat {
     private const val NUN = "ن"
 
     private val letterDefinitions = mapOf(
-        ALIF to MuqattaatLetter(ALIF, "ألف", "ألف", setOf("ألف", "الف", "ا"), MuqattaatMaddCategory.NONE),
-        LAM to MuqattaatLetter(LAM, "لام", "لام", setOf("لام", "ل"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        MIM to MuqattaatLetter(MIM, "ميم", "ميم", setOf("ميم", "م"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        SAD to MuqattaatLetter(SAD, "صاد", "صاد", setOf("صاد", "ص"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        KAF to MuqattaatLetter(KAF, "كاف", "كاف", setOf("كاف", "ك"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        ALIF to MuqattaatLetter(ALIF, "ألف", "ألف", setOf("ألف", "الف"), MuqattaatMaddCategory.NONE),
+        LAM to MuqattaatLetter(LAM, "لام", "لام", setOf("لام"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        MIM to MuqattaatLetter(MIM, "ميم", "ميم", setOf("ميم"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        SAD to MuqattaatLetter(SAD, "صاد", "صاد", setOf("صاد"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        KAF to MuqattaatLetter(KAF, "كاف", "كاف", setOf("كاف"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
         HA to MuqattaatLetter(HA, "ها", "هاء", setOf("ها", "هاء", "هَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
         YA to MuqattaatLetter(YA, "يا", "ياء", setOf("يا", "ياء", "يَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
         TA to MuqattaatLetter(TA, "طا", "طاء", setOf("طا", "طاء", "طَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
         RA to MuqattaatLetter(RA, "را", "راء", setOf("را", "راء", "رَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
         HAA to MuqattaatLetter(HAA, "حا", "حاء", setOf("حا", "حاء", "حَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
-        AIN to MuqattaatLetter(AIN, "عين", "عين", setOf("عين", "ع"), MuqattaatMaddCategory.LAZIM_HARFI_FOUR_OR_SIX_HARAKAT),
-        SIN to MuqattaatLetter(SIN, "سين", "سين", setOf("سين", "س"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        QAF to MuqattaatLetter(QAF, "قاف", "قاف", setOf("قاف", "ق"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        NUN to MuqattaatLetter(NUN, "نون", "نون", setOf("نون", "ن"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        AIN to MuqattaatLetter(AIN, "عين", "عين", setOf("عين"), MuqattaatMaddCategory.LAZIM_HARFI_FOUR_OR_SIX_HARAKAT),
+        SIN to MuqattaatLetter(SIN, "سين", "سين", setOf("سين"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        QAF to MuqattaatLetter(QAF, "قاف", "قاف", setOf("قاف"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        NUN to MuqattaatLetter(NUN, "نون", "نون", setOf("نون"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
     )
 
     private val visualTokenByMatchToken = mapOf(
@@ -169,7 +169,7 @@ object Muqattaat {
         val observedForms = normalizeSpeech(observed).split(' ').filter(String::isNotBlank)
         val spoken = pronunciation.units.flatMap { it.spokenForms }.map(::normalizeSpeech).toSet()
         if (observedForms.size == pronunciation.units.size && observedForms.indices.all { unitMatches(pronunciation.units[it], observedForms[it]) }) return true
-        return observedForms.size == 1 && canonicalLetters(observedForms.single()) == pronunciation.matchToken && observedForms.single() !in spoken
+        return false
     }
 
     /**
@@ -221,7 +221,7 @@ object Muqattaat {
         if (t.size < 2 || t.size > 6) return false
         return sortedSequences.any { p ->
             val k = minOf(p.units.size, t.size)
-            (0 until k).all { unitMatches(p.units[it], t[it]) } && t.size < p.units.size
+            (0 until k).all { unitMatches(p.units[it], t[it]) || t[it] == p.units[it].letter } && t.size < p.units.size
         } && !startsWithFullSequence(text)
     }
 

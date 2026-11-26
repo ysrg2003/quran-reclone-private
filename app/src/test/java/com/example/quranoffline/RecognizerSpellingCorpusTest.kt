@@ -30,7 +30,9 @@ class RecognizerSpellingCorpusTest {
             val word = QuranWord(0, c[1], c[2])
             val reference = PronunciationWord(0, c[2], listOf(c[2]), emptySet(), null, null, null, null)
             // The app's voice path: PronunciationSpeechMatcher with the spoken reference.
-            val ok = PronunciationSpeechMatcher.matches(word, reference, c[3]) ||
+            val letters = com.example.quranoffline.data.Muqattaat.pronunciationFor(word)
+            // Disjoined letters are judged by their spoken letter names, not ordinary spelling.
+            val ok = if (letters != null) PronunciationSpeechMatcher.matches(word, reference, letters.spokenText) && !PronunciationSpeechMatcher.matches(word, reference, c[3]) else PronunciationSpeechMatcher.matches(word, reference, c[3]) ||
                 PronunciationSpeechMatcher.matches(word, reference, c[4])
             if (!ok) failures += "${c[0]}\t${c[1]}\t${c[3]}\t${c[4]}"
         }
