@@ -147,7 +147,8 @@ object Muqattaat {
                 continue
             }
             val single = letterDefinitions.values.firstOrNull { definition ->
-                speechNameMatches(definition, normalized[index])
+                // "مم" is the ordinary word مِمَّ (86:5), not a stretched letter name.
+                normalized[index] != "مم" && speechNameMatches(definition, normalized[index])
             }
             if (single != null) result += single.shortName else result += tokens[index]
             index++

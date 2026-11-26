@@ -15,7 +15,7 @@ object RecognizerSpacedForms {
         .trim()
 
     fun register(forms: Collection<String>) {
-        pairs = forms.filter { it.split(' ').size == 2 }.map { fold(it) }.toSet()
+        pairs = forms.filter { it.split(' ').size in 2..3 && it.substringBefore(' ') in setOf("يا", "ويا", "ها", "فيا") }.map { fold(it) }.toSet()
     }
 
     fun join(tokens: List<String>): List<String> {
@@ -23,9 +23,15 @@ object RecognizerSpacedForms {
         val result = ArrayList<String>(tokens.size)
         var i = 0
         while (i < tokens.size) {
-            if (i + 1 < tokens.size && "${fold(tokens[i])} ${fold(tokens[i + 1])}" in pairs) {
-                result += "${tokens[i]} ${tokens[i + 1]}"
-                i += 2
+            var n = minOf(3, tokens.size - i)
+            while (n >= 2) {
+                val key = (0 until n).joinToString(" ") { fold(tokens[i + it]) }
+                if (key in pairs) break
+                n--
+            }
+            if (n >= 2) {
+                result += (0 until n).joinToString(" ") { tokens[i + it] }
+                i += n
             } else {
                 result += tokens[i]
                 i++

@@ -135,6 +135,8 @@ fun matchesWrittenSpelling(word: QuranWord, observed: String): Boolean {
     val observedFolded = foldSpelling(normalizeArabicForMatchKeepingLetters(observed))
     if (observedFolded.isBlank()) return false
     if (observedFolded in writtenSpellingForms(word.text)) return true
+    // Two-token recognizer output joined by the tracker (يا أيها = ياايها).
+    if (observedFolded.contains(' ') && observedFolded.replace(" ", "") in writtenSpellingForms(word.text)) return true
     // Standard spelling that speech-to-text writes (e.g. ذلك for ذٰلك, يا أيها for يٰٓأيها).
     return word.recognizedForms.any { foldSpelling(it) == observedFolded }
 }

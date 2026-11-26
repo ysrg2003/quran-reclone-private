@@ -15,6 +15,9 @@ import org.junit.Test
 class ImlaeiCorpusAuditTest {
     private val marks = Regex("[\\u0610-\\u061a\\u064b-\\u065f\\u06d6-\\u06ed\\u0670\\u0640]")
 
+    private fun canon(v: String) = v.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا').replace('ٱ', 'ا')
+        .replace('ؤ', 'و').replace('ئ', 'ي').replace("ء", "").replace(" ", "").replace("لل", "ل")
+
     @Test
     fun audit() {
         val path = System.getenv("PAIRS_TSV")
@@ -39,6 +42,10 @@ class ImlaeiCorpusAuditTest {
             // Mutations that must NOT be accepted (a wrong recitation).
             fun mutate(kind: String, observed: String) {
                 if (observed.isBlank() || observed == plain) return
+                // Not a real error: same word once hamza seat, spacing and tatweel are ignored.
+                if (canon(observed) == canon(plain)) return
+                // Legitimate: the app's own spoken form (silent final alif/waw is not pronounced).
+                if (canon(observed) == canon(c[5])) return
                 mutTotal[kind] = (mutTotal[kind] ?: 0) + 1
                 if (PronunciationSpeechMatcher.matches(word, ref, observed)) {
                     mutAccepted.getOrPut(kind) { mutableListOf() } += "${c[0]}:${c[1]}\t${c[2]}\t$plain\t$observed"
