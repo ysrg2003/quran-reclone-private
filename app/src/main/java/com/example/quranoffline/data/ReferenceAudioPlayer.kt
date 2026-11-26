@@ -79,6 +79,9 @@ class ReferenceTimingRepository {
 class ReferenceAudioPlayer(private val context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var player: MediaPlayer? = null
+    private val audioWorker=java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var audioTask:java.util.concurrent.Future<*>?=null
+    @Volatile private var audioGeneration=0L
     private var assetDescriptor: AssetFileDescriptor? = null
     private var stopRunnable: Runnable? = null
     private var nextSequenceRunnable: Runnable? = null
@@ -134,7 +137,7 @@ class ReferenceAudioPlayer(private val context: Context) {
                     }
                 }
                 repeat(normalized.wholeAyahRepeatCount) {
-                    add(PlaybackItem(wholeAyahSource, wholeAyah.withCorrectionPadding(normalized), isWholeAyah = true, assetPath = wholeAyahAssetPath))
+                    add(PlaybackItem(wholeAyahSource, if(wholeAyahAssetPath==null)null else wholeAyah.withCorrectionPadding(normalized), isWholeAyah = true, assetPath = wholeAyahAssetPath))
                 }
             }
         }
@@ -179,7 +182,7 @@ class ReferenceAudioPlayer(private val context: Context) {
             if (index >= items.size) { onFinished(); return }
             val item = items[index++]
             onItemStarted(item.key)
-            playDataSource(item.source, item.assetPath, TimingSegment(0, 0, item.startMs, item.endMs)) {
+            playDataSource(item.source, item.assetPath, if(item.assetPath==null)null else TimingSegment(0, 0, item.startMs, item.endMs)) {
                 if (index < items.size && pauseBetweenMs > 0) {
                     val nextRun = Runnable { nextSequenceRunnable = null; next() }
                     nextSequenceRunnable = nextRun
@@ -241,6 +244,22 @@ class ReferenceAudioPlayer(private val context: Context) {
         onFinished: () -> Unit,
     ) {
         stop()
+        val ticket=audioGeneration
+        if(QuranComAudio.isReference(source)){
+            audioTask=audioWorker.submit{
+                val resolved=runCatching{QuranComAudio.resolve(source)}
+                mainHandler.post{if(ticket==audioGeneration){resolved.onSuccess{url->
+                    // API ayah files and physical word files are played completely.
+                    // Old estimated offsets never apply to a different recording.
+                    playResolvedDataSource(url,null,null,onFinished)
+                }.onFailure{android.widget.Toast.makeText(context,"تعذر جلب الصوت من Quran.com. تحقق من الإنترنت وحاول مجددًا.",android.widget.Toast.LENGTH_LONG).show();onFinished()}}}
+            }
+            return
+        }
+        playResolvedDataSource(source,assetPath,segment,onFinished)
+    }
+
+    private fun playResolvedDataSource(source:String,assetPath:String?,segment:TimingSegment?,onFinished:()->Unit){
         val mediaPlayer = MediaPlayer()
         try {
             val openedDescriptor = assetPath?.let { context.assets.openFd(it) }
@@ -330,6 +349,7 @@ class ReferenceAudioPlayer(private val context: Context) {
     }
 
     fun stop() {
+        audioGeneration++;audioTask?.cancel(true);audioTask=null
         stopRunnable?.let(mainHandler::removeCallbacks)
         stopRunnable = null
         nextSequenceRunnable?.let(mainHandler::removeCallbacks)

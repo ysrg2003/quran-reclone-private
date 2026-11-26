@@ -14,14 +14,15 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     flavorDimensions += "distribution"
     productFlavors {
         create("online") {
             dimension = "distribution"
-            applicationIdSuffix = ".online"
-            versionNameSuffix = "-online"
+            applicationIdSuffix = ".apiaudioreclone"
+            versionNameSuffix = "-original-api-audio-reclone-private"
             buildConfigField("boolean", "OFFLINE_DISTRIBUTION", "false")
         }
         create("offline") {
@@ -61,6 +62,9 @@ android {
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 

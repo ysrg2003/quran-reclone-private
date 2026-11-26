@@ -8,7 +8,7 @@ import java.net.URL
 /** Resolves streamed Online audio and bundled Offline audio. */
 class RemoteAssetManager(context: Context) {
     private val appContext = context.applicationContext
-    private val audioRoot = File(appContext.filesDir, "quran-assets/audio/Husary_Murattal")
+    private val audioRoot = File(appContext.filesDir, "quran-api-audio/Husary_Murattal")
     private val bundledAudioAssetRoot = "quran/audio/husary_aac"
 
     companion object {
@@ -24,7 +24,7 @@ class RemoteAssetManager(context: Context) {
         }
 
         fun audioUrlFor(surah: Int, ayah: Int): String =
-            "$AYAH_AUDIO_BASE_URL/${audioFileName(surah, ayah)}"
+            QuranComAudio.ayah(surah,ayah)
     }
 
     fun audioUrl(surah: Int, ayah: Int): String = audioUrlFor(surah, ayah)
@@ -75,7 +75,7 @@ class RemoteAssetManager(context: Context) {
         val target = File(audioRoot, audioFileName(surah, ayah))
         if (target.isFile && target.length() > 0L) return target
         val partial = File(target.path + ".part")
-        fetchToFile(audioUrl(surah, ayah), partial)
+        fetchToFile(QuranComAudio.resolve(audioUrl(surah, ayah)), partial)
         if (!partial.renameTo(target)) error("Could not finalize ${target.name}")
         return target
     }

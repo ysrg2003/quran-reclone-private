@@ -1009,8 +1009,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             firstWord = firstWord,
             wholeAyah = null,
             settings = state.value.correctionSettings,
-            firstWordAssetPath = bundledAssetPath,
-            firstWordSource = ayahSource,
+            firstWordAssetPath = null,
+            firstWordSource = QuranComAudio.word(1,1,request.localWordIndex,requireNotNull(basmalaSourceAyah()).words[request.localWordIndex].text,requireNotNull(basmalaSourceAyah()).words.size),
             onWholeAyahStarted = {},
             onFinished = {
                 if (generation == readerGeneration) finishOpeningBasmalaCorrection("اكتمل تصحيح كلمة البسملة؛ أعد الكلمة المظللة ثم تابع.")
@@ -1231,13 +1231,13 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                         finishCorrectionPlayback()
                         state.value = state.value.copy(notice = "تعذر تنزيل ملف آية الحصري؛ تحقق من الاتصال وحاول مرة أخرى.")
                     } else {
-                        playCorrectionSource(request, firstWord, previousWord, nextWord, wholeAyah, downloaded.absolutePath, downloaded.absolutePath, null)
+                        playCorrectionSource(request, firstWord, previousWord, nextWord, wholeAyah, QuranComAudio.word(ayah.surah,ayah.ayah,request.localWordIndex,ayah.words[request.localWordIndex].text,ayah.words.size), downloaded.absolutePath, null)
                     }
                 }
             }
             return
         }
-        val wordSource = ayahSource
+        val wordSource = QuranComAudio.word(ayah.surah,ayah.ayah,request.localWordIndex,ayah.words[request.localWordIndex].text,ayah.words.size)
         val wholeAyahSource = ayahSource
         state.value = state.value.copy(
             correctionPlaying = true,
@@ -1272,7 +1272,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             nextWord = nextWord,
             wholeAyah = wholeAyah,
             settings = state.value.correctionSettings,
-            firstWordAssetPath = bundledAssetPath,
+            firstWordAssetPath = null,
             wholeAyahAssetPath = bundledAssetPath,
             firstWordSource = wordSource,
             wholeAyahSource = wholeAyahSource ?: source,
