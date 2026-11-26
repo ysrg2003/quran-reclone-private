@@ -171,4 +171,15 @@ class MuqattaatMaddFormsTest {
         assertFalse(Muqattaat.looksTruncated("ذلك الكتاب"))
         assertTrue(Muqattaat.startsWithFullSequence("الف لام ميم ذلك"))
     }
+
+    @Test
+    fun fusedSpokenLetterNamesAreSplitButStillNeedEveryName() {
+        assertTrue(m("الٓمٓ", "الم", "الف لاميم"))
+        assertTrue(m("كٓهيعٓصٓ", "كهيعص", "كافها يا عين صاد"))
+        assertTrue(m("حمٓ", "حم", "حاميم"))
+        assertTrue(m("يسٓ", "يس", "ياسين"))
+        assertFalse(m("الٓمٓ", "الم", "الفلام"))
+        assertFalse(m("الٓمٓ", "الم", "ألف لامرى"))
+        assertTrue(Muqattaat.coalesceSpeechTokens(listOf("عينها")) == listOf("عينها"))
+    }
 }

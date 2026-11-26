@@ -78,4 +78,18 @@ class TanweenAlifTest {
         assertTrue(matchesWrittenSpelling(t, "امه"))
         assertFalse(matchesWrittenSpelling(t, "امت"))
     }
+
+    @Test
+    fun definiteDroppedYaAndMergedAnLaAreAccepted() {
+        val hadi = QuranWord(0, "بِهَٰدِي", "بهادي")
+        assertTrue(matchesWrittenSpelling(hadi, "بهادي"))
+        assertTrue(matchesWrittenSpelling(hadi, "بهاد"))
+        assertFalse(matchesWrittenSpelling(hadi, "بهاج"))
+        val alla = QuranWord(0, "أَلَّا", "الا")
+        assertTrue(matchesWrittenSpelling(alla, "الا"))
+        assertTrue(matchesWrittenSpelling(alla, "انلا"))
+        assertFalse(matchesWrittenSpelling(QuranWord(0, "أَلَا", "الا"), "انلا"))
+        val wa = QuranWord(0, "وَأَلَّوِ", "وألو")
+        assertTrue(matchesWrittenSpelling(wa, "وانلو"))
+    }
 }

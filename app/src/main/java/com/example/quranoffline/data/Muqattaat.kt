@@ -130,8 +130,32 @@ object Muqattaat {
     fun coalesceSpeechTokens(tokens: List<String>): List<String> =
         RecognizerSpacedForms.join(coalesceNames(tokens))
 
-    private fun coalesceNames(tokens: List<String>): List<String> {
-        if (tokens.isEmpty()) return tokens
+    private val fullNamePieces: Map<String, String> = buildMap {
+        letterDefinitions.values.forEach { d -> d.spokenForms.map(::normalizeSpeech).filter { it.length >= 2 }.forEach { put(it, normalizeSpeech(d.shortName)) } }
+        put("لا", "لام") // the prolonged lam written without its final meem: لا + ميم = لاميم
+    }
+    private val pieceOrder = fullNamePieces.keys.sortedByDescending { it.length }
+
+    /** A recognizer sometimes writes spoken letter names fused (لاميم, كافها). Splits only when every piece is a full name. */
+    private fun splitFusedNames(token: String): List<String>? {
+        val t = normalizeSpeech(token)
+        if (t.length < 4 || t == "عينها") return null
+        fun split(from: Int): List<String>? {
+            if (from == t.length) return emptyList()
+            for (piece in pieceOrder) {
+                if (!t.startsWith(piece, from)) continue
+                val rest = split(from + piece.length) ?: continue
+                return listOf(fullNamePieces.getValue(piece)) + rest
+            }
+            return null
+        }
+        val pieces = split(0) ?: return null
+        return if (pieces.size >= 2) pieces else null
+    }
+
+    private fun coalesceNames(rawTokens: List<String>): List<String> {
+        if (rawTokens.isEmpty()) return rawTokens
+        val tokens = rawTokens.flatMap { splitFusedNames(it) ?: listOf(it) }
         val normalized = tokens.map(::normalizeSpeech)
         val result = mutableListOf<String>()
         var index = 0
@@ -166,7 +190,7 @@ object Muqattaat {
 
     fun matches(visualToken: String, matchToken: String, observed: String): Boolean {
         val pronunciation = pronunciationFor(visualToken, matchToken) ?: return false
-        val observedForms = normalizeSpeech(observed).split(' ').filter(String::isNotBlank)
+        val observedForms = normalizeSpeech(observed).split(' ').filter(String::isNotBlank).flatMap { splitFusedNames(it) ?: listOf(it) }
         val spoken = pronunciation.units.flatMap { it.spokenForms }.map(::normalizeSpeech).toSet()
         if (observedForms.size == pronunciation.units.size && observedForms.indices.all { unitMatches(pronunciation.units[it], observedForms[it]) }) return true
         return false

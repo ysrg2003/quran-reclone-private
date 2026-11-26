@@ -136,6 +136,16 @@ fun writtenSpellingForms(wordText: String): Set<String> {
     if (Regex("ا\\p{M}*\u06E0\\p{M}*$").containsMatchIn(nfc)) {
         forms += forms.filter { it.length > 2 && it.endsWith("ا") }.map { it.dropLast(1) }
     }
+    // Defective noun/participle with a written final ya (بِهَادِي): the ya is dropped when the next word
+    // starts with a sakin (بهاد العمي) and kept when stopping. Accept both.
+    if (Regex("[اٰ]\\p{M}*[^\\p{M}ا]\\p{M}*ِ\\p{M}*ي\\p{M}*$").containsMatchIn(nfc)) {
+        forms += forms.filter { it.length >= 5 && it.endsWith("ي") }.map { it.dropLast(1) }
+    }
+    // أَلَّ is the merged rasm of أن لا / أن لو (ألّا, وَأَلَّوِ): recognizers write the two words apart.
+    if (Regex("^(?:[وف]\\p{M}*)?[أ]\\p{M}*ل\\p{M}*ّ").containsMatchIn(nfc)) {
+        forms += forms.filter { it.startsWith("ال") || it.startsWith("وال") || it.startsWith("فال") }
+            .map { it.replaceFirst("ال", "انل") }
+    }
     return forms.filter { it.isNotBlank() }.toSet()
 }
 
