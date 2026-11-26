@@ -48,7 +48,9 @@ internal fun WordReferenceLineView(
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
 ) {
-    val ayahs = line.ayahKeys.mapNotNull { key -> ayahsByKey[key] ?: pageAyahsByKey[key] }
+    val ayahs = androidx.compose.runtime.remember(line, ayahsByKey, pageAyahsByKey) {
+        line.ayahKeys.mapNotNull { key -> ayahsByKey[key] ?: pageAyahsByKey[key] }
+    }
     val primary = ayahs.firstOrNull()
     val selected = ayahs.any { ayahIndexByKey[it.selectionKey()]?.let(selectedIndices::contains) == true }
     val active = ayahs.any { state.readerCurrentKey == it.selectionKey() }
@@ -114,7 +116,9 @@ internal fun WordReferenceLineView(
                 .horizontalScroll(rememberScrollState(), reverseScrolling = true),
         ) {
             Text(
-                text = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets),
+                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets) {
+                    annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets)
+                },
                 modifier = Modifier.fillMaxWidth(),
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
