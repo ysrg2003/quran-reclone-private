@@ -17,6 +17,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    buildTypes {
+        release {
+            // Private test build: non-debuggable (R8 too heavy for the build machine) and signed with the debug key so it
+            // installs over the earlier debug-signed test build with the same app id.
+            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
+            isShrinkResources = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
     flavorDimensions += "distribution"
     productFlavors {
         create("online") {
