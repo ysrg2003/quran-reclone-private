@@ -43,4 +43,39 @@ class TanweenAlifTest {
         assertTrue(matchesWrittenSpelling(w, "علي"))
         assertTrue(matchesWrittenSpelling(w, "على"))
     }
+
+    @Test
+    fun realAssetTanweenFathCodepointAcceptsBothStopAndContinue() {
+        // U+0657 is how the app's Quran text writes the open tanween fath.
+        listOf("كَثِيرٗا" to "كثير", "عَذَابٗا" to "عذاب", "يَوۡمٗا" to "يوم", "رَغَدٗا" to "رغد").forEach { (text, noAlif) ->
+            val w = QuranWord(0, text, noAlif + "ا")
+            assertTrue(text, matchesWrittenSpelling(w, noAlif))
+            assertTrue(text, matchesWrittenSpelling(w, noAlif + "ا"))
+        }
+        // A different word is still rejected.
+        assertFalse(matchesWrittenSpelling(QuranWord(0, "كَثِيرٗا", "كثيرا"), "كبير"))
+    }
+
+    @Test
+    fun finalAlifWithRoundZeroAcceptsBothWaqfAndWaslForms() {
+        val ana = QuranWord(0, "أَنَا۠", "انا")
+        assertTrue(matchesWrittenSpelling(ana, "انا"))
+        assertTrue(matchesWrittenSpelling(ana, "أنا"))
+        assertTrue(matchesWrittenSpelling(ana, "ان"))
+        val zunun = QuranWord(0, "ٱلظُّنُونَا۠", "الظنونا")
+        assertTrue(matchesWrittenSpelling(zunun, "الظنونا"))
+        assertTrue(matchesWrittenSpelling(zunun, "الظنون"))
+        assertFalse(matchesWrittenSpelling(zunun, "الظنو"))
+    }
+
+    @Test
+    fun taMarbutaBothFormsWithTanweenAndRoundTrip() {
+        val w = QuranWord(0, "بَقَرَةٞ", "بقرة")
+        assertTrue(matchesWrittenSpelling(w, "بقرة"))
+        assertTrue(matchesWrittenSpelling(w, "بقره"))
+        val t = QuranWord(0, "أُمَّةٗ", "امة")
+        assertTrue(matchesWrittenSpelling(t, "امة"))
+        assertTrue(matchesWrittenSpelling(t, "امه"))
+        assertFalse(matchesWrittenSpelling(t, "امت"))
+    }
 }

@@ -126,7 +126,14 @@ fun writtenSpellingForms(wordText: String): Set<String> {
     if (nfc.contains('ة')) forms += forms.map { it.replace('ة', 'ه') }
     // Tanween fath (ـًا): the written alif is pronounced only when stopping. Reciting on, the word
     // ends at the consonant, and recognizers often write it that way (عذاب for عذابًا).
-    if (Regex("ً\\p{M}*ا\\p{M}*$").containsMatchIn(nfc) || Regex("ا\\p{M}*ً\\p{M}*$").containsMatchIn(nfc)) {
+    // The Quran asset writes the open tanween fath as U+0657 (كَثِيرٗا) and the plain one as U+064B.
+    val fathTanween = "[\\u064B\\u0657\\u08F0]"
+    if (Regex("$fathTanween\\p{M}*ا\\p{M}*$").containsMatchIn(nfc) || Regex("ا\\p{M}*$fathTanween\\p{M}*$").containsMatchIn(nfc)) {
+        forms += forms.filter { it.length > 2 && it.endsWith("ا") }.map { it.dropLast(1) }
+    }
+    // A final alif carrying the small round-rectangle zero (أَنَا۠, ٱلظُّنُونَا۠, قَوَارِيرَا۠) is pronounced
+    // only when stopping; reciting on, the word ends at the consonant. Accept both readings.
+    if (Regex("ا\\p{M}*\u06E0\\p{M}*$").containsMatchIn(nfc)) {
         forms += forms.filter { it.length > 2 && it.endsWith("ا") }.map { it.dropLast(1) }
     }
     return forms.filter { it.isNotBlank() }.toSet()
