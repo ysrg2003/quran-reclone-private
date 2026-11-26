@@ -124,7 +124,10 @@ object Muqattaat {
      * Complete and partial known sequences are joined; ordinary Quran words are
      * untouched. This makes `ألف لام ميم` match the one visual token `الٓمٓ`.
      */
-    fun coalesceSpeechTokens(tokens: List<String>): List<String> {
+    fun coalesceSpeechTokens(tokens: List<String>): List<String> =
+        RecognizerSpacedForms.join(coalesceNames(tokens))
+
+    private fun coalesceNames(tokens: List<String>): List<String> {
         if (tokens.isEmpty()) return tokens
         val normalized = tokens.map(::normalizeSpeech)
         val result = mutableListOf<String>()

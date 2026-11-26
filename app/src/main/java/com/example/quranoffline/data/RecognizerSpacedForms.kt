@@ -1,0 +1,36 @@
+package com.example.quranoffline.data
+
+/**
+ * Speech-to-text writes a few Quran words as two tokens (يا أيها, يا قوم, ها أنتم).
+ * Consecutive recognizer tokens that form one of those known standard spellings
+ * are joined into the single token the matcher compares with the Quran word.
+ */
+object RecognizerSpacedForms {
+    @Volatile private var pairs: Set<String> = emptySet()
+
+    private fun fold(value: String): String = value
+        .replace('ٱ', 'ا').replace('آ', 'ا').replace('أ', 'ا').replace('إ', 'ا')
+        .replace('ؤ', 'و').replace('ئ', 'ي').replace("ء", "")
+        .replace(Regex("[\\u0610-\\u061a\\u064b-\\u065f\\u06d6-\\u06ed\\u0670\\u0640]"), "")
+        .trim()
+
+    fun register(forms: Collection<String>) {
+        pairs = forms.filter { it.split(' ').size == 2 }.map { fold(it) }.toSet()
+    }
+
+    fun join(tokens: List<String>): List<String> {
+        if (tokens.size < 2 || pairs.isEmpty()) return tokens
+        val result = ArrayList<String>(tokens.size)
+        var i = 0
+        while (i < tokens.size) {
+            if (i + 1 < tokens.size && "${fold(tokens[i])} ${fold(tokens[i + 1])}" in pairs) {
+                result += "${tokens[i]} ${tokens[i + 1]}"
+                i += 2
+            } else {
+                result += tokens[i]
+                i++
+            }
+        }
+        return result
+    }
+}

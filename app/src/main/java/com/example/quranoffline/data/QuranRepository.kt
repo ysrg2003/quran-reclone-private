@@ -38,7 +38,31 @@ class QuranRepository(
             .open(assetPath)
             .bufferedReader(Charsets.UTF_8)
             .use { it.readText() }
-        parseWordReference(raw)
+        withRecognizerForms(parseWordReference(raw))
+    }
+
+    /**
+     * Adds the standard spelling a speech-to-text service writes for each word.
+     * Comparison only; displayed Quran text is never changed. Missing asset or
+     * ayahs with a different word count keep the previous behavior.
+     */
+    private fun withRecognizerForms(base: List<QuranAyah>): List<QuranAyah> {
+        val forms = runCatching {
+            val raw = appContext.assets.open("quran/recognizer_forms.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val root = JSONObject(raw).getJSONObject("ayahs")
+            HashMap<String, List<String>>(root.length()).also { map ->
+                root.keys().forEach { key ->
+                    val array = root.getJSONArray(key)
+                    map[key] = List(array.length()) { array.getString(it) }
+                }
+            }
+        }.getOrNull() ?: return base
+        RecognizerSpacedForms.register(forms.values.flatten().filter { it.contains(' ') })
+        return base.map { ayah ->
+            val list = forms["${ayah.surah}:${ayah.ayah}"]
+            if (list == null || list.size != ayah.words.size) ayah
+            else ayah.copy(words = ayah.words.mapIndexed { i, w -> w.copy(recognizedForms = w.recognizedForms + list[i]) })
+        }
     }
 
     fun allAyahs(): List<QuranAyah> = ayahs

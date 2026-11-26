@@ -133,7 +133,10 @@ private fun normalizeArabicForMatchKeepingLetters(value: String): String =
 /** True when the recognizer wrote the word in its ordinary written spelling. */
 fun matchesWrittenSpelling(word: QuranWord, observed: String): Boolean {
     val observedFolded = foldSpelling(normalizeArabicForMatchKeepingLetters(observed))
-    return observedFolded.isNotBlank() && observedFolded in writtenSpellingForms(word.text)
+    if (observedFolded.isBlank()) return false
+    if (observedFolded in writtenSpellingForms(word.text)) return true
+    // Standard spelling that speech-to-text writes (e.g. ذلك for ذٰلك, يا أيها for يٰٓأيها).
+    return word.recognizedForms.any { foldSpelling(it) == observedFolded }
 }
 
 fun quranWordMatches(word: QuranWord, observed: String): Boolean =
