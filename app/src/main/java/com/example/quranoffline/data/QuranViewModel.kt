@@ -1150,6 +1150,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             add(word.matchText)
         }.map(::normalizeArabicForComparison).filter(String::isNotBlank)
         return expected.any { it == actual || (actual.length > 1 && it.startsWith(actual)) } ||
+            matchesWrittenSpelling(word, firstToken) ||
             Muqattaat.isPotentialPrefix(word, firstToken)
     }
 

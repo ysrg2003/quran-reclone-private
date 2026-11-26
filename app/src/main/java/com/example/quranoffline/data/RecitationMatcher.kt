@@ -97,7 +97,49 @@ fun quranWordMatchesAllowCanonicalSpelling(word: QuranWord, observed: String): B
     return canonical.isNotBlank() && canonical == actual
 }
 
-fun quranWordMatches(word: QuranWord, observed: String): Boolean {
+private fun foldSpelling(value: String): String = value
+    .replace('ٱ', 'ا')
+    .replace('آ', 'ا')
+    .replace('أ', 'ا')
+    .replace('إ', 'ا')
+    .replace('ؤ', 'و')
+    .replace('ئ', 'ي')
+    .replace("ء", "")
+    .replace(Regex("\\s+"), " ")
+    .trim()
+
+/**
+ * Ordinary written spellings of a Quran word, as a speech-to-text service
+ * writes it: every mark removed, every letter kept (including the final alif
+ * that Uthmani script marks as silent, such as كفروا), with the dagger alif
+ * written as alif (الصلاة). Comparison only; displayed Quran text is unchanged.
+ */
+fun writtenSpellingForms(wordText: String): Set<String> {
+    val nfc = Normalizer.normalize(wordText, Normalizer.Form.NFC)
+    val dropped = foldSpelling(nfc.replace(smallAlif.toString(), "").replace(arabicMarks, ""))
+    val written = foldSpelling(nfc.replace(smallAlif, 'ا').replace(arabicMarks, ""))
+    // A drawn (dagger) alif is a pronounced long vowel: dropping it stays an
+    // error, so only the alif-written form is accepted for such words.
+    val forms = if (nfc.contains(smallAlif)) linkedSetOf(written) else linkedSetOf(dropped, written)
+    if (nfc.contains('ة')) forms += forms.map { it.replace('ة', 'ه') }
+    return forms.filter { it.isNotBlank() }.toSet()
+}
+
+private fun normalizeArabicForMatchKeepingLetters(value: String): String =
+    Normalizer.normalize(value, Normalizer.Form.NFC)
+        .replace(smallAlif.toString(), "")
+        .replace(arabicMarks, "")
+
+/** True when the recognizer wrote the word in its ordinary written spelling. */
+fun matchesWrittenSpelling(word: QuranWord, observed: String): Boolean {
+    val observedFolded = foldSpelling(normalizeArabicForMatchKeepingLetters(observed))
+    return observedFolded.isNotBlank() && observedFolded in writtenSpellingForms(word.text)
+}
+
+fun quranWordMatches(word: QuranWord, observed: String): Boolean =
+    matchesProvidedForms(word, observed) || matchesWrittenSpelling(word, observed)
+
+private fun matchesProvidedForms(word: QuranWord, observed: String): Boolean {
     val markerIndex = word.text.indexOf(silentAlifMarker)
     val hasSilentMarker = markerIndex >= 0 || word.text.contains("وْل") || word.text.endsWith("اْ")
     val canonicalMatch = arabicWordsEquivalent(word.text, observed)

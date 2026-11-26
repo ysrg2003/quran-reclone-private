@@ -169,16 +169,16 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun silentFinalCarrierWordsRejectSpeechRecognizerWrittenAlif() {
+    fun silentFinalCarrierWordsAcceptSpeechRecognizerWrittenAlif() {
         val expectedWords = listOf(
             WordReferenceFixtures.kafaru,
             WordReferenceFixtures.ashtraw.copy(index = 1),
             WordReferenceFixtures.laqu.copy(index = 2),
         )
         val result = RecitationMatcher.evaluate(expectedWords, "كفروا اشتروا لقوا", hasFinalResult = true)
-        assertEquals(0, result.matched)
-        assertEquals(3, result.unexpected)
-        assertTrue(result.words.all { it.status == WordStatus.EXTRA_OR_UNEXPECTED })
+        assertEquals(3, result.matched)
+        assertEquals(0, result.unexpected)
+        assertTrue(result.words.all { it.status == WordStatus.MATCHED })
     }
 
     @Test
@@ -228,12 +228,12 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun speechRecognizerWrittenFinalAlifIsRejectedForSilentFinalCarrier() {
+    fun speechRecognizerWrittenFinalAlifIsAcceptedForSilentFinalCarrier() {
         val expectedWord = listOf(WordReferenceFixtures.kafaru)
         val result = RecitationMatcher.evaluate(expectedWord, "كفروا", hasFinalResult = true)
-        assertEquals(0, result.matched)
-        assertEquals(1, result.unexpected)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, result.words.single().status)
+        assertEquals(1, result.matched)
+        assertEquals(0, result.unexpected)
+        assertEquals(WordStatus.MATCHED, result.words.single().status)
     }
 
     @Test
@@ -246,13 +246,13 @@ class RecitationMatcherTest {
     }
 
     @Test
-    fun speechRecognizerWrittenFinalAlifIsRejectedForLaqu() {
+    fun speechRecognizerWrittenFinalAlifIsAcceptedForLaqu() {
         val expectedWord = listOf(WordReferenceFixtures.laqu)
         val silent = RecitationMatcher.evaluate(expectedWord, "لقو", hasFinalResult = true)
         val providerWritten = RecitationMatcher.evaluate(expectedWord, "لقوا", hasFinalResult = true)
         assertEquals(1, silent.matched)
-        assertEquals(0, providerWritten.matched)
-        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, providerWritten.words.single().status)
+        assertEquals(1, providerWritten.matched)
+        assertEquals(WordStatus.MATCHED, providerWritten.words.single().status)
     }
 
     @Test

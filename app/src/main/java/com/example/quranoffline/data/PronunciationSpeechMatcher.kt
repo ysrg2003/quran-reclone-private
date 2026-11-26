@@ -20,6 +20,8 @@ object PronunciationSpeechMatcher {
         // spoken spelling. Voice mode keeps the stricter pronunciation contract
         // unless the caller explicitly opts into canonical spelling.
         if (allowCanonicalQuranSpelling && quranWordMatchesAllowCanonicalSpelling(word, observed)) return true
+        // Speech-to-text writes words in ordinary spelling (e.g. كفروا); that is correct.
+        if (matchesWrittenSpelling(word, observed)) return true
         val expected = normalizeArabicForComparison(reference.spoken)
         val actual = normalizeArabicForComparison(observed)
         if (expected == actual) return true
@@ -75,7 +77,9 @@ object PronunciationSpeechMatcher {
             val actual = normalizeArabicForComparison(actualRaw)
             val visualWord = visualWords.firstOrNull { it.index == word.index }
             val canonicalOrSpoken = allowCanonicalQuranSpelling && visualWord != null && word.spokenTokens.size == 1 && quranWordMatchesAllowCanonicalSpelling(visualWord, actualRaw)
-            canonicalOrSpoken || expected == actual ||
+            canonicalOrSpoken ||
+                (visualWord != null && word.spokenTokens.size <= 1 && matchesWrittenSpelling(visualWord, actualRaw)) ||
+                expected == actual ||
                 (word.spokenTokens.size > 1 && collapseLongVowelRepeats(actual, expected) == expected) ||
                 (word.maddPositions.isNotEmpty() && collapseValidMaddRepeats(actual, expected, word.maddPositions) == expected)
         }
