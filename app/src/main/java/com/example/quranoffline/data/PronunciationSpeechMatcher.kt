@@ -22,6 +22,8 @@ object PronunciationSpeechMatcher {
         if (allowCanonicalQuranSpelling && quranWordMatchesAllowCanonicalSpelling(word, observed)) return true
         // Speech-to-text writes words in ordinary spelling (e.g. كفروا); that is correct.
         if (matchesWrittenSpelling(word, observed)) return true
+        // Disjoined letters (الم, حم...): letter names, single letters and madd-cut readings.
+        if (Muqattaat.matches(word, observed)) return true
         val expected = normalizeArabicForComparison(reference.spoken)
         val actual = normalizeArabicForComparison(observed)
         if (expected == actual) return true

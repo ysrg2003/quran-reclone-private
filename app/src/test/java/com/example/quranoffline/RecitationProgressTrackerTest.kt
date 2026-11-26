@@ -510,4 +510,45 @@ class RecitationProgressTrackerTest {
         assertEquals(CorrectionKind.WRONG_WORD, nextWrong.correction?.kind)
         assertEquals(1, nextWrong.correction?.localWordIndex)
     }
+
+    @Test
+    fun afterWrongWordNeitherEarlierNorLaterWordsAreAcceptedUntilItIsCorrect() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d")))
+        tracker.update(final("a x"))
+        // Earlier word: must not move the cursor or clear the error.
+        var r = tracker.update(final("a"))
+        assertEquals(1, r.currentWordInAyah)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, r.evaluation.words[1].status)
+        // Later word: not accepted.
+        r = tracker.update(final("c"))
+        assertEquals(1, r.currentWordInAyah)
+        assertTrue(r.evaluation.words[2].status != WordStatus.MATCHED)
+        // The wrong word said correctly unlocks the next word.
+        r = tracker.update(final("b"))
+        assertEquals(2, r.currentWordInAyah)
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
+    }
+
+    @Test
+    fun afterPlaybackResumeOnlyTheWrongWordIsAccepted() {
+        val tracker = RecitationProgressTracker(listOf(ayah(1, "a", "b", "c", "d")))
+        tracker.update(final("a x"))
+        tracker.resumeFrom(0, 1)
+        var r = tracker.update(final("c"))
+        assertTrue(r.evaluation.words[2].status != WordStatus.MATCHED)
+        tracker.resumeFrom(0, 1)
+        r = tracker.update(final("b"))
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
+    }
+
+    @Test
+    fun madMuqattaatCutByRecognizerIsAcceptedAndLateLetterNamesAreIgnored() {
+        val alm = QuranWord(0, "الٓمٓ", "الم")
+        val tracker = RecitationProgressTracker(listOf(QuranAyah(2, 1, "", "", listOf(alm)), ayah(2, "a", "b")))
+        var r = tracker.update(final("الف ل"))
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[0].status)
+        r = tracker.update(final("ميم a"))
+        assertNull(r.correction)
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
+    }
 }

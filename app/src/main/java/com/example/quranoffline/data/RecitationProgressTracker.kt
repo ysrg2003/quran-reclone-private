@@ -89,6 +89,7 @@ class RecitationProgressTracker(
     private var resumeAnchorLocalIndex = 0
     private var lastTranscriptTokens: List<String> = emptyList()
     private var pendingWordPrefix: String? = null
+    private var muqattaatLeftover: List<MuqattaatLetter> = emptyList()
     private var stopProcessingSegment = false
     private var cachedEvaluation = RecitationEvaluation(
         words = evaluationWords.toList(),
@@ -177,7 +178,22 @@ class RecitationProgressTracker(
             }
             while (index < newTokens.size) {
                 var token = newTokens[index]
+                if (muqattaatLeftover.isNotEmpty()) {
+                    val next = muqattaatLeftover.first()
+                    muqattaatLeftover = muqattaatLeftover.drop(1)
+                    if (Muqattaat.unitMatchesToken(next, token)) { index++; continue }
+                    muqattaatLeftover = emptyList()
+                }
                 val expectedCurrent = ayahs.getOrNull(currentAyahIndex)?.words?.getOrNull(nextWordInAyah)
+                if (expectedCurrent != null && pendingWordPrefix == null) {
+                    val used = Muqattaat.matchedTokenCount(expectedCurrent, newTokens, index)
+                    val units = Muqattaat.pronunciationFor(expectedCurrent)?.units?.size ?: 0
+                    if (used in 1 until units) {
+                        token = newTokens.subList(index, index + used).joinToString(" ")
+                        muqattaatLeftover = Muqattaat.missingUnitsAfter(expectedCurrent, used)
+                        index += used - 1
+                    }
+                }
                 val muqattaatPhrase = newTokens.drop(index).joinToString(" ")
                 if (expectedCurrent != null && Muqattaat.isPotentialPrefix(expectedCurrent, muqattaatPhrase)) {
                     pendingWordPrefix = muqattaatPhrase
@@ -278,7 +294,11 @@ class RecitationProgressTracker(
         }
 
         if (awaitingResume) {
+            // While the word at the anchor is still wrong or missing, only that word may be
+            // recited: later or earlier words are not accepted before it is pronounced correctly.
+            val anchorOpen = globalWordIndex(currentAyahIndex, resumeAnchorLocalIndex)?.let { openErrorKinds.containsKey(it) } == true
             val resumeIndex = expected.indices
+                .filter { !anchorOpen || it == resumeAnchorLocalIndex }
                 .filter { matchesWord(currentAyahIndex, it, token) }
                 .minByOrNull { kotlin.math.abs(it - resumeAnchorLocalIndex) }
             if (resumeIndex != null) {
@@ -309,7 +329,10 @@ class RecitationProgressTracker(
         val current = nextWordInAyah.coerceIn(0, expected.lastIndex)
         val exactCurrent = matchesWord(currentAyahIndex, current, token)
         val rollbackStart = (current - rollbackWindow).coerceAtLeast(0)
-        val rollbackMatch = (rollbackStart until current).firstOrNull { matchesWord(currentAyahIndex, it, token) }
+        // An unresolved error on the current word blocks going back to earlier words too:
+        // the reader must pronounce the wrong word correctly first.
+        val currentHasOpenError = globalWordIndex(currentAyahIndex, current)?.let { openErrorKinds.containsKey(it) } == true
+        val rollbackMatch = if (currentHasOpenError) null else (rollbackStart until current).firstOrNull { matchesWord(currentAyahIndex, it, token) }
         val laterMatch = ((current + 1)..expected.lastIndex).firstOrNull { matchesWord(currentAyahIndex, it, token) }
 
         return when {

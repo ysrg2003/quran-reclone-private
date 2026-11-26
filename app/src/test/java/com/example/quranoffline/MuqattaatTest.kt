@@ -117,3 +117,40 @@ class MuqattaatTest {
         assertEquals("أسماء حروف مستقلة", "أسماء حروف مستقلة")
     }
 }
+
+class MuqattaatMaddFormsTest {
+    private fun m(token: String, match: String, observed: String) = quranWordMatches(QuranWord(0, token, match), observed)
+
+    @Test
+    fun spelledAndMaddCutFormsAreAcceptedForEveryOpening() {
+        val words = mapOf(
+            "الٓمٓ" to listOf("الف لام ميم", "الف ل", "ا ل م", "ألف لاااام ميييم", "الم", "الف لا"),
+            "الٓمٓصٓ" to listOf("الف لام ميم صاد", "الف لام ميم", "الف لام ميم ص"),
+            "الٓر" to listOf("الف لام را", "الف لام", "الف لام ر"),
+            "الٓمٓر" to listOf("الف لام ميم را", "الف لام ميم"),
+            "كٓهيعٓصٓ" to listOf("كاف ها يا عين صاد", "كاف ها يا عين", "كاف ها يا"),
+            "طه" to listOf("طا ها", "طه"),
+            "طسٓمٓ" to listOf("طا سين ميم", "طا سين"),
+            "طسٓ" to listOf("طا سين", "طس"),
+            "يسٓ" to listOf("يا سين", "يس", "ي س"),
+            "صٓ" to listOf("صاد", "ص", "صااااد"),
+            "حمٓ" to listOf("حا ميم", "حم", "ح م"),
+            "عٓسٓقٓ" to listOf("عين سين قاف", "عين سين", "ع س ق"),
+            "قٓ" to listOf("قاف", "ق", "قااااف"),
+            "نٓ" to listOf("نون", "ن", "نووون"),
+        )
+        words.forEach { (token, forms) ->
+            val match = token.replace("ٓ", "")
+            forms.forEach { f -> assertTrue("$token <- $f", m(token, match, f)) }
+        }
+    }
+
+    @Test
+    fun ordinaryWordsAndWrongLettersAreNotAccepted() {
+        assertFalse(m("الٓمٓ", "الم", "لا"))
+        assertFalse(m("الٓمٓ", "الم", "الف"))
+        assertFalse(m("حمٓ", "حم", "حا"))
+        assertFalse(m("الٓمٓ", "الم", "ذلك"))
+        assertFalse(m("الٓمٓ", "الم", "الف سين"))
+    }
+}

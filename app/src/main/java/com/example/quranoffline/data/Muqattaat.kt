@@ -59,10 +59,10 @@ object Muqattaat {
         TA to MuqattaatLetter(TA, "طا", "طاء", setOf("طا", "طاء", "طَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
         RA to MuqattaatLetter(RA, "را", "راء", setOf("را", "راء", "رَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
         HAA to MuqattaatLetter(HAA, "حا", "حاء", setOf("حا", "حاء", "حَا"), MuqattaatMaddCategory.NATURAL_TWO_HARAKAT),
-        AIN to MuqattaatLetter(AIN, "عين", "عين", setOf("عين"), MuqattaatMaddCategory.LAZIM_HARFI_FOUR_OR_SIX_HARAKAT),
-        SIN to MuqattaatLetter(SIN, "سين", "سين", setOf("سين"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        QAF to MuqattaatLetter(QAF, "قاف", "قاف", setOf("قاف"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
-        NUN to MuqattaatLetter(NUN, "نون", "نون", setOf("نون"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        AIN to MuqattaatLetter(AIN, "عين", "عين", setOf("عين", "ع"), MuqattaatMaddCategory.LAZIM_HARFI_FOUR_OR_SIX_HARAKAT),
+        SIN to MuqattaatLetter(SIN, "سين", "سين", setOf("سين", "س"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        QAF to MuqattaatLetter(QAF, "قاف", "قاف", setOf("قاف", "ق"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
+        NUN to MuqattaatLetter(NUN, "نون", "نون", setOf("نون", "ن"), MuqattaatMaddCategory.LAZIM_HARFI_SIX_HARAKAT),
     )
 
     private val visualTokenByMatchToken = mapOf(
@@ -113,7 +113,7 @@ object Muqattaat {
     fun pronunciationFor(word: QuranWord): MuqattaatPronunciation? = pronunciationFor(word.text, word.matchText)
 
     fun pronunciationFor(visualToken: String, matchToken: String = visualToken): MuqattaatPronunciation? =
-        pronunciationByVisualToken[visualToken]
+        pronunciationByVisualToken[visualToken.replace(Regex("[\\u06D6-\\u06DC\\s]"), "")]
 
     fun allCanonicalSequences(): Set<String> = pronunciations.keys
 
@@ -159,18 +159,78 @@ object Muqattaat {
     /** Matches one final recognizer token, including separately spoken names. */
     fun matches(word: QuranWord, observed: String): Boolean = matches(word.text, word.matchText, observed)
 
+    private fun visualWordFor(visualToken: String, matchToken: String) = QuranWord(0, visualToken, matchToken)
+
     fun matches(visualToken: String, matchToken: String, observed: String): Boolean {
         val pronunciation = pronunciationFor(visualToken, matchToken) ?: return false
         val observedForms = normalizeSpeech(observed).split(' ').filter(String::isNotBlank)
         val spoken = pronunciation.units.flatMap { it.spokenForms }.map(::normalizeSpeech).toSet()
-        if (observedForms.size == pronunciation.units.size && observedForms.indices.all { speechNameMatches(pronunciation.units[it], observedForms[it]) }) return true
+        if (observedForms.size == pronunciation.units.size && observedForms.indices.all { unitMatches(pronunciation.units[it], observedForms[it]) }) return true
+        if (observedForms.isNotEmpty() && observedForms.size < pronunciation.units.size && matchedTokenCount(visualWordFor(visualToken, matchToken), observedForms, 0) == observedForms.size) return true
         return observedForms.size == 1 && canonicalLetters(observedForms.single()) == pronunciation.matchToken && observedForms.single() !in spoken
     }
+
+    /**
+     * Forms a recognizer writes for a prolonged (madd) letter name. They are accepted only when the
+     * word being judged is a muqatta'at opening, never as a general word mapping ("لا", "لم" are real words).
+     */
+    private val looseForms: Map<String, Set<String>> = mapOf(
+        LAM to setOf("لا", "لم", "لاام", "ل"),
+        MIM to setOf("مم", "مي", "ام"),
+        ALIF to setOf("ا", "الف", "الفف", "ال"),
+        SAD to setOf("صا"),
+        KAF to setOf("كا"),
+        AIN to setOf("عي", "عيين"),
+        SIN to setOf("سي", "سيين"),
+        QAF to setOf("قا"),
+        NUN to setOf("نو", "نوو"),
+        RA to setOf("ر"), TA to setOf("ط"), HAA to setOf("ح"), HA to setOf("ه"), YA to setOf("ي"),
+    )
+
+    private fun unitMatches(unit: MuqattaatLetter, observed: String): Boolean {
+        if (speechNameMatches(unit, observed)) return true
+        val n = normalizeSpeech(observed)
+        return looseForms[unit.letter].orEmpty().any { collapseLongVowelRepeats(n, it) == it || n == it }
+    }
+
+    /** Letters of a muqatta'at word that may be missing at the end when the recognizer cuts a long madd. */
+    private fun allowedMissing(unitCount: Int): Int = when {
+        unitCount >= 5 -> 2
+        unitCount >= 3 -> 1
+        else -> 0
+    }
+
+    /**
+     * Number of leading tokens (starting at [start]) that spell this muqatta'at word, accepting a
+     * truncated tail (e.g. "الف ل" for الم when the recognizer drops the prolonged last letter).
+     * 0 when nothing matches. Prefers the longest match.
+     */
+    fun matchedTokenCount(word: QuranWord, tokens: List<String>, start: Int): Int {
+        val pronunciation = pronunciationFor(word) ?: return 0
+        val units = pronunciation.units
+        val minUnits = units.size - allowedMissing(units.size)
+        val normalized = tokens.drop(start).take(units.size).map(::normalizeSpeech)
+        var best = 0
+        var k = 0
+        while (k < normalized.size && unitMatches(units[k], normalized[k])) {
+            k++
+            if (k >= minUnits) best = k
+        }
+        return best
+    }
+
+    /** Letter units a truncated reading left unspoken (consumed if the recognizer delivers them late). */
+    fun missingUnitsAfter(word: QuranWord, consumedTokens: Int): List<MuqattaatLetter> =
+        pronunciationFor(word)?.units?.drop(consumedTokens).orEmpty()
+
+    fun unitMatchesToken(unit: MuqattaatLetter, token: String): Boolean = unitMatches(unit, token)
 
     fun isPotentialPrefix(word: QuranWord, observed: String): Boolean {
         val pronunciation = pronunciationFor(word) ?: return false
         val observedForms = normalizeSpeech(observed).split(' ').filter(String::isNotBlank)
         if (observedForms.isEmpty() || observedForms.size >= pronunciation.units.size) return false
+        // A truncated madd reading that is already acceptable is a match, not a word still being spoken.
+        if (matchedTokenCount(word, observedForms, 0) == observedForms.size) return false
         return observedForms.indices.all { speechNameMatches(pronunciation.units[it], observedForms[it]) }
     }
 
