@@ -26,6 +26,7 @@ class AsrTranscriptAuditTest {
         val bySurah = rows.groupBy { it[0].substringBefore(':').toInt() }
         val out = StringBuilder(); var words = 0; var matched = 0; var ayahs = 0; var perfect = 0
         val rej = linkedMapOf<String, Int>()
+        val per = sortedMapOf<Int, IntArray>()
         for (line in File(asr).readLines()) {
             val c = line.split('\t'); if (c.size < 2) continue
             val key = c[0]; val s = key.substringBefore(':').toInt(); val a = key.substringAfter(':').toInt()
@@ -42,12 +43,14 @@ class AsrTranscriptAuditTest {
             val start = qAyahs.take(idx).sumOf { it.words.size }
             val n = qAyahs[idx].words.size
             val m = (0 until n).count { ev[start + it].status == WordStatus.MATCHED }
+            val pr = per.getOrPut(s) { IntArray(4) }; pr[0]++; pr[1] += n; pr[2] += m; if (m == n) pr[3]++
             ayahs++; words += n; matched += m; if (m == n) perfect++
             if (m < n) {
                 val first = (0 until n).first { ev[start + it].status != WordStatus.MATCHED }
                 out.append("$key m=$m/$n firstMiss=${first} exp=${byAyah[idx].second[first][4]} obs=${res.correction?.observed}\n  ASR: $text\n")
             }
         }
+        out.insert(0, per.entries.joinToString("") { (k, v) -> "SURAH $k ayahs=${v[0]} words=${v[1]} matched=${v[2]} perfect=${v[3]}\n" })
         out.insert(0, "ASR ayahs=$ayahs words=$words matched=$matched perfectAyahs=$perfect\n")
         File(System.getenv("AUDIT_OUT") + ".asr.txt").writeText(out.toString())
     }

@@ -569,4 +569,27 @@ class RecitationProgressTrackerTest {
         assertEquals(WordStatus.MATCHED, r.evaluation.words[0].status)
         assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
     }
+
+    @Test
+    fun openingLettersAreSkippedWithoutBlockingWhenReaderContinues() {
+        val alm = QuranWord(0, "الٓمٓ", "الم")
+        val tracker = RecitationProgressTracker(listOf(QuranAyah(1, 1, "", "", listOf(alm)), ayah(2, "a", "b")))
+        val r = tracker.update(final("a b"))
+        assertNull(r.correction)
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[0].status)
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[2].status)
+    }
+
+    @Test
+    fun openingLettersInsideAyahSkippedAndWrongWordAfterThemStillBlocks() {
+        val hm = QuranWord(0, "حمٓ", "حم")
+        val tracker = RecitationProgressTracker(listOf(QuranAyah(40, 1, "", "", listOf(hm, QuranWord(1, "a", "a"), QuranWord(2, "b", "b"), QuranWord(3, "c", "c")))))
+        var r = tracker.update(final("a x"))
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[0].status)
+        assertEquals(WordStatus.MATCHED, r.evaluation.words[1].status)
+        assertEquals(WordStatus.EXTRA_OR_UNEXPECTED, r.evaluation.words[2].status)
+        r = tracker.update(final("c"))
+        assertTrue(r.evaluation.words[3].status != WordStatus.MATCHED)
+    }
 }

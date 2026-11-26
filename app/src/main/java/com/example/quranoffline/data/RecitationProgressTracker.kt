@@ -317,6 +317,24 @@ class RecitationProgressTracker(
             nextWordInAyah = resumeAnchorLocalIndex.coerceIn(0, expected.lastIndex)
         }
 
+        // Opening letters are never blocking: if the reader goes straight on to the word that follows
+        // them (self-recited, or too long a madd for the recognizer), the opening counts as done.
+        run {
+            val at = nextWordInAyah.coerceIn(0, expectedWords.lastIndex)
+            val openingWord = expectedWords[at]
+            if (Muqattaat.pronunciationFor(openingWord) != null && !Muqattaat.matches(openingWord, token)) {
+                val followsInAyah = at + 1 < expectedWords.size && matchesWord(currentAyahIndex, at + 1, token)
+                val followsInNextAyah = at + 1 >= expectedWords.size && currentAyahIndex + 1 < ayahs.size &&
+                    ayahs[currentAyahIndex + 1].surah == expectedAyah.surah && matchesWord(currentAyahIndex + 1, 0, token)
+                if (followsInAyah || followsInNextAyah) {
+                    markMatched(at, "")
+                    nextWordInAyah = at + 1
+                    if (nextWordInAyah >= expected.size) advanceAyah()
+                    return acceptStableToken(token, segment, segmentIndex)
+                }
+            }
+        }
+
         if (settings.automaticPreviousAyah && isPreviousAyahStart(segment, segmentIndex)) {
             val previousAyahIndex = currentAyahIndex - 1
             currentAyahIndex = previousAyahIndex

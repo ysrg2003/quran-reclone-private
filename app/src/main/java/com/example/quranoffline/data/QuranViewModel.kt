@@ -1379,6 +1379,15 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /** Start after the disjoined opening letters; the word index is within [ayah]. */
+    fun startMemorizationAfterOpening(surah: Int, ayah: Int, wordIndex: Int) {
+        val metadata = state.value.metadata ?: return
+        val pageNumber = metadata.ayah(surah, ayah)?.page ?: return
+        stopListening()
+        setMemorizationStart(surah, ayah, wordIndex)
+        showPage(pageNumber, notice = "تم تحديد بداية التسميع بعد الحروف المقطعة: السورة $surah، الآية $ayah.")
+    }
+
     fun startMemorizationFrom(surah: Int, ayah: Int) {
         val metadata = state.value.metadata ?: return
         val pageNumber = metadata.ayah(surah, ayah)?.page ?: return

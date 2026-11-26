@@ -277,6 +277,7 @@ private fun QuranOfflineApp(
                 onPlayBasmala = viewModel::playOpeningBasmala,
                 onReadFromHere = viewModel::playFromHere,
                 onMemorizeFromHere = viewModel::startMemorizationFrom,
+                onStartAfterOpening = viewModel::startMemorizationAfterOpening,
                 onCorrection = viewModel::playCorrectionForCurrentWord,
                 onStopCorrection = viewModel::stopCorrection,
                 onPreviousAyah = viewModel::startFromPreviousAyah,
@@ -321,6 +322,7 @@ private fun QuranOfflineApp(
                 onSave = viewModel::saveCurrentSession,
                 onSetStart = viewModel::setMemorizationStart,
                 onMemorizeFromHere = viewModel::startMemorizationFrom,
+                onStartAfterOpening = viewModel::startMemorizationAfterOpening,
                 onCorrection = viewModel::playCorrectionForCurrentWord,
                 onStopCorrection = viewModel::stopCorrection,
                 onPreviousAyah = viewModel::startFromPreviousAyah,
@@ -544,6 +546,7 @@ private fun MemorizationScreen(
     onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
+    onStartAfterOpening: (Int, Int, Int) -> Unit = { _, _, _ -> },
     onCorrection: () -> Unit,
     onStopCorrection: () -> Unit,
     onPreviousAyah: () -> Unit,
@@ -620,6 +623,7 @@ private fun MemorizationScreen(
         item {
             Text("مصحف التدريب — صفحات المصحف 1–604", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF123F35))
         }
+        item { MuqattaatOpeningCard(state, onMemorizeFromHere, onStartAfterOpening) }
         item { MushafMetadataCard(state) }
         item { MushafPageNavigationCard(state, onPreviousPage, onNextPage) }
         if (!focusRecitation) {
@@ -1113,6 +1117,7 @@ private fun AyahBlock(
     currentSpokenWordIndex: Int,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
+    onStartAfterOpening: (Int, Int, Int) -> Unit = { _, _, _ -> },
     onPlayAyah: (Int, Int) -> Unit,
     onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
@@ -1498,6 +1503,7 @@ private fun ReaderScreen(
     onSave: () -> Unit,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
+    onStartAfterOpening: (Int, Int, Int) -> Unit = { _, _, _ -> },
     onCorrection: () -> Unit,
     onStopCorrection: () -> Unit,
     onPreviousAyah: () -> Unit,
@@ -1534,6 +1540,7 @@ private fun ReaderScreen(
         modifier = modifier.fillMaxSize().background(Color(0xFFF7F8F4)).padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item { MuqattaatOpeningCard(state, onMemorizeFromHere, onStartAfterOpening) }
         item {
             RecitationCard(state, onStart, onInputModeChange, onTypedInputChange, onSubmitTyped, onResume, onCorrection, onStopCorrection, onPreviousAyah)
         }
@@ -1731,6 +1738,7 @@ private fun MushafPageSurface(
     state: com.example.quranoffline.data.QuranUiState,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
+    onStartAfterOpening: (Int, Int, Int) -> Unit = { _, _, _ -> },
     onPlayAyah: (Int, Int) -> Unit,
     onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
@@ -1855,6 +1863,7 @@ private fun PageAyahInline(
     hasSelection: Boolean,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
+    onStartAfterOpening: (Int, Int, Int) -> Unit = { _, _, _ -> },
     onPlayAyah: (Int, Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
     onReadSurahFromHere: (Int, Int) -> Unit,
@@ -1910,6 +1919,7 @@ private fun PageAyahLine(
     hasSelection: Boolean,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
     onMemorizeFromHere: (Int, Int) -> Unit,
+    onStartAfterOpening: (Int, Int, Int) -> Unit = { _, _, _ -> },
     onPlayAyah: (Int, Int) -> Unit,
     onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
@@ -2068,4 +2078,47 @@ private fun readerScopeLabel(scope: com.example.quranoffline.data.ReaderScope): 
     com.example.quranoffline.data.ReaderScope.HIZB -> "حزب/ربع"
     com.example.quranoffline.data.ReaderScope.PAGES -> "صفحات"
     com.example.quranoffline.data.ReaderScope.QURAN -> "المصحف"
+}
+
+
+/** Notice about long madd plus, for surahs that open with disjoined letters, a way to start after them. */
+@Composable
+private fun MuqattaatOpeningCard(
+    state: com.example.quranoffline.data.QuranUiState,
+    onFromBeginning: (Int, Int) -> Unit,
+    onAfterOpening: (Int, Int, Int) -> Unit,
+) {
+    val surah = state.selectedSurah
+    val after = remember(state.allAyahs, surah) {
+        var result: Triple<Int, Int, Int>? = null
+        var firstIsOpening = false
+        loop@ for (ayah in state.allAyahs.filter { it.surah == surah }.sortedBy { it.ayah }) {
+            for ((index, word) in ayah.words.withIndex()) {
+                if (com.example.quranoffline.data.Muqattaat.pronunciationFor(word) != null) {
+                    firstIsOpening = true
+                } else {
+                    if (firstIsOpening) result = Triple(surah, ayah.ayah, index)
+                    break@loop
+                }
+            }
+        }
+        result
+    }
+    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4DC))) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "تنبيه: قد لا يتعرف التطبيق على كلمة تُقرأ بمدّ طويل، خاصة الحروف المقطعة في أول السورة مثل «الم». يمكنك قراءتها مع نفسك دون أن تُحسب عليك.",
+                color = Color(0xFF76552A),
+                textAlign = TextAlign.Right,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (after != null) {
+                Text("هذه السورة تبدأ بحروف مقطعة. اختر طريقة التسميع:", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                val (s, a, w) = after
+                val label = if (w == 0) "التسميع من الآية $a (بعد الحروف المقطعة)" else "التسميع من بعد الحروف المقطعة (الآية $a، الكلمة ${w + 1})"
+                Button(onClick = { onAfterOpening(s, a, w) }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                OutlinedButton(onClick = { onFromBeginning(s, 1) }, modifier = Modifier.fillMaxWidth()) { Text("من بداية السورة") }
+            }
+        }
+    }
 }
