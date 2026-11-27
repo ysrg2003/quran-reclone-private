@@ -191,3 +191,8 @@ Manual on device (UNTESTED by me, no device available):
 - Kept: Juz first, copy brackets, whole-ayah counter (default 3, off option), any legitimate reading accepted (matcher untouched), progress and khatma tracking (view-independent).
 - Checks added (HifzMushafLayoutRegressionTest): reveal rule in hide mode, whole-page hide, page swipe, whole-ayah off/default. Full JVM suite passes. Not tested on a phone.
 - Not changed: the full-screen reader's tasmee view still uses its own per-ayah blocks.
+
+## v24.9
+- Copy of an ayah is now exactly "(" + ayah text + ")" in plain parentheses with nothing added (no ayah number, no surah reference, no plus sign). A multi-ayah copy is "(a) (b)". Test: AyahShareFormatTest.
+- Hide: the reveal-judged-words behaviour is limited to the Hifz/Tasmee tab. The Reading tab and the full-screen reader hide exactly as before v24.8 (whole line transparent, no colouring). The full-screen reader code is untouched.
+- Not tested on a phone. Full JVM suite passes.
