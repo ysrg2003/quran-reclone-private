@@ -141,3 +141,9 @@ Manual on device (UNTESTED by me, no device available):
 - 229 tests pass (JVM), 4 skipped. Same release key. Device untested.
 - New Appearance.kt: AppearanceStore (SharedPreferences quran_appearance, read once at launch), presets, free accent/paper/text, tab order (invalid saved order falls back to default). Applied to theme primary, top bars, tab row, immersive reader paper, mushaf card paper, line text, highlights (dark variants on dark paper), tab-0 ayah card. Words with a tasmee status keep dark text on the green/red/yellow backgrounds. Other cards stay white (no full dark mode).
 - Juz tab: tap expands surahs of the juz (data/JuzSurahs.kt from metadata, partial ranges marked); tapping opens ayah 1 via selectSurah, otherwise the ayah's mushaf page via openSurahAt.
+
+## v24.1 (0e38054, tag apk-v24.1)
+- Tests: see VERSION_INDEX row (JVM). Device untested.
+- Report export: data/LogExport.kt (xlsx and docx as zip+XML via java.util.zip, RTL sheet/table), ReportPdf.kt (platform PdfDocument + StaticLayout). Generated on Dispatchers.IO into cache/exports, shared through FileProvider ({appId}.exports) and the share sheet. Sessions and corrected errors (full store, not the 5 shown). No new dependency. xlsx/docx structure tested in JVM; PDF and Arabic shaping only checkable on a phone.
+- Pages 1-2: WordReferenceLineView centered=isOpeningPage: TextAlign.Center and no stretch.
+- Markers: reference page 6 (ayahs 30-37) matches quran.com end-marker lines exactly (30, 32, 34 on the next line). QuranComLayoutBuilder (v23 hack removed) keeps the marker on its reported line, leading that line. Cache renamed quran_com_layout_v3.json; v1/v2 files dropped once and re-downloaded. The bundled Word layout has different line breaks and is unchanged (shows until the download finishes or when offline).
