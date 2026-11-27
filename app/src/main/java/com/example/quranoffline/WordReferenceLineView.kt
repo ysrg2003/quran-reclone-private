@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -133,11 +134,24 @@ internal fun WordReferenceLineView(
                 )
                 .padding(vertical = 2.dp),
         ) {
+            // Justify: measure the natural ink width once per line/size and stretch it to the full row width (clamped).
+            val fitState = androidx.compose.runtime.remember(line, textScale) { androidx.compose.runtime.mutableFloatStateOf(1f) }
             Text(
                 text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets) {
                     annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets)
                 },
-                modifier = Modifier.fillMaxWidth(),
+                onTextLayout = { r ->
+                    if (r.lineCount == 1 && r.size.width > 0) {
+                        val ink = r.getLineRight(0) - r.getLineLeft(0)
+                        if (ink > 0f) {
+                            val f = (r.size.width / ink).coerceIn(0.9f, 1.3f)
+                            if (kotlin.math.abs(f - fitState.floatValue) > 0.004f) fitState.floatValue = f
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().graphicsLayer {
+                    scaleX = fitState.floatValue; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0.5f)
+                },
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
                 color = if (state.hidden) Color.Transparent else textColor,

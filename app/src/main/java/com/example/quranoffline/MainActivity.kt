@@ -1886,7 +1886,7 @@ internal fun MushafPageSurface(
             Modifier
                 .fillMaxWidth()
                 .then(if (isOpeningPage && !fullBleed) Modifier.border(1.dp, Color(0xFFE4D4B8), RoundedCornerShape(18.dp)).padding(6.dp) else Modifier)
-                .padding(if (fullBleed) 4.dp else 18.dp),
+                .padding(if (fullBleed) 0.dp else 18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!fullBleed) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
