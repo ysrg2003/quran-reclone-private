@@ -388,7 +388,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 (1..ayahCount).forEach { ayah ->
                     assetManager.downloadAyah(surah, ayah)
-                    withContext(Dispatchers.Main) { state.value = state.value.copy(downloadedAyahs = assetManager.downloadedAyahCount(surah, ayahCount)) }
+                    val doneCount = assetManager.downloadedAyahCount(surah, ayahCount) // file checks stay off the main thread
+                    withContext(Dispatchers.Main) { state.value = state.value.copy(downloadedAyahs = doneCount) }
                 }
                 withContext(Dispatchers.Main) { state.value = state.value.copy(downloadInProgress = false, notice = "اكتمل تنزيل السورة $surah. يمكن تشغيلها لاحقاً دون شبكة.") }
             } catch (error: Throwable) {

@@ -192,7 +192,7 @@ private fun QuranOfflineApp(
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Box(Modifier.fillMaxSize()) {
-        Scaffold(
+        if (!immersive) Scaffold(
         topBar = {
             Column {
                 TopAppBar(

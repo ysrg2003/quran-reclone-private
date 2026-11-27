@@ -21,17 +21,19 @@ class WhisperSpeechSession(
     private val onUpdate: (RecognitionUpdate) -> Unit = { u -> main.post { onUpdateMain(u) } }
     private val active = AtomicBoolean(false)
     private var worker: Thread? = null
+    @Volatile private var stopRequested = false
 
     override fun start() {
         if (!active.compareAndSet(false, true)) return
         onUpdate(RecognitionUpdate.Started)
-        worker = Thread({ run() }, "whisper-session").also { it.start() }
+        val previousWorker = lastWorker
+        worker = Thread({ runCatching { previousWorker?.join(10000) }; run() }, "whisper-session").also { lastWorker = it; it.start() }
     }
 
     override fun stop() {
         if (!active.getAndSet(false)) return
-        runCatching { worker?.join(8000) }
-        onUpdate(RecognitionUpdate.Stopped)
+        // Never block the main thread: the worker finishes its last decode, posts it, then posts Stopped.
+        stopRequested = true
     }
 
     @SuppressLint("MissingPermission")
@@ -83,6 +85,7 @@ class WhisperSpeechSession(
         } finally {
             runCatching { rec?.stop() }; runCatching { rec?.release() }
             if (handle != 0L) runCatching { WhisperNative.nativeFree(handle) }
+            if (stopRequested) onUpdate(RecognitionUpdate.Stopped)
         }
     }
 
@@ -98,6 +101,7 @@ class WhisperSpeechSession(
     }
 
     companion object {
+        @Volatile private var lastWorker: Thread? = null
         const val RATE = 16_000
         const val SOFT_SECONDS = 8
         const val MAX_SECONDS = 14
