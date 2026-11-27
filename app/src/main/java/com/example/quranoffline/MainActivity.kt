@@ -780,6 +780,7 @@ private fun MemorizationScreen(
         // v24.8: the same mushaf page surface as the Reading tab (page lines, ayah order, markers, font),
         // with hide, word colouring and the current-word highlight handled inside the surface.
         item {
+          CompositionLocalProvider(LocalRevealJudgedWhenHidden provides true) {
             MushafPageSurface(
                 pageAyahs = state.ayahs,
                 state = state,
@@ -801,6 +802,7 @@ private fun MemorizationScreen(
                 onLongPressAyah = { surah, ayah -> actionSurah = surah; actionAyah = ayah; showAyahActions = true },
                 onClearSelection = onClearSelection,
             )
+          }
         }
         // Hidden in v21.1 (the Khatmat tab covers the daily wird). Code and saved goal data are kept; set to true to bring it back.
         if (SHOW_TODAY_GOAL_BOX) item { GoalCard(state.goal, onSetGoal) }
