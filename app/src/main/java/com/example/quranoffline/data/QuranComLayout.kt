@@ -169,8 +169,21 @@ object QuranComLayoutStore {
     private const val FILE_NAME = "quran_com_layout_v1.json"
     private fun file(context: Context) = File(context.applicationContext.filesDir, FILE_NAME)
 
+    /** Bumped after an install or a removal so the app can swap layouts without a restart. */
+    val revision = kotlinx.coroutines.flow.MutableStateFlow(0)
+    private fun prefs(context: Context) = context.applicationContext.getSharedPreferences("quran_com_layout", Context.MODE_PRIVATE)
     fun isInstalled(context: Context): Boolean = file(context).isFile
-    fun remove(context: Context) { file(context).delete() }
+    /** The user's "back to Word layout" choice. Stops the automatic download until they download again. */
+    fun userChoseWord(context: Context): Boolean = prefs(context).getBoolean("userChoseWord", false)
+    fun remove(context: Context) {
+        file(context).delete()
+        prefs(context).edit().putBoolean("userChoseWord", true).apply()
+        revision.value = revision.value + 1
+    }
+    /** True when the first-launch download should run now: not installed, not opted out, at most one try per 6 hours. */
+    fun shouldAutoDownload(context: Context, nowMs: Long): Boolean =
+        !isInstalled(context) && !userChoseWord(context) && nowMs - prefs(context).getLong("lastAttemptMs", 0L) > 6L * 3600_000L
+    fun markAttempt(context: Context, nowMs: Long) { prefs(context).edit().putLong("lastAttemptMs", nowMs).apply() }
 
     /** Returns the cached layout JSON, or null. Caller validates before use. */
     fun readCached(context: Context): String? = runCatching { file(context).takeIf { it.isFile }?.readText() }.getOrNull()
@@ -216,6 +229,8 @@ object QuranComLayoutStore {
         val tmp = File(target.path + ".part")
         tmp.writeText(QuranComLayoutBuilder.toJson(layout))
         check(tmp.renameTo(target)) { "could not save layout" }
+        prefs(appContext).edit().putBoolean("userChoseWord", false).apply()
+        revision.value = revision.value + 1
     }
 
     private fun fetchPage(page: Int): QcPage {

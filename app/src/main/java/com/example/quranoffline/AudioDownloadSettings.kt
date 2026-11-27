@@ -259,7 +259,7 @@ fun QuranComLayoutSettingsCard() {
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("ترتيب المصحف (صفحات وأسطر Quran.com)", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
-            Text("يُنزَّل ترتيب الصفحات والأسطر فقط من Quran.com (604 صفحة، نحو 8 ميغابايت من الإنترنت)، ويبقى نص الآيات هو نص التطبيق نفسه. يُحفظ داخل التطبيق ويُطبَّق بعد إعادة تشغيل التطبيق. المصدر: Quran.com / Quran Foundation.", color = Color(0xFF66736C))
+            Text("يُنزَّل ترتيب الصفحات والأسطر فقط من Quran.com (604 صفحة، نحو 8 ميغابايت من الإنترنت)، ويبقى نص الآيات هو نص التطبيق نفسه. يُنزَّل تلقائياً أول مرة عند توفر الإنترنت ويُحفظ داخل التطبيق ويُطبَّق دون إعادة تشغيل (عند عدم وجود تسميع أو تشغيل جارٍ). المصدر: Quran.com / Quran Foundation.", color = Color(0xFF66736C))
             Text(if (installed) "الحالة: ترتيب Quran.com مُثبّت." else "الحالة: يُستخدم الترتيب المضمَّن (ملف Word).", fontWeight = FontWeight.Bold)
             if (progress in 0..603) Text("جارٍ التنزيل: ${progress} / 604")
             if (message.isNotEmpty()) Text(message)
@@ -271,13 +271,13 @@ fun QuranComLayoutSettingsCard() {
                         withContext(kotlinx.coroutines.Dispatchers.Main) {
                             progress = -1
                             installed = com.example.quranoffline.data.QuranComLayoutStore.isInstalled(ctx)
-                            message = if (r.isSuccess) "تم. أعد تشغيل التطبيق لتطبيق الترتيب الجديد." else "تعذر التنزيل: ${r.exceptionOrNull()?.message ?: "خطأ"}. لم يتغير شيء."
+                            message = if (r.isSuccess) "تم. سيُطبَّق الترتيب الجديد عند هدوء التطبيق (أو عند التشغيل التالي)." else "تعذر التنزيل: ${r.exceptionOrNull()?.message ?: "خطأ"}. لم يتغير شيء."
                         }
                     }
                 }) { Text(if (installed) "إعادة التنزيل" else "تنزيل وتطبيق") }
                 if (installed) OutlinedButton(enabled = progress < 0, onClick = {
                     com.example.quranoffline.data.QuranComLayoutStore.remove(ctx); installed = false
-                    message = "حُذف. أعد تشغيل التطبيق للرجوع إلى الترتيب المضمَّن."
+                    message = "حُذف. سيُستخدم ترتيب Word، ولن يُنزَّل Quran.com تلقائياً بعد الآن."
                 }) { Text("الرجوع إلى ترتيب Word") }
             }
         }

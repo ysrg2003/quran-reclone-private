@@ -141,6 +141,58 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     )
     val uiState: State<QuranUiState> = state
 
+    private var layoutWatchStarted = false
+
+    /** Auto-installs quran.com's page/line layout on first launch with internet, and swaps layouts when idle. */
+    private fun startLayoutWatch() {
+        if (layoutWatchStarted) return
+        layoutWatchStarted = true
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            var seen = QuranComLayoutStore.revision.value
+            launch(Dispatchers.IO) {
+                if (!QuranComLayoutStore.shouldAutoDownload(app, System.currentTimeMillis())) return@launch
+                if (!hasInternet(app)) return@launch
+                QuranComLayoutStore.markAttempt(app, System.currentTimeMillis())
+                QuranComLayoutStore.downloadAndInstall(app) { }
+            }
+            // Initial apply (an installed layout is already loaded at startup, so only react to changes).
+            QuranComLayoutStore.revision.collect { rev ->
+                if (rev != seen) { seen = rev; applyLayoutWhenIdle(app) }
+            }
+        }
+    }
+
+    private fun hasInternet(app: Application): Boolean = runCatching {
+        val cm = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    }.getOrDefault(false)
+
+    private suspend fun applyLayoutWhenIdle(app: Application) {
+        val ayahs = state.value.allAyahs
+        val layout = withContext(Dispatchers.IO) {
+            val l = WordReferenceLayout.load(app)
+            if (l.pageCount == 604 && l.pages.size == 604 && (l.source.startsWith("quran.com").not() || QuranComLayoutBuilder.isConsistent(l, ayahs))) l else null
+        } ?: return
+        // Only swap when nothing is being recited, played or downloaded. Otherwise retry for a few minutes; the next launch applies it anyway.
+        repeat(20) {
+            val s = state.value
+            if (s.assetsReady && !s.listening && !s.correctionPlaying && !s.readerPlaying && !s.downloadInProgress) {
+                val visible = layout.ayahKeysForPage(s.currentPage)
+                    .mapNotNull { (surah, ayah) -> s.allAyahs.firstOrNull { it.surah == surah && it.ayah == ayah } }
+                    .takeIf { it.isNotEmpty() } ?: return
+                state.value = s.copy(
+                    wordReferenceLayout = layout,
+                    ayahs = visible,
+                    pageWordOffset = globalWordOffset(s.allAyahs, visible.firstOrNull()),
+                    notice = "تم تطبيق ترتيب المصحف الجديد.",
+                )
+                return
+            }
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
+
     init {
         previewLoadJob = loadPreview()
         loadAssets(if (BuildConfig.OFFLINE_DISTRIBUTION) AssetMode.DOWNLOAD else AssetMode.STREAM)
@@ -294,6 +346,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     checkpoint = memorizationProgressStore.read()?.validatedAgainst(prepared.allAyahs),
                     notice = if (mode == AssetMode.STREAM) "نص Word العثماني والتوقيتات محليان؛ صوت الحصري يُجلب عند الحاجة." else "نص Word العثماني والتوقيتات وصوت الحصري مضمّنة داخل إصدار Offline؛ يحتاج التسميع الصوتي للإنترنت فقط.",
                 )
+                startLayoutWatch()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {

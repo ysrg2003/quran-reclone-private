@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
@@ -1839,7 +1841,26 @@ internal fun MushafPageSurface(
                     }
                     val effectiveScale = fit * textScale
                     val sideways = textScale > 1.02f
-                    Box(Modifier.fillMaxWidth().then(if (sideways) Modifier.horizontalScroll(rememberScrollState()) else Modifier)) {
+                    // When the sideways scroll is already at its edge, a further drag past it changes the page.
+                    val pageNow by rememberUpdatedState(state.currentPage)
+                    val pagesNow by rememberUpdatedState(state.totalPages)
+                    val changePage by rememberUpdatedState(onPageChanged)
+                    val edgeSwipe = remember {
+                        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+                            var overshoot = 0f
+                            override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.UserInput) overshoot += available.x
+                                return androidx.compose.ui.geometry.Offset.Zero
+                            }
+                            override suspend fun onPreFling(available: androidx.compose.ui.unit.Velocity): androidx.compose.ui.unit.Velocity {
+                                val target = com.example.quranoffline.data.pageAfterHorizontalSwipe(pageNow, pagesNow, overshoot)
+                                overshoot = 0f
+                                if (target != pageNow) changePage(target)
+                                return androidx.compose.ui.unit.Velocity.Zero
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().then(if (sideways) Modifier.nestedScroll(edgeSwipe).horizontalScroll(rememberScrollState()) else Modifier)) {
                     Column(if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     wordReferenceLines.forEach { line ->
                         WordReferenceLineView(
