@@ -114,3 +114,11 @@ Manual on device (UNTESTED by me, no device available):
 - Same release key. Device untested.
 - Hide ayahs (full-screen reader): hides exactly the selected ayahs' words (ayah 1 also hides its basmala box); no selection or a selection on another page hides nothing; the hide button with no selection shows a hint toast and does not switch modes. Flag HIDE_ONLY_SELECTED=false gives the v22 whole-page behaviour. Memorization tab 0 hide button is unchanged (whole page).
 - Mushaf basmala line no longer follows hide (that view is not shown while hide is on).
+
+## v23 (c68383d, tag apk-v23)
+- 218 tests pass (JVM), 4 skipped. Same release key. Device untested.
+- Reveal: WordDisplayRules.shown no longer treats UNCERTAIN (every unsaid word) as judged. Tasmee start sets hidden=true unless the user turned text on during a previous tasmee. showPage keeps hidden while listening. In the full-screen reader, while tasmee runs everything shown is hidden and, with a selection, only the selected ayahs are shown.
+- Actions circle: ActionsCircle (ReaderUi.kt) shows while a selection exists; buttons act on the whole selection; middle button taps close+clear, drag moves; size setting stored under new key actionCircleDp (default 34, 22..64). The small x selection circle was removed.
+- Khatma: line for the whole Quran (6236 ayahs) at the daily wird, from day zero.
+- Reader: READER_EDGE_MARGIN_DP=4 around the page (plus 2dp column padding).
+- Numbering: quran.com API puts the end marker of 566 of 6236 ayahs on the line after the last word; QuranComLayoutBuilder now puts the number after the last word. Downloaded layout file renamed to _v2, old _v1 file deleted on first use and the download retried; the bundled layout (all 6236 markers verified in order) shows meanwhile.
