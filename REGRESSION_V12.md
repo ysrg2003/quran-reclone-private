@@ -19,3 +19,7 @@ Manual on device (UNTESTED by me, no device available):
 ## v15 additions
 - Word audio per surah (private, with identity index), entire-Quran download (ayah audio for chosen reciter, or all words), confirmation with sizes and free space, pause/resume.
 - Manual: word tap plays local file when downloaded and streams otherwise; word audio with a mismatched count/text is never played locally; bulk pause then resume continues; low-space stops with message.
+
+## v16 additions
+- Hide-ayahs mode: new setting "show only spoken words" (default ON): unsaid words render nothing instead of a dot. Colours unchanged (green/red/yellow), a wrong word shows the correct text in red. Turn the setting off for the exact v11 view (dots).
+- Manual: hide mode in tasmee and reader; say a word right (green), wrong (red, correct text, correction audio plays), skip a word.

@@ -1123,6 +1123,7 @@ private fun AyahBlock(
     onReadFromHere: (Int, Int) -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val onlySpoken = com.example.quranoffline.data.WordDisplayRules.onlySpoken(androidx.compose.ui.platform.LocalContext.current)
     val openingBasmala = if (ayah.ayah == 1) com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(ayah.surah) else null
     Column(
         verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -1155,16 +1156,12 @@ private fun AyahBlock(
                             val status = wordEvaluation?.status
                             val revealed = wordEvaluation?.observed != null
                             val isCurrent = listening && openingBasmalaWordIndex == index && currentSpokenWord != null
-                            val background = when (status) {
-                                WordStatus.MATCHED -> Color(0xFFDFF1E5)
-                                WordStatus.EXTRA_OR_UNEXPECTED, WordStatus.MISSING -> Color(0xFFFFDDD8)
-                                WordStatus.UNCERTAIN -> Color(0xFFFFF0C9)
-                                null -> if (isCurrent) Color(0xFFDFF1E5) else Color.Transparent
-                            }
-                            val shownText = when {
-                                !hidden -> wordText
-                                revealed -> wordText
-                                isCurrent -> currentSpokenWord.orEmpty()
+                            val background = Color(com.example.quranoffline.data.WordDisplayRules.background(status, isCurrent))
+                            val mode = com.example.quranoffline.data.WordDisplayRules.shown(hidden, onlySpoken, status, revealed, isCurrent)
+                            if (mode == com.example.quranoffline.data.WordDisplayRules.Shown.HIDDEN) return@forEachIndexed
+                            val shownText = when (mode) {
+                                com.example.quranoffline.data.WordDisplayRules.Shown.CORRECT_WORD -> wordText
+                                com.example.quranoffline.data.WordDisplayRules.Shown.CURRENT_SPOKEN -> currentSpokenWord.orEmpty()
                                 else -> "•"
                             }
                             Surface(color = background, shape = RoundedCornerShape(8.dp)) {
@@ -1192,17 +1189,12 @@ private fun AyahBlock(
                     val status = wordEvaluation?.status
                     val revealed = wordEvaluation?.observed != null
                     val isCurrent = listening && globalIndex == currentSpokenWordIndex && !currentSpokenWord.isNullOrBlank()
-                    val background = when (status) {
-                        WordStatus.MATCHED -> Color(0xFFDFF1E5)
-                        WordStatus.EXTRA_OR_UNEXPECTED -> Color(0xFFFFDDD8)
-                        WordStatus.UNCERTAIN -> Color(0xFFFFF0C9)
-                        WordStatus.MISSING -> Color(0xFFFFDDD8)
-                        null -> if (isCurrent) Color(0xFFDFF1E5) else Color.Transparent
-                    }
-                    val shownText = when {
-                        !hidden -> word.text
-                        revealed -> word.text
-                        isCurrent -> currentSpokenWord.orEmpty()
+                    val background = Color(com.example.quranoffline.data.WordDisplayRules.background(status, isCurrent))
+                    val mode = com.example.quranoffline.data.WordDisplayRules.shown(hidden, onlySpoken, status, revealed, isCurrent)
+                    if (mode == com.example.quranoffline.data.WordDisplayRules.Shown.HIDDEN) return@forEachIndexed
+                    val shownText = when (mode) {
+                        com.example.quranoffline.data.WordDisplayRules.Shown.CORRECT_WORD -> word.text
+                        com.example.quranoffline.data.WordDisplayRules.Shown.CURRENT_SPOKEN -> currentSpokenWord.orEmpty()
                         else -> "•"
                     }
                     Surface(color = background, shape = RoundedCornerShape(8.dp)) {
@@ -2046,6 +2038,7 @@ private fun SettingsScreen(
         item { TypographySettingsCard(state.correctionSettings, onUpdateCorrectionSettings) }
         item { Text("الحفظ والتسميع والتصحيح", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
         item { CorrectionSettingsCard(state.correctionSettings, onUpdateCorrectionSettings, onResetCorrectionSettings) }
+        item { HiddenViewSettingsCard() }
         item { Text("المحرك والملفات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
         item { EngineCard() }
         item { Text("إعدادات التنزيل", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }

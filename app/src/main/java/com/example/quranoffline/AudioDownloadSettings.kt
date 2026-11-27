@@ -228,3 +228,20 @@ fun BulkDownloadCard(suras: List<QuranSuraMetadata>) {
             dismissButton = { TextButton(onClick = { pending = null }) { Text("إلغاء") } })
     }
 }
+
+/** Settings: what the "hide ayahs" mode shows. Default on: only words already said (or judged) appear. */
+@Composable
+fun HiddenViewSettingsCard() {
+    val ctx = LocalContext.current
+    var only by remember { mutableStateOf(com.example.quranoffline.data.WordDisplayRules.onlySpoken(ctx)) }
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("عرض التسميع مع إخفاء الآيات", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("إظهار الكلمات التي نُطقت فقط (بدون نقاط للكلمات المتبقية)", Modifier.weight(1f))
+                Switch(checked = only, onCheckedChange = { only = it; com.example.quranoffline.data.WordDisplayRules.setOnlySpoken(ctx, it) })
+            }
+            Text("الألوان كما هي: أخضر للكلمة الصحيحة، أحمر للكلمة الخاطئة أو الزائدة أو المتروكة (تظهر بنصها الصحيح)، أصفر لغير المؤكدة. عند الخطأ يُشغَّل صوت الكلمة الصحيحة كما في النسخ السابقة.", color = Color(0xFF66736C))
+        }
+    }
+}
