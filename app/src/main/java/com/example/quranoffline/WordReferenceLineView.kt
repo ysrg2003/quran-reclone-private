@@ -1,5 +1,6 @@
 package com.example.quranoffline
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -110,7 +111,7 @@ internal fun WordReferenceLineView(
         }
         "footer" -> Text(
             text = line.text,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth().then(if (onPlainTap != null && state.selectedAyahIndices.isEmpty()) Modifier.clickable { onPlainTap() } else Modifier).padding(top = 8.dp),
             fontFamily = WordReferenceFontFamily,
             fontSize = 11.sp,
             color = Color(0xFF8A806D),

@@ -15,6 +15,8 @@ data class KhatmaState(
     val reminderOn: Boolean = false,
     val reminderHour: Int = 20,
     val reminderMinute: Int = 0,
+    /** Time of the first ayah recorded in the current khatma (0 = not started). Used for the finish estimate. */
+    val startMillis: Long = 0L,
 ) {
     val coveredCount: Int get() = covered.cardinality()
     val todayCount: Int get() = today.cardinality()
@@ -24,7 +26,7 @@ data class KhatmaState(
 object KhatmaLogic {
     const val TOTAL = 6236
 
-    fun record(state: KhatmaState, indices: Collection<Int>, dayKey: String): KhatmaState {
+    fun record(state: KhatmaState, indices: Collection<Int>, dayKey: String, nowMillis: Long = 0L): KhatmaState {
         val valid = indices.filter { it in 0 until TOTAL }
         if (valid.isEmpty()) return state
         val today = if (state.dayKey == dayKey) state.today.clone() as BitSet else BitSet(TOTAL)
@@ -33,7 +35,22 @@ object KhatmaLogic {
         var completed = state.completed
         var out = covered
         if (covered.cardinality() >= TOTAL) { completed += 1; out = BitSet(TOTAL) }
-        return state.copy(covered = out, completed = completed, lastIndex = valid.last(), dayKey = dayKey, today = today)
+        val start = if (completed > state.completed) 0L else if (state.startMillis == 0L && nowMillis > 0L) nowMillis else state.startMillis
+        return state.copy(covered = out, completed = completed, lastIndex = valid.last(), dayKey = dayKey, today = today, startMillis = start)
+    }
+
+    /** remaining ayahs, pace so far (ayahs/day, calendar days since start, today counted), days to finish at that pace and at the daily target. */
+    data class Estimate(val remaining: Int, val pacePerDay: Double, val daysByPace: Int?, val daysByTarget: Int?)
+
+    fun estimate(s: KhatmaState, nowMillis: Long): Estimate {
+        val covered = s.coveredCount
+        val remaining = (TOTAL - covered).coerceAtLeast(0)
+        val dayMs = 24L * 60 * 60 * 1000
+        val days = if (s.startMillis <= 0L) 1L else ((nowMillis - s.startMillis) / dayMs + 1).coerceAtLeast(1L)
+        val pace = if (covered > 0 && s.startMillis > 0L) covered.toDouble() / days else 0.0
+        val byPace = if (pace > 0.0) Math.ceil(remaining / pace).toInt() else null
+        val byTarget = if (s.dailyTarget > 0) Math.ceil(remaining.toDouble() / s.dailyTarget).toInt() else null
+        return Estimate(remaining, pace, byPace, byTarget)
     }
 
     private const val HEX = "0123456789abcdef"
@@ -74,6 +91,7 @@ class LocalKhatmaStore(context: Context) {
             reminderOn = prefs.getBoolean("$k.remOn", false),
             reminderHour = prefs.getInt("$k.remH", 20),
             reminderMinute = prefs.getInt("$k.remM", 0),
+            startMillis = prefs.getLong("$k.start", 0L),
         )
     }
 
@@ -89,6 +107,7 @@ class LocalKhatmaStore(context: Context) {
             .putBoolean("$k.remOn", s.reminderOn)
             .putInt("$k.remH", s.reminderHour)
             .putInt("$k.remM", s.reminderMinute)
+            .putLong("$k.start", s.startMillis)
             .apply()
     }
 }

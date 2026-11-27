@@ -1748,7 +1748,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun recordKhatma(kind: SaveMarkKind, indices: List<Int>) {
         val before = khatmaOf(kind)
-        val after = KhatmaLogic.record(before, indices, KhatmaLogic.dayKey(System.currentTimeMillis()))
+        val after = KhatmaLogic.record(before, indices, KhatmaLogic.dayKey(System.currentTimeMillis()), System.currentTimeMillis())
         if (after.completed > before.completed) state.value = state.value.copy(notice = "ما شاء الله، اكتملت ختمة جديدة!")
         putKhatma(after)
     }
@@ -1780,7 +1780,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         startReaderIndices((lo..hi).toList(), "النطاق المخصص", repeat.coerceIn(1, 5))
     }
 
-    /** Text for copy/share of one ayah. */
+    private fun toArabicDigits(n: Int): String = n.toString().map { '٠' + (it - '0') }.joinToString("")
+
+    /** Text for copy/share: every ayah followed by its number in an ayah-end mark. */
     fun ayahShareText(surah: Int, ayah: Int): String? {
         val all = state.value.allAyahs
         val sel = state.value.selectedAyahIndices
@@ -1789,7 +1791,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         if (items.isEmpty()) return null
         val md = state.value.metadata
         fun nm(s: Int) = md?.sura(s)?.arabicName ?: s.toString()
-        val body = items.joinToString(" ") { "﴿${it.text}﴾" }
+        val body = items.joinToString(" ") { "${it.text} ﴿${toArabicDigits(it.ayah)}﴾" }
         val f = items.first(); val l = items.last()
         val ref = if (items.size == 1 || f.surah == l.surah && f.ayah == l.ayah) "[سورة ${nm(f.surah)}: ${f.ayah}]"
             else if (f.surah == l.surah) "[سورة ${nm(f.surah)}: ${f.ayah}-${l.ayah}]"

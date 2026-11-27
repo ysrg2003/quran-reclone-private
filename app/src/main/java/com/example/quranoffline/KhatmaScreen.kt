@@ -22,6 +22,8 @@ import com.example.quranoffline.data.KhatmaLogic
 import com.example.quranoffline.data.KhatmaState
 import com.example.quranoffline.data.QuranUiState
 import com.example.quranoffline.data.SaveMarkKind
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 
 @Composable
 fun KhatmaScreen(
@@ -48,7 +50,11 @@ private fun KhatmaCard(
     val suraName = last?.let { a -> state.metadata?.sura(a.surah)?.arabicName }
     val percent = k.coveredCount * 100f / KhatmaLogic.TOTAL
     var targetText by remember(k.dailyTarget) { mutableStateOf(if (k.dailyTarget > 0) k.dailyTarget.toString() else "") }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val ctx = LocalContext.current
+    var statusTick by remember { mutableIntStateOf(0) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { statusTick++ }
+    LaunchedEffect(k.reminderOn, k.reminderHour, k.reminderMinute) { if (k.reminderOn) KhatmaReminders.apply(ctx, k) }
+    val est = remember(k.coveredCount, k.startMillis, k.dailyTarget) { KhatmaLogic.estimate(k, System.currentTimeMillis()) }
     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
@@ -56,6 +62,12 @@ private fun KhatmaCard(
             LinearProgressIndicator(progress = { percent / 100f }, modifier = Modifier.fillMaxWidth())
             Text("${k.coveredCount} من ${KhatmaLogic.TOTAL} آية (${"%.1f".format(percent)}%)")
             Text(if (last != null) "وصلت إلى: سورة ${suraName ?: last.surah} • آية ${last.ayah}" else "لم تبدأ هذه الختمة بعد.")
+            fun dateAfter(days: Int): String = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("ar")).format(java.util.Date(System.currentTimeMillis() + days * 86_400_000L))
+            if (k.coveredCount > 0) {
+                Text("المتبقي: ${est.remaining} آية")
+                est.daysByPace?.let { Text("بوتيرتك الحالية (${"%.1f".format(est.pacePerDay)} آية/يوم) تنتهي بعد $it يوماً، في ${dateAfter(it)}") }
+                est.daysByTarget?.let { Text("بالهدف اليومي (${k.dailyTarget} آية) تنتهي بعد $it يوماً، في ${dateAfter(it)}") }
+            }
             OutlinedButton(onClick = { onOpen(k.kind) }, enabled = last != null, modifier = Modifier.fillMaxWidth()) { Text("افتح موضعي في الختمة") }
             HorizontalDivider()
             Text("الورد اليومي: اليوم ${k.todayCount}" + if (k.dailyTarget > 0) " من ${k.dailyTarget} آية" else " آية")
@@ -75,7 +87,13 @@ private fun KhatmaCard(
             if (k.reminderOn) {
                 PickerField("الساعة", "%02d".format(k.reminderHour), (0..23).map { "%02d".format(it) to it }, { onReminder(k.kind, true, it, k.reminderMinute) })
                 PickerField("الدقيقة", "%02d".format(k.reminderMinute), (0..55 step 5).map { "%02d".format(it) to it }, { onReminder(k.kind, true, k.reminderHour, it) })
-                Text("قد يتأخر التذكير بضع دقائق (توفيراً للبطارية).", style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C))
+                key(statusTick) { Text(KhatmaReminders.status(ctx, k), style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C)) }
+                OutlinedButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= 33 && !KhatmaReminders.notificationsAllowed(ctx)) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    val ok = KhatmaReminders.notify(ctx, k, test = true)
+                    Toast.makeText(ctx, if (ok) "أُرسل إشعار تجريبي" else "الإشعارات مغلقة. فعّلها من إعدادات التطبيق", Toast.LENGTH_LONG).show()
+                    statusTick++
+                }, modifier = Modifier.fillMaxWidth()) { Text("أرسل إشعاراً تجريبياً الآن") }
             }
         }
     }

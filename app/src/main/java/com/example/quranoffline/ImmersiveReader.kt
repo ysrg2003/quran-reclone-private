@@ -52,7 +52,7 @@ internal fun ImmersiveReader(
     val lastTouch = remember { floatArrayOf(0f, 0f) } // plain array: updating it never recomposes
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = LocalContext.current
-    BackHandler(onBack = onExit)
+    BackHandler { if (state.selectedAyahIndices.isNotEmpty()) viewModel.clearAyahSelection() else onExit() }
     val view = LocalView.current
     val activity = LocalContext.current as? Activity
     DisposableEffect(Unit) {
@@ -206,7 +206,7 @@ internal fun ImmersiveReader(
                             onClick = { viewModel.updateCorrectionSettings { it.copy(mushafTextScale = scale + 0.1f) } },
                         ) { Text("A+", color = Color.White, fontWeight = FontWeight.Bold) }
                     }
-                    Surface(color = Color.White, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) { ReciterPicker() }
+                    Surface(color = Color.White, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) { ReciterPicker(pageAyahs = state.ayahs.map { it.surah to it.ayah }) }
                 }
             }
             Surface(
@@ -217,19 +217,12 @@ internal fun ImmersiveReader(
                     if (state.notice.isNotBlank()) Text(state.notice, color = Color(0xFFD6EEE5), style = MaterialTheme.typography.labelMedium)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
                         IconButton(onClick = viewModel::nextPage, enabled = state.currentPage < state.totalPages) { Icon(Icons.Default.ChevronLeft, "الصفحة التالية", tint = Color.White) }
-                        if (state.selectedAyahIndices.isNotEmpty()) {
-                            TextButton(onClick = viewModel::playSelectedAyahs) { Text("تشغيل المحدد", color = Color.White) }
-                            TextButton(onClick = viewModel::clearAyahSelection) { Text("إلغاء التحديد", color = Color.White) }
-                        } else {
-                            IconButton(onClick = {
-                                if (state.readerPlaying) viewModel.stopReader()
-                                else {
-                                    val first = state.selectedAyahIndices.firstOrNull()?.let { state.allAyahs.getOrNull(it) } ?: state.ayahs.firstOrNull()
-                                    first?.let { listenAnchor = it.surah to it.ayah }
-                                }
-                            }) {
-                                Icon(if (state.readerPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (state.readerPlaying) "إيقاف القراءة" else "تشغيل القراءة", tint = Color.White)
-                            }
+                        IconButton(onClick = {
+                            if (state.readerPlaying) viewModel.stopReader()
+                            else if (state.selectedAyahIndices.isNotEmpty()) viewModel.playSelectedAyahs()
+                            else state.ayahs.firstOrNull()?.let { listenAnchor = it.surah to it.ayah }
+                        }) {
+                            Icon(if (state.readerPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (state.readerPlaying) "إيقاف القراءة" else "تشغيل القراءة", tint = Color.White)
                         }
                         IconButton(onClick = { if (state.listening) viewModel.stopListening() else onStartListening() }) {
                             Icon(if (state.listening) Icons.Default.Stop else Icons.Default.Mic, if (state.listening) "إيقاف التسميع" else "بدء التسميع", tint = Color.White)

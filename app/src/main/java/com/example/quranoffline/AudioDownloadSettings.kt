@@ -33,17 +33,32 @@ private fun mb(b: Long) = "%.1f ميغابايت".format(b / 1048576.0)
 
 /** Compact reciter dropdown, shared by Settings and the reader screen. Selection is remembered. */
 @Composable
-fun ReciterPicker(onChanged: () -> Unit = {}, dark: Boolean = false) {
+fun ReciterPicker(onChanged: () -> Unit = {}, dark: Boolean = false, pageAyahs: List<Pair<Int, Int>> = emptyList()) {
     val ctx = LocalContext.current
     var selected by remember { mutableStateOf(com.example.quranoffline.data.Reciters.run { ensureLoaded(ctx); currentId }) }
     var open by remember { mutableStateOf(false) }
+    val mgrP = remember { AudioDownloadManager.get(ctx) }
+    // Computed off the main thread, only while the menu is open: per reciter, downloaded ayahs / 6236 and whether this page is fully local.
+    val stats by produceState(emptyMap<Int, Pair<Int, Boolean>>(), open, pageAyahs) {
+        if (!open) return@produceState
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.example.quranoffline.data.Reciters.all.associate { r ->
+                val st = mgrP.store(r.id)
+                val pct = (st.countsBySurah().sum() * 100L / 6236).toInt()
+                r.id to (pct to (pageAyahs.isNotEmpty() && pageAyahs.all { (su, ay) -> st.localAyah(su, ay) != null }))
+            }
+        }
+    }
     Box {
         OutlinedButton(onClick = { open = true }, Modifier.fillMaxWidth()) {
             Text("القارئ: ${com.example.quranoffline.data.Reciters.byId(selected).label}", color = if (dark) Color.White else Color.Unspecified)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             com.example.quranoffline.data.Reciters.all.forEach { r ->
-                DropdownMenuItem(text = { Text(r.label) }, onClick = {
+                DropdownMenuItem(text = {
+                    val st = stats[r.id]
+                    Text(if (st == null) r.label else r.label + " • منزّل ${st.first}%" + if (pageAyahs.isNotEmpty()) (if (st.second) " • الصفحة منزّلة" else " • الصفحة غير منزّلة") else "")
+                }, onClick = {
                     com.example.quranoffline.data.Reciters.select(ctx, r.id); selected = r.id; open = false; onChanged()
                 })
             }
