@@ -28,7 +28,7 @@ import com.example.quranoffline.data.SearchOutcome
 import kotlinx.coroutines.delay
 
 @Composable
-private fun PickerField(label: String, valueText: String, options: List<Pair<String, Int>>, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
+internal fun PickerField(label: String, valueText: String, options: List<Pair<String, Int>>, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.width(56.dp))

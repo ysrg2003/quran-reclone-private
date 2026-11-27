@@ -262,7 +262,7 @@ private fun QuranOfflineApp(
                         }
                     },
                 ) {
-                    listOf("الحفظ والتسميع", "السور", "الأجزاء", "السجل", "القراءة", "الإعدادات").forEachIndexed { index, title ->
+                    listOf("الحفظ والتسميع", "السور", "الأجزاء", "السجل", "القراءة", "الإعدادات", "الختمات").forEachIndexed { index, title ->
                         Tab(
                             selected = tab == index,
                             onClick = { tab = index },
@@ -374,6 +374,13 @@ private fun QuranOfflineApp(
                 onUpdateCorrectionSettings = viewModel::updateCorrectionSettings,
                 onResetCorrectionSettings = viewModel::resetCorrectionSettings,
                 onShowLegalNotices = { showLegalNotices = true },
+                modifier = Modifier.padding(padding),
+            )
+            6 -> KhatmaScreen(
+                state = state,
+                onTarget = viewModel::setKhatmaTarget,
+                onReminder = viewModel::setKhatmaReminder,
+                onOpen = { kind -> viewModel.openKhatmaPosition(kind); tab = 4 },
                 modifier = Modifier.padding(padding),
             )
             }

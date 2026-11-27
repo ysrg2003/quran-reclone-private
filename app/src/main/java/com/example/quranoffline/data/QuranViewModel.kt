@@ -44,6 +44,8 @@ data class QuranUiState(
     val sessions: List<SessionSummary> = emptyList(),
     val correctedErrors: List<CorrectedRecitationError> = emptyList(),
     val saveMarks: List<SaveMark> = emptyList(),
+    val khatmaHifz: KhatmaState = KhatmaState(SaveMarkKind.HIFZ),
+    val khatmaRead: KhatmaState = KhatmaState(SaveMarkKind.READ),
     val errorLogEnabled: Boolean = true,
     val goal: DailyGoal = DailyGoal(targetAyahs = 3, completedAyahs = 0, day = ""),
     val checkpoint: MemorizationCheckpoint? = null,
@@ -105,6 +107,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val store = LocalSessionStore(application)
     private val correctedErrorStore = LocalRecitationErrorStore(application)
     private val saveMarkStore = LocalSaveMarkStore(application)
+    private val khatmaStore = LocalKhatmaStore(application)
+    private var lastHifzIndex = -1
     private val goalStore = LocalGoalStore(application)
     private val memorizationProgressStore = LocalMemorizationProgressStore(application)
     private val correctionSettingsStore = LocalCorrectionSettingsStore(application)
@@ -135,6 +139,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             sessions = store.list(),
             correctedErrors = correctedErrorStore.list(),
             saveMarks = saveMarkStore.list(),
+            khatmaHifz = khatmaStore.load(SaveMarkKind.HIFZ),
+            khatmaRead = khatmaStore.load(SaveMarkKind.READ),
             errorLogEnabled = correctedErrorStore.enabled,
             goal = goalStore.current(),
             checkpoint = memorizationProgressStore.read(),
@@ -386,7 +392,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     fun nextPage() {
         if (state.value.currentPage >= state.value.totalPages) return
         if (state.value.listening || state.value.correctionPlaying) stopListening() else stopReader()
+        val leaving = state.value.ayahs
         showPage(state.value.currentPage + 1)
+        // Turning forward one page counts the page just read toward the reading khatma.
+        val md = state.value.metadata
+        if (md != null && leaving.isNotEmpty()) recordKhatma(SaveMarkKind.READ, leaving.mapNotNull { md.ayah(it.surah, it.ayah)?.globalAyahIndex })
     }
 
     fun previousPage() {
@@ -663,6 +673,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startListening() {
+        lastHifzIndex = -1
         if (!state.value.assetsReady) { state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً."); return }
         if (state.value.allAyahs.isEmpty() || state.value.metadata == null) { state.value = state.value.copy(notice = "تعذر تجهيز ترتيب صفحات المصحف."); return }
         if (state.value.listening || state.value.correctionPlaying || state.value.readerPlaying) return
@@ -1495,6 +1506,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         memorizationProgressStore.save(checkpoint)
         state.value = state.value.copy(checkpoint = checkpoint)
         recordMark(SaveMarkKind.HIFZ, target.surah, target.ayah, pageForAyahIndex(ayahIndex), safeWordIndex)
+        // An ayah counts toward the tasmee khatma once the user has moved on past it (small forward steps only).
+        if (ayahIndex in all.indices) {
+            if (lastHifzIndex in 0 until ayahIndex && ayahIndex - lastHifzIndex <= 5) recordKhatma(SaveMarkKind.HIFZ, (lastHifzIndex until ayahIndex).toList())
+            lastHifzIndex = ayahIndex
+        }
     }
 
     fun saveCurrentSession() {
@@ -1653,6 +1669,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val ayah = parts.getOrNull(1)?.toIntOrNull() ?: return
         val idx = state.value.allAyahs.indexOfFirst { it.surah == surah && it.ayah == ayah }
         recordMark(SaveMarkKind.READ, surah, ayah, if (idx >= 0) pageForAyahIndex(idx) else state.value.currentPage, 0)
+        if (idx >= 0) recordKhatma(SaveMarkKind.READ, listOf(idx))
     }
 
     fun setErrorLogEnabled(on: Boolean) {
@@ -1707,5 +1724,35 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 else -> null
             }
         }
+    }
+
+    // ---- Khatmat (v19.2) ----
+    private fun khatmaOf(kind: SaveMarkKind) = if (kind == SaveMarkKind.HIFZ) state.value.khatmaHifz else state.value.khatmaRead
+
+    private fun putKhatma(k: KhatmaState) {
+        khatmaStore.save(k)
+        state.value = if (k.kind == SaveMarkKind.HIFZ) state.value.copy(khatmaHifz = k) else state.value.copy(khatmaRead = k)
+    }
+
+    private fun recordKhatma(kind: SaveMarkKind, indices: List<Int>) {
+        val before = khatmaOf(kind)
+        val after = KhatmaLogic.record(before, indices, KhatmaLogic.dayKey(System.currentTimeMillis()))
+        if (after.completed > before.completed) state.value = state.value.copy(notice = "ما شاء الله، اكتملت ختمة جديدة!")
+        putKhatma(after)
+    }
+
+    fun setKhatmaTarget(kind: SaveMarkKind, ayahsPerDay: Int) = putKhatma(khatmaOf(kind).copy(dailyTarget = ayahsPerDay.coerceIn(0, 6236)))
+
+    fun setKhatmaReminder(kind: SaveMarkKind, on: Boolean, hour: Int, minute: Int) {
+        val k = khatmaOf(kind).copy(reminderOn = on, reminderHour = hour.coerceIn(0, 23), reminderMinute = minute.coerceIn(0, 59))
+        putKhatma(k)
+        com.example.quranoffline.KhatmaReminders.apply(getApplication(), k)
+    }
+
+    /** Opens the page of the last ayah covered in this khatma. */
+    fun openKhatmaPosition(kind: SaveMarkKind) {
+        val idx = khatmaOf(kind).lastIndex
+        val a = state.value.allAyahs.getOrNull(idx) ?: run { state.value = state.value.copy(notice = "لا يوجد موضع محفوظ في هذه الختمة بعد."); return }
+        pageOfAyah(a.surah, a.ayah)?.let { jumpToPage(it) }
     }
 }
