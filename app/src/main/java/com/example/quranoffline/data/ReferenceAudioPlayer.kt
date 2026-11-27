@@ -248,7 +248,7 @@ class ReferenceAudioPlayer(private val context: Context) {
         val ticket=audioGeneration
         if(QuranComAudio.isReference(source)){
             // Optional offline pack: a complete private local file wins; otherwise stream as in v11.
-            localAyahFile(source)?.let{playResolvedDataSource(it.absolutePath,null,null,onFinished);return}
+            (localAyahFile(source)?:localWordFile(source))?.let{playResolvedDataSource(it.absolutePath,null,null,onFinished);return}
             audioTask=audioWorker.submit{
                 val resolved=runCatching{QuranComAudio.resolve(source)}
                 mainHandler.post{if(ticket==audioGeneration){resolved.onSuccess{url->
@@ -261,6 +261,13 @@ class ReferenceAudioPlayer(private val context: Context) {
         }
         playResolvedDataSource(source,assetPath,segment,onFinished)
     }
+
+    private fun localWordFile(source:String):java.io.File?=runCatching{
+        val u=java.net.URI(source);if(u.host!="word")return null
+        val p=u.path.trim('/').split('/')
+        val q=u.rawQuery.split("&").associate{val kv=it.split("=",limit=2);kv[0] to java.net.URLDecoder.decode(kv[1],"UTF-8")}
+        WordPackStore(context).localWord(p[0].toInt(),p[1].toInt(),p[2].toInt(),q.getValue("count").toInt(),QuranComAudio.normalized(q.getValue("text")))
+    }.getOrNull()
 
     private fun localAyahFile(source:String):java.io.File?=runCatching{
         val u=java.net.URI(source);if(u.host!="ayah")return null

@@ -15,3 +15,7 @@ Manual on device (UNTESTED by me, no device available):
 - Reciter picker (Settings download card and reader screen). Default stays reciter 6 (Husary murattal) = v11 source. Pick another and streaming/ downloaded files use it.
 - Downloads per reciter in separate private folders; reciter 6 folder unchanged from v12.
 - Manual: switch reciter in reader, play ayah (streams); download a surah for reciter 7, airplane mode, plays offline; switch back to 6, uses 6's files only.
+
+## v15 additions
+- Word audio per surah (private, with identity index), entire-Quran download (ayah audio for chosen reciter, or all words), confirmation with sizes and free space, pause/resume.
+- Manual: word tap plays local file when downloaded and streams otherwise; word audio with a mismatched count/text is never played locally; bulk pause then resume continues; low-space stops with message.

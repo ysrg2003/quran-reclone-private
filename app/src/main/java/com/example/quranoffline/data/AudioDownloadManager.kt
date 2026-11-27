@@ -114,7 +114,124 @@ class AudioDownloadManager private constructor(private val context: Context) {
     fun usedBytes(reciter: Int) = store(reciter).usedBytes()
     fun usedBytesAll() = AudioPackStore.usedBytesAll(context)
 
+
+    // ---------- word audio ----------
+    val wordStore = WordPackStore(context)
+    private val _wordJobs = MutableStateFlow<Map<Int, JobState>>(emptyMap())
+    val wordJobs: StateFlow<Map<Int, JobState>> = _wordJobs
+    private val wordCancel = ConcurrentHashMap<Int, Boolean>()
+    private val wordPool = Executors.newFixedThreadPool(1)
+    private val wordMeasuring = ConcurrentHashMap<Int, Boolean>()
+    private fun setWord(s: Int, st: JobState) { _wordJobs.value = _wordJobs.value + (s to st) }
+    private fun wordHttp() = AudioDownloader(AudioPackStore(context), Reciters.DEFAULT_ID, ::networkAllowed)
+    private fun wordDl() = WordDownloader(wordStore, ::networkAllowed, wordHttp())
+
+    /** Measured bytes of a surah's word files, or null. */
+    fun wordSurahSize(s: Int): Long? = sizes.getLong("w_$s", -1L).takeIf { it >= 0 }
+    fun wordMeasured() = (1..114).count { wordSurahSize(it) != null }
+    fun wordMeasuredBytes() = (1..114).sumOf { wordSurahSize(it) ?: 0L }
+    /** Real total when every surah is measured; otherwise an estimate (measured average, or 57 KB/word from one sample). */
+    fun wordTotal(): Pair<Long, Boolean> {
+        if (wordMeasured() == 114) return wordMeasuredBytes() to true
+        return (TOTAL_WORDS * 57_000L) to false
+    }
+
+    fun startWords(surah: Int) {
+        if (_wordJobs.value[surah]?.running == true) return
+        wordStore.ensureDir()
+        val need = (wordSurahSize(surah) ?: 8_000_000L) - wordStore.surahBytes(surah)
+        if (context.filesDir.usableSpace < need + 50L * 1024 * 1024) { setWord(surah, JobState(message = "المساحة غير كافية")); return }
+        wordCancel[surah] = false
+        setWord(surah, JobState(true, wordStore.surahCount(surah), 0, "جارٍ التنزيل"))
+        wordPool.execute { runWordSurah(surah); _revision.value++ }
+    }
+
+    private fun runWordSurah(surah: Int): AudioDownloader.Result {
+        val r = try { wordDl().downloadSurah(surah, { wordCancel[surah] == true }) { d, t -> setWord(surah, JobState(true, d, t, "جارٍ التنزيل")) } }
+        catch (e: Throwable) { AudioDownloader.Result.Failed("خطأ غير متوقع: ${e.message ?: e.javaClass.simpleName}") }
+        val msg = when (r) {
+            is AudioDownloader.Result.Done -> "اكتمل التنزيل"
+            is AudioDownloader.Result.Cancelled -> "موقوف مؤقتًا، يمكن المتابعة"
+            is AudioDownloader.Result.Failed -> r.reason
+        }
+        if (r is AudioDownloader.Result.Done) sizes.edit().putLong("w_$surah", wordStore.surahBytes(surah)).apply()
+        setWord(surah, JobState(false, wordStore.surahCount(surah), 0, msg))
+        return r
+    }
+    fun pauseWords(surah: Int) { wordCancel[surah] = true }
+    fun deleteWords(surah: Int) { wordCancel[surah] = true; wordStore.deleteSurah(surah); sizes.edit().remove("w_$surah").apply(); setWord(surah, JobState()); _revision.value++ }
+    fun deleteAllWords() { _wordJobs.value.keys.forEach { wordCancel[it] = true }; wordStore.deleteAll(); _wordJobs.value = emptyMap(); (1..114).forEach { sizes.edit().remove("w_$it").apply() }; _revision.value++ }
+
+    /** Lazy HEAD measurement of one surah's word files. */
+    fun measureWords(surahs: List<Int>) {
+        for (s in surahs) {
+            if (wordSurahSize(s) != null || wordMeasuring.putIfAbsent(s, true) != null) continue
+            measurePool.execute {
+                try {
+                    val dl = wordDl(); val http = wordHttp()
+                    var sum = 0L; var ok = true
+                    for (e in dl.wordUrls(s)) { val l = http.contentLength(e.url); if (l == null) { ok = false; break }; sum += l }
+                    if (ok) sizes.edit().putLong("w_$s", sum).apply()
+                } catch (e: Throwable) { } finally { wordMeasuring.remove(s); _revision.value++ }
+            }
+        }
+    }
+
+    // ---------- download the entire Quran ----------
+    enum class BulkKind { AYAH, WORDS }
+    data class BulkState(val kind: BulkKind? = null, val running: Boolean = false, val surah: Int = 0, val doneSurahs: Int = 0, val message: String = "")
+    private val _bulk = MutableStateFlow(BulkState())
+    val bulk: StateFlow<BulkState> = _bulk
+    @Volatile private var bulkCancel = false
+    private val bulkPool = Executors.newFixedThreadPool(1)
+
+    fun freeBytes() = context.filesDir.usableSpace
+
+    fun startBulk(kind: BulkKind, reciter: Int, ayahCounts: List<Int>) {
+        if (_bulk.value.running) return
+        bulkCancel = false
+        _bulk.value = BulkState(kind, true, 0, 0, "بدأ التنزيل")
+        bulkPool.execute {
+            try {
+                var done = 0
+                for (s in 1..114) {
+                    if (bulkCancel) { _bulk.value = BulkState(kind, false, s, done, "موقوف مؤقتًا، يمكن المتابعة"); return@execute }
+                    val have = if (kind == BulkKind.AYAH) store(reciter).surahCount(s) == ayahCounts[s - 1] else wordSurahSize(s) != null
+                    if (have) { done++; continue }
+                    val need = if (kind == BulkKind.AYAH) (surahSize(reciter, s) ?: ayahCounts[s - 1] * 250_000L) else (wordSurahSize(s) ?: 8_000_000L)
+                    if (freeBytes() < need + 100L * 1024 * 1024) { _bulk.value = BulkState(kind, false, s, done, "توقف: المساحة غير كافية عند السورة $s"); return@execute }
+                    _bulk.value = BulkState(kind, true, s, done, "جارٍ تنزيل السورة $s")
+                    val r = if (kind == BulkKind.AYAH) {
+                        val k = key(reciter, s); cancel[k] = false
+                        set(k, JobState(true, 0, ayahCounts[s - 1], "جارٍ التنزيل"))
+                        val res = try { AudioDownloader(store(reciter), reciter, ::networkAllowed).downloadSurah(s, ayahCounts[s - 1], { bulkCancel || cancel[k] == true }) { d, t -> set(k, JobState(true, d, t, "جارٍ التنزيل")) } }
+                            catch (e: Throwable) { AudioDownloader.Result.Failed("خطأ: ${e.message ?: e.javaClass.simpleName}") }
+                        set(k, JobState(false, store(reciter).surahCount(s), ayahCounts[s - 1], if (res is AudioDownloader.Result.Done) "اكتمل التنزيل" else "")); res
+                    } else { wordCancel[s] = false; val rr = runWordSurahBulk(s); rr }
+                    when (r) {
+                        is AudioDownloader.Result.Done -> done++
+                        is AudioDownloader.Result.Cancelled -> { _bulk.value = BulkState(kind, false, s, done, "موقوف مؤقتًا، يمكن المتابعة"); _revision.value++; return@execute }
+                        is AudioDownloader.Result.Failed -> { _bulk.value = BulkState(kind, false, s, done, "توقف عند السورة $s: ${r.reason}"); _revision.value++; return@execute }
+                    }
+                    _revision.value++
+                }
+                _bulk.value = BulkState(kind, false, 114, done, "اكتمل تنزيل القرآن كاملاً")
+            } catch (e: Throwable) {
+                _bulk.value = BulkState(kind, false, 0, 0, "خطأ غير متوقع: ${e.message ?: e.javaClass.simpleName}")
+            } finally { _revision.value++ }
+        }
+    }
+    private fun runWordSurahBulk(s: Int): AudioDownloader.Result {
+        val r = try { wordDl().downloadSurah(s, { bulkCancel || wordCancel[s] == true }) { d, t -> setWord(s, JobState(true, d, t, "جارٍ التنزيل")) } }
+        catch (e: Throwable) { AudioDownloader.Result.Failed("خطأ: ${e.message ?: e.javaClass.simpleName}") }
+        if (r is AudioDownloader.Result.Done) sizes.edit().putLong("w_$s", wordStore.surahBytes(s)).apply()
+        setWord(s, JobState(false, wordStore.surahCount(s), 0, if (r is AudioDownloader.Result.Done) "اكتمل التنزيل" else ""))
+        return r
+    }
+    fun pauseBulk() { bulkCancel = true }
+
     companion object {
+        const val TOTAL_WORDS = 77_430L
         @Volatile private var inst: AudioDownloadManager? = null
         fun get(context: Context) = inst ?: synchronized(this) { inst ?: AudioDownloadManager(context.applicationContext).also { inst = it } }
     }

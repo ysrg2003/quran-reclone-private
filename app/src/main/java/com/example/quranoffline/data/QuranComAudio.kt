@@ -10,7 +10,7 @@ object QuranComAudio {
  const val API="https://api.quran.com/api/v4"
  fun ayah(surah:Int,ayah:Int):String {require(surah in 1..114&&ayah>0);return "quranapi://ayah/$surah/$ayah"}
  fun word(surah:Int,ayah:Int,index:Int,text:String,count:Int):String {require(index>=0);return "quranapi://word/$surah/$ayah/${index+1}?count=$count&text="+java.net.URLEncoder.encode(text,"UTF-8")}
- internal fun normalized(text:String)=java.text.Normalizer.normalize(text,java.text.Normalizer.Form.NFKD).replace(Regex("[\\p{M}ـ]"),"").replace('ٱ','ا').replace('أ','ا').replace('إ','ا').replace('آ','ا')
+ fun normalized(text:String)=java.text.Normalizer.normalize(text,java.text.Normalizer.Form.NFKD).replace(Regex("[\\p{M}ـ]"),"").replace('ٱ','ا').replace('أ','ا').replace('إ','ا').replace('آ','ا')
  fun isReference(source:String)=source.startsWith("quranapi://")
  private fun read(path:String):JSONObject {
   val c=URI(API+path).toURL().openConnection()as HttpURLConnection

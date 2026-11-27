@@ -137,3 +137,94 @@ fun RecognitionEngineSettingsCard() {
         }
     }
 }
+
+/** Per-surah word audio (optional). Word audio otherwise streams as in v11. */
+@Composable
+fun WordAudioSettingsCard(suras: List<QuranSuraMetadata>) {
+    val ctx = LocalContext.current
+    val mgr = remember { AudioDownloadManager.get(ctx) }
+    val jobs by mgr.wordJobs.collectAsState()
+    val rev by mgr.revision.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val used = remember(rev, jobs) { mgr.wordStore.usedBytes() }
+    val (total, exact) = remember(rev) { mgr.wordTotal() }
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("صوت الكلمات (اختياري)", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+            Text("ملفات صوت كل كلمة من Quran.com، تُحفظ في تخزين التطبيق الخاص فقط. بدون تنزيل يبقى صوت الكلمة عبر الإنترنت كما كان. لا يُستخدم الملف المحلي إلا إذا طابقت الكلمة وعددها بيانات Quran.com.", color = Color(0xFF66736C))
+            Text("الحجم الكلي: ${mb(total)} ${if (exact) "(مقاس فعليًا)" else "(تقدير من عيّنة واحدة، ليس قياسًا فعليًا)"}. المنزّل الآن: ${mb(used)}.")
+            OutlinedButton(onClick = { mgr.measureWords(suras.map { it.index }) }, Modifier.fillMaxWidth()) { Text("قياس الأحجام الفعلية في الخلفية (${mgr.wordMeasured()}/114)") }
+            OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(if (expanded) "إخفاء قائمة السور" else "اختيار السور لتنزيل صوت الكلمات") }
+            if (expanded) suras.forEach { s ->
+                val job = jobs[s.index] ?: AudioDownloadManager.JobState()
+                val have = remember(rev, jobs) { mgr.wordStore.surahCount(s.index) }
+                val size = mgr.wordSurahSize(s.index)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("${s.index}. ${s.arabicName}  (${size?.let { mb(it) } ?: "حجم غير مقاس"})", fontWeight = FontWeight.SemiBold)
+                    Text(if (job.running) "$have كلمة${if (job.total > 0) " من ${job.total}" else ""}، ${job.message}" else if (have > 0) "$have كلمة منزّلة. ${job.message}" else job.message.ifBlank { "غير منزّلة" }, color = Color(0xFF66736C))
+                    if (job.running && job.total > 0) LinearProgressIndicator(progress = { job.done.toFloat() / job.total }, Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (job.running) OutlinedButton(onClick = { mgr.pauseWords(s.index) }) { Text("إيقاف مؤقت") }
+                        else OutlinedButton(onClick = { mgr.startWords(s.index) }) { Text(if (have > 0) "متابعة / تحديث" else "تنزيل") }
+                        if (have > 0 && !job.running) OutlinedButton(onClick = { mgr.deleteWords(s.index) }) { Text("حذف") }
+                    }
+                }
+            }
+            if (used > 0) OutlinedButton(onClick = { confirmDelete = true }, Modifier.fillMaxWidth()) { Text("حذف كل صوت الكلمات") }
+            Text("الصوت: Quran.com / Quran Foundation.", color = Color(0xFF66736C))
+        }
+    }
+    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false },
+        title = { Text("حذف كل صوت الكلمات؟") }, text = { Text("سيعود صوت الكلمة إلى البث من الإنترنت.") },
+        confirmButton = { TextButton(onClick = { mgr.deleteAllWords(); confirmDelete = false }) { Text("حذف") } },
+        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("إلغاء") } })
+}
+
+/** Download the entire Quran: all ayah audio for the chosen reciter, or all word audio. Confirmation, sizes, pause/resume. */
+@Composable
+fun BulkDownloadCard(suras: List<QuranSuraMetadata>) {
+    val ctx = LocalContext.current
+    val mgr = remember { AudioDownloadManager.get(ctx) }
+    val bulk by mgr.bulk.collectAsState()
+    val rev by mgr.revision.collectAsState()
+    var pending by remember { mutableStateOf<AudioDownloadManager.BulkKind?>(null) }
+    val reciter = com.example.quranoffline.data.Reciters.run { ensureLoaded(ctx); byId(currentId) }
+    val counts = suras.map { it.ayahCount }
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("تنزيل القرآن كاملاً", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+            Text("يمكن إيقاف التنزيل ومتابعته لاحقًا؛ ما اكتمل من الملفات يبقى. التنزيل يعمل أثناء فتح التطبيق، وإن أغلقه النظام فيُتابع من حيث توقف عند الضغط على المتابعة.", color = Color(0xFF66736C))
+            if (bulk.running) {
+                Text("${bulk.message} (اكتملت ${bulk.doneSurahs} من 114 سورة)")
+                LinearProgressIndicator(progress = { bulk.doneSurahs / 114f }, Modifier.fillMaxWidth())
+                OutlinedButton(onClick = { mgr.pauseBulk() }, Modifier.fillMaxWidth()) { Text("إيقاف مؤقت") }
+            } else {
+                if (bulk.message.isNotBlank()) Text(bulk.message, color = Color(0xFF66736C))
+                Button(onClick = { pending = AudioDownloadManager.BulkKind.AYAH }, Modifier.fillMaxWidth()) { Text("تنزيل كل الآيات للقارئ: ${reciter.label}") }
+                Button(onClick = { pending = AudioDownloadManager.BulkKind.WORDS }, Modifier.fillMaxWidth()) { Text("تنزيل صوت كل الكلمات") }
+            }
+        }
+    }
+    pending?.let { kind ->
+        val free = mgr.freeBytes()
+        val (total, exact, have) = if (kind == AudioDownloadManager.BulkKind.AYAH)
+            Triple(mgr.totalSize(reciter.id), true, mgr.usedBytes(reciter.id))
+        else mgr.wordTotal().let { Triple(it.first as Long?, it.second, mgr.wordStore.usedBytes()) }
+        val remaining = total?.let { (it - have).coerceAtLeast(0) }
+        val enough = remaining != null && free >= remaining + 100L * 1024 * 1024
+        AlertDialog(onDismissRequest = { pending = null },
+            title = { Text(if (kind == AudioDownloadManager.BulkKind.AYAH) "تنزيل كل الآيات؟" else "تنزيل صوت كل الكلمات؟") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(if (total == null) "الحجم الكلي غير مقاس بعد لهذا القارئ. اضغط «قياس الأحجام» في إعدادات القارئ أولاً." else "الحجم الكلي: ${mb(total)} ${if (exact) "(مقاس فعليًا)" else "(تقدير وليس قياسًا فعليًا)"}")
+                    if (remaining != null) Text("المتبقي للتنزيل: ${mb(remaining)}")
+                    Text("المساحة الحرة على الجهاز: ${mb(free)}")
+                    if (remaining != null && !enough) Text("المساحة غير كافية (يلزم المتبقي + 100 ميغابايت احتياطي).", color = Color(0xFF9A3B3B))
+                    if (!mgr.networkAllowed()) Text("الشبكة غير متاحة أو الوضع Wi-Fi فقط مفعّل ولست على Wi-Fi.", color = Color(0xFF9A3B3B))
+                }
+            },
+            confirmButton = { TextButton(enabled = enough && mgr.networkAllowed(), onClick = { mgr.startBulk(kind, reciter.id, counts); pending = null }) { Text("ابدأ التنزيل") } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("إلغاء") } })
+    }
+}
