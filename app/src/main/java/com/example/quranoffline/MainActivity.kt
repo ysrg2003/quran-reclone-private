@@ -318,6 +318,8 @@ private fun QuranOfflineApp(
                 onClearErrors = viewModel::clearCorrectedErrors,
                 onExport = onExportBackup,
                 onOpenSession = { id -> viewModel.openSession(id); tab = 4 },
+                onOpenMark = { id -> viewModel.openSaveMark(id); tab = 4 },
+                onErrorLogToggle = viewModel::setErrorLogEnabled,
                 modifier = Modifier.padding(padding),
             )
             4 -> ReaderScreen(
@@ -1428,6 +1430,8 @@ private fun HistoryScreen(
     onClearErrors: () -> Unit,
     onExport: () -> Unit,
     onOpenSession: (String) -> Unit,
+    onOpenMark: (String) -> Unit = {},
+    onErrorLogToggle: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(Color(0xFFF7F8F4)).padding(16.dp)) {
@@ -1442,7 +1446,15 @@ private fun HistoryScreen(
                 IconButton(onClick = onClear) { Icon(Icons.Default.Refresh, contentDescription = "حذف السجل") }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        SaveMarksCard("علامات الحفظ والتسميع", com.example.quranoffline.data.SaveMarkLogic.forKind(state.saveMarks, com.example.quranoffline.data.SaveMarkKind.HIFZ), onOpenMark)
+        Spacer(Modifier.height(8.dp))
+        SaveMarksCard("علامات القراءة والاستماع", com.example.quranoffline.data.SaveMarkLogic.forKind(state.saveMarks, com.example.quranoffline.data.SaveMarkKind.READ), onOpenMark)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("تسجيل أخطاء التسميع", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+            Switch(checked = state.errorLogEnabled, onCheckedChange = onErrorLogToggle)
+        }
+        Spacer(Modifier.height(8.dp))
         if (state.correctedErrors.isNotEmpty()) {
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E8))) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2205,6 +2217,22 @@ internal fun MuqattaatOpeningCard(
                 val label = if (w == 0) "التسميع من الآية $a (بعد الحروف المقطعة)" else "التسميع من بعد الحروف المقطعة (الآية $a، الكلمة ${w + 1})"
                 Button(onClick = { onAfterOpening(s, a, w) }, modifier = Modifier.fillMaxWidth()) { Text(label) }
                 OutlinedButton(onClick = { onFromBeginning(s, 1) }, modifier = Modifier.fillMaxWidth()) { Text("من بداية السورة") }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun SaveMarksCard(title: String, marks: List<com.example.quranoffline.data.SaveMark>, onOpen: (String) -> Unit) {
+    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, fontWeight = FontWeight.Bold)
+            if (marks.isEmpty()) Text("لا توجد علامات بعد؛ تُحفظ تلقائياً.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+            marks.forEach { m ->
+                OutlinedButton(onClick = { onOpen(m.id) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("السورة ${m.surah} • الآية ${m.ayah} • ص ${m.page} • ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(m.updatedAt))}", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

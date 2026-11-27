@@ -101,6 +101,11 @@ class LocalRecitationErrorStore(context: Context) {
         preferences.edit().remove(key).apply()
     }
 
+    /** User switch: when off, no new mistakes are logged (existing entries stay until cleared). Default on. */
+    var enabled: Boolean
+        get() = preferences.getBoolean("enabled", true)
+        set(value) { preferences.edit().putBoolean("enabled", value).apply() }
+
     companion object {
         fun newId(): String = UUID.randomUUID().toString()
     }

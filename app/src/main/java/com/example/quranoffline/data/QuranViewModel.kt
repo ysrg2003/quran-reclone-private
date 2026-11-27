@@ -43,6 +43,8 @@ data class QuranUiState(
     val notice: String = "جاري تحميل النص والتوقيتات من مستودع الأصول…",
     val sessions: List<SessionSummary> = emptyList(),
     val correctedErrors: List<CorrectedRecitationError> = emptyList(),
+    val saveMarks: List<SaveMark> = emptyList(),
+    val errorLogEnabled: Boolean = true,
     val goal: DailyGoal = DailyGoal(targetAyahs = 3, completedAyahs = 0, day = ""),
     val checkpoint: MemorizationCheckpoint? = null,
     val currentWordIndex: Int = -1,
@@ -102,6 +104,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private var repository = QuranRepository(application)
     private val store = LocalSessionStore(application)
     private val correctedErrorStore = LocalRecitationErrorStore(application)
+    private val saveMarkStore = LocalSaveMarkStore(application)
     private val goalStore = LocalGoalStore(application)
     private val memorizationProgressStore = LocalMemorizationProgressStore(application)
     private val correctionSettingsStore = LocalCorrectionSettingsStore(application)
@@ -131,6 +134,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         QuranUiState(
             sessions = store.list(),
             correctedErrors = correctedErrorStore.list(),
+            saveMarks = saveMarkStore.list(),
+            errorLogEnabled = correctedErrorStore.enabled,
             goal = goalStore.current(),
             checkpoint = memorizationProgressStore.read(),
             correctionSettings = correctionSettingsStore.current(),
@@ -396,6 +401,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         if (target == state.value.currentPage) return
         if (state.value.listening || state.value.correctionPlaying) stopListening() else stopReader()
         showPage(target)
+        state.value.ayahs.firstOrNull()?.let { recordMark(SaveMarkKind.READ, it.surah, it.ayah, target, 0) }
     }
 
     private fun showPage(pageNumber: Int, notice: String? = null) {
@@ -535,7 +541,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 ),
             ),
             pauseBetweenMs = 0,
-            onItemStarted = { itemKey -> if (generation == readerGeneration) state.value = state.value.copy(readerCurrentKey = itemKey) },
+            onItemStarted = { itemKey -> if (generation == readerGeneration) { state.value = state.value.copy(readerCurrentKey = itemKey) } },
             onFinished = { if (generation == readerGeneration) state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "اكتملت البِسملة الافتتاحية؛ ابدأ الآن بالآية الأولى.") },
         )
     }
@@ -578,7 +584,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         state.value = state.value.copy(readerPlaying = true, readerScope = ReaderScope.AYAH, readerCurrentKey = items.first().key, notice = "تُقرأ $label…")
         referenceAudioPlayer.playQueue(
             items = items,
-            onItemStarted = { key -> if (generation == readerGeneration) state.value = state.value.copy(readerCurrentKey = key) },
+            onItemStarted = { key -> if (generation == readerGeneration) { state.value = state.value.copy(readerCurrentKey = key); recordReadFromKey(key) } },
             onFinished = { if (generation == readerGeneration) state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "اكتملت قراءة $label.") },
         )
     }
@@ -617,7 +623,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         state.value = state.value.copy(readerPlaying = true, readerScope = scope, readerCurrentKey = items.first().key, notice = "تُقرأ ${readerScopeLabel(scope)}…")
         referenceAudioPlayer.playQueue(
             items = items,
-            onItemStarted = { key -> if (generation == readerGeneration) state.value = state.value.copy(readerCurrentKey = key) },
+            onItemStarted = { key -> if (generation == readerGeneration) { state.value = state.value.copy(readerCurrentKey = key); recordReadFromKey(key) } },
             onFinished = { if (generation == readerGeneration) state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "اكتملت قراءة ${readerScopeLabel(scope)}.") },
         )
     }
@@ -870,7 +876,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     val basmalaCorrection = basmalaProgress.correction
                     val basmalaCompleted = basmalaProgress.evaluation.words.isNotEmpty() &&
                         basmalaProgress.evaluation.words.all { it.status == WordStatus.MATCHED }
-                    if (basmalaProgress.correctedErrors.isNotEmpty()) correctedErrorStore.appendAll(basmalaProgress.correctedErrors)
+                    if (basmalaProgress.correctedErrors.isNotEmpty() && correctedErrorStore.enabled) correctedErrorStore.appendAll(basmalaProgress.correctedErrors)
                     val correctedErrors = if (basmalaProgress.correctedErrors.isNotEmpty()) correctedErrorStore.list() else previousState.correctedErrors
                     state.value = previousState.copy(
                         rawTranscript = rawSpeechTextForDisplay(update),
@@ -955,7 +961,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     return
                 }
                 val correction = result.correction
-                if (result.correctedErrors.isNotEmpty()) correctedErrorStore.appendAll(result.correctedErrors)
+                if (result.correctedErrors.isNotEmpty() && correctedErrorStore.enabled) correctedErrorStore.appendAll(result.correctedErrors)
                 val correctedErrors = if (result.correctedErrors.isNotEmpty()) correctedErrorStore.list() else previousState.correctedErrors
                                     val currentTarget = correction?.let { tracker.globalWordIndex(it.ayahIndex, it.localWordIndex) }
                         ?: result.currentGlobalWordIndex.takeIf { it < previousState.totalWordCount }
@@ -1488,6 +1494,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         )
         memorizationProgressStore.save(checkpoint)
         state.value = state.value.copy(checkpoint = checkpoint)
+        recordMark(SaveMarkKind.HIFZ, target.surah, target.ayah, pageForAyahIndex(ayahIndex), safeWordIndex)
     }
 
     fun saveCurrentSession() {
@@ -1631,5 +1638,37 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private fun pageForAyahIndex(index: Int): Int {
         val metadata = state.value.metadata ?: return state.value.currentPage
         return QuranPageLayout.pageForAyahIndex(state.value.allAyahs, metadata, index, state.value.currentPage)
+    }
+
+    // ---- Save-marks (v19): tasmee/hifz and reading/listening are kept apart, last 3 each. ----
+    private fun recordMark(kind: SaveMarkKind, surah: Int, ayah: Int, page: Int, wordIndex: Int) {
+        val updated = SaveMarkLogic.upsert(state.value.saveMarks, kind, surah, ayah, page, wordIndex, System.currentTimeMillis(), java.util.UUID.randomUUID().toString())
+        saveMarkStore.save(updated)
+        state.value = state.value.copy(saveMarks = updated)
+    }
+
+    private fun recordReadFromKey(key: String) {
+        val parts = key.split(':')
+        val surah = parts.getOrNull(0)?.toIntOrNull() ?: return
+        val ayah = parts.getOrNull(1)?.toIntOrNull() ?: return
+        val idx = state.value.allAyahs.indexOfFirst { it.surah == surah && it.ayah == ayah }
+        recordMark(SaveMarkKind.READ, surah, ayah, if (idx >= 0) pageForAyahIndex(idx) else state.value.currentPage, 0)
+    }
+
+    fun setErrorLogEnabled(on: Boolean) {
+        correctedErrorStore.enabled = on
+        state.value = state.value.copy(errorLogEnabled = on, notice = if (on) "تم تفعيل سجل الأخطاء." else "تم إيقاف سجل الأخطاء؛ لن تُسجَّل أخطاء جديدة.")
+    }
+
+    fun openSaveMark(id: String) {
+        val mark = state.value.saveMarks.firstOrNull { it.id == id } ?: return
+        if (mark.kind == SaveMarkKind.HIFZ) {
+            val checkpoint = MemorizationCheckpoint(mark.surah, mark.ayah, mark.wordIndex, state.value.checkpoint?.includeOpeningBasmala ?: false, System.currentTimeMillis())
+                .validatedAgainst(state.value.allAyahs)
+            if (checkpoint == null) { state.value = state.value.copy(notice = "تعذر فتح العلامة؛ الموضع غير موجود في النص المحمّل."); return }
+            memorizationProgressStore.save(checkpoint)
+            state.value = state.value.copy(checkpoint = checkpoint)
+        }
+        showPage(mark.page.takeIf { it > 0 } ?: state.value.currentPage, notice = "فُتحت العلامة المحفوظة.")
     }
 }
