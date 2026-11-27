@@ -96,3 +96,9 @@ Manual on device (UNTESTED by me, no device available):
 - 199 tests pass (SelectionRange, ayahSegments tests added), 4 skipped. Same release key. Device untested: touch hit-testing, circle position, justified stretch and the range sheet were never seen on a screen.
 - Tap selects the ayah under the finger via text-offset segments split at ayah-end markers. Base (long-pressed) ayah stays; tap before it moves the start side, after it moves the end side, on it collapses.
 - Tasmee hides only selected ayahs when a selection exists. Mic with selection starts at its first ayah and stops after the last; mic without selection opens a range sheet (from current position).
+
+## v21.1 (0e8f6d7, tag apk-v21.1)
+- Same release key. Device untested.
+- Root cause of line-wide selection: the bundled line data lists only some ayahs per line (an ayah starting mid-line is missing from ayahKeys). Segments now come from end markers.
+- New res/raw/khatma_duff.wav (synthesized in-house), channel khatma_reminders_v3. Repeat up to 3 times while wird not done. Wird units ayahs/pages/surahs (pages and surahs approximate).
+- Hide ayahs: with a selection on another page the old rule hid nothing; now hides the whole page unless a selected ayah is on it.
