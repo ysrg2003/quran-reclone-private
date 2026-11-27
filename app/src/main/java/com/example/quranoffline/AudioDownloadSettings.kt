@@ -9,6 +9,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.example.quranoffline.data.AudioDownloadManager
 import com.example.quranoffline.data.AudioPackSizes
 import com.example.quranoffline.data.QuranSuraMetadata
@@ -242,6 +244,42 @@ fun HiddenViewSettingsCard() {
                 Switch(checked = only, onCheckedChange = { only = it; com.example.quranoffline.data.WordDisplayRules.setOnlySpoken(ctx, it) })
             }
             Text("الألوان كما هي: أخضر للكلمة الصحيحة، أحمر للكلمة الخاطئة أو الزائدة أو المتروكة (تظهر بنصها الصحيح)، أصفر لغير المؤكدة. عند الخطأ يُشغَّل صوت الكلمة الصحيحة كما في النسخ السابقة.", color = Color(0xFF66736C))
+        }
+    }
+}
+
+/** Optional: use quran.com's page and line breaks. Downloaded on request into private storage; restart applies it. */
+@Composable
+fun QuranComLayoutSettingsCard() {
+    val ctx = LocalContext.current
+    var installed by remember { mutableStateOf(com.example.quranoffline.data.QuranComLayoutStore.isInstalled(ctx)) }
+    var progress by remember { mutableStateOf(-1) }
+    var message by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("ترتيب المصحف (صفحات وأسطر Quran.com)", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+            Text("يُنزَّل ترتيب الصفحات والأسطر فقط من Quran.com (604 صفحة، نحو 8 ميغابايت من الإنترنت)، ويبقى نص الآيات هو نص التطبيق نفسه. يُحفظ داخل التطبيق ويُطبَّق بعد إعادة تشغيل التطبيق. المصدر: Quran.com / Quran Foundation.", color = Color(0xFF66736C))
+            Text(if (installed) "الحالة: ترتيب Quran.com مُثبّت." else "الحالة: يُستخدم الترتيب المضمَّن (ملف Word).", fontWeight = FontWeight.Bold)
+            if (progress in 0..603) Text("جارٍ التنزيل: ${progress} / 604")
+            if (message.isNotEmpty()) Text(message)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(enabled = progress < 0, onClick = {
+                    progress = 0; message = ""
+                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val r = com.example.quranoffline.data.QuranComLayoutStore.downloadAndInstall(ctx) { progress = it }
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            progress = -1
+                            installed = com.example.quranoffline.data.QuranComLayoutStore.isInstalled(ctx)
+                            message = if (r.isSuccess) "تم. أعد تشغيل التطبيق لتطبيق الترتيب الجديد." else "تعذر التنزيل: ${r.exceptionOrNull()?.message ?: "خطأ"}. لم يتغير شيء."
+                        }
+                    }
+                }) { Text(if (installed) "إعادة التنزيل" else "تنزيل وتطبيق") }
+                if (installed) OutlinedButton(enabled = progress < 0, onClick = {
+                    com.example.quranoffline.data.QuranComLayoutStore.remove(ctx); installed = false
+                    message = "حُذف. أعد تشغيل التطبيق للرجوع إلى الترتيب المضمَّن."
+                }) { Text("الرجوع إلى ترتيب Word") }
+            }
         }
     }
 }

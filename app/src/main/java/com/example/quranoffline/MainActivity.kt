@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -1819,14 +1821,32 @@ internal fun MushafPageSurface(
                 } else {
                     // One shared horizontal scroller for the whole page (was one per line:
                     // 15 scrollable nodes competing with the vertical list and page swipe).
-                    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                    Column(Modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Fit the widest line to the screen width (portrait and landscape) so page swipes are never
+                    // swallowed by a sideways scroller. Only when the user enlarges text above 1.0 does the page scroll sideways.
+                    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val availablePx = constraints.maxWidth
+                    val fit = remember(state.currentPage, state.wordReferenceLayout, availablePx) {
+                        val probe = wordReferenceLines.filter { it.type == "ayah" }.sortedByDescending { it.text.length }.take(3)
+                        val widest = probe.maxOfOrNull { l ->
+                            measurer.measure(
+                                androidx.compose.ui.text.AnnotatedString(l.text),
+                                style = androidx.compose.ui.text.TextStyle(fontFamily = WordReferenceFontFamily, fontSize = 22.sp),
+                                softWrap = false, maxLines = 1,
+                            ).size.width
+                        } ?: 0
+                        if (widest <= 0 || availablePx <= 0 || availablePx == Constraints.Infinity) 1f else (availablePx.toFloat() / widest * 0.97f).coerceIn(0.4f, 2.2f)
+                    }
+                    val effectiveScale = fit * textScale
+                    val sideways = textScale > 1.02f
+                    Box(Modifier.fillMaxWidth().then(if (sideways) Modifier.horizontalScroll(rememberScrollState()) else Modifier)) {
+                    Column(if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     wordReferenceLines.forEach { line ->
                         WordReferenceLineView(
                             line = line,
                             state = state,
                             pageAyahs = pageAyahs,
-                            textScale = textScale,
+                            textScale = effectiveScale,
                             ayahsByKey = allAyahsByKey,
                             pageAyahsByKey = pageAyahsByKey,
                             ayahIndexByKey = ayahIndexByKey,
@@ -1844,6 +1864,7 @@ internal fun MushafPageSurface(
                             onLongPressAyah = onLongPressAyah,
                             onPlainTap = onPlainTap,
                         )
+                    }
                     }
                     }
                     }
@@ -2049,6 +2070,7 @@ private fun SettingsScreen(
         item { Text("الحفظ والتسميع والتصحيح", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
         item { CorrectionSettingsCard(state.correctionSettings, onUpdateCorrectionSettings, onResetCorrectionSettings) }
         item { HiddenViewSettingsCard() }
+        item { QuranComLayoutSettingsCard() }
         item { Text("المحرك والملفات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
         item { EngineCard() }
         item { Text("إعدادات التنزيل", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }

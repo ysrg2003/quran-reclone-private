@@ -153,11 +153,14 @@ private fun annotatedWordReferenceLine(
     if (line.type != "ayah" || state.hidden) return AnnotatedString(line.text)
 
     val ranges = mutableListOf<Triple<Int, Int, Color>>()
+    var lineCursor = 0
     line.ayahKeys.forEach { key ->
         val ayah = ayahsByKey[key] ?: return@forEach
         val ayahIndex = ayahIndexByKey[key] ?: return@forEach
-        var searchFrom = 0
+        val range = line.wordRanges[key]
+        var searchFrom = if (range != null) lineCursor else 0
         ayah.words.forEachIndexed { localIndex, word ->
+            if (range != null && (localIndex < range.first || localIndex >= range.second)) return@forEachIndexed
             val start = line.text.indexOf(word.text, searchFrom)
             if (start < 0) return@forEachIndexed
             val end = start + word.text.length
@@ -166,6 +169,7 @@ private fun annotatedWordReferenceLine(
             val color = statusHighlightColor(status)
             if (color != null) ranges += Triple(start, end, color)
             searchFrom = end
+            if (range != null) lineCursor = end
         }
     }
 

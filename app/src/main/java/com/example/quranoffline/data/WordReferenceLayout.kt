@@ -17,6 +17,8 @@ data class WordReferenceLine(
     val text: String,
     val ayahKeys: List<String>,
     val ayahNumbers: List<WordReferenceAyahNumber>,
+    /** Optional: per ayah key, the [from, toExclusive) word indexes that sit on this line. Empty for the bundled Word layout. */
+    val wordRanges: Map<String, Pair<Int, Int>> = emptyMap(),
 )
 
 data class WordReferencePage(
@@ -54,9 +56,17 @@ class WordReferenceLayout(
         pages.firstOrNull { page -> (surah to ayah) in ayahKeysForPage(page.page) }?.page
 
     companion object {
-        fun load(context: Context): WordReferenceLayout {
+        fun loadBundled(context: Context): WordReferenceLayout {
             val raw = context.assets.open("quran/word_reference_layout.json").bufferedReader().use { it.readText() }
             return fromJson(raw)
+        }
+
+        /** Uses the downloaded quran.com layout when present and valid; otherwise the bundled Word layout. */
+        fun load(context: Context): WordReferenceLayout {
+            QuranComLayoutStore.readCached(context)?.let { raw ->
+                runCatching { fromJson(raw) }.getOrNull()?.takeIf { it.pageCount == 604 && it.pages.size == 604 }?.let { return it }
+            }
+            return loadBundled(context)
         }
 
         fun loadPreview(context: Context): WordReferenceLayout {
@@ -92,8 +102,13 @@ class WordReferenceLayout(
                                     )
                                 }
                             }
+                            val rangesJson = lineObject.optJSONObject("wordRanges")
+                            val ranges = if (rangesJson == null) emptyMap() else buildMap {
+                                rangesJson.keys().forEach { k -> rangesJson.optJSONArray(k)?.let { put(k, it.getInt(0) to it.getInt(1)) } }
+                            }
                             add(
                                 WordReferenceLine(
+                                    wordRanges = ranges,
                                     number = lineObject.optInt("number", lineIndex + 1),
                                     type = lineObject.optString("type", "ayah"),
                                     text = lineObject.optString("text"),
