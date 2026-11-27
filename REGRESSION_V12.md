@@ -177,3 +177,10 @@ Manual on device (UNTESTED by me, no device available):
 - Matcher: tanween is also accepted when the recognizer writes it as a final nun (عليما -> عليمن). The ة/ه, silent-alif, waqf/wasl and madd cases were already handled by the existing matcher and are unchanged.
 - Tabs: one-time v24.6 migration forces tab 2 (Juz) to the front of the saved tab order and rewrites it, so an install that carried an older saved order (Khatmat first) now opens on Juz. The flag is tab_order_juz_first_v246; after that a deliberate reorder is kept.
 - Build: GitHub Actions still cannot run on the private repo (22 of 23 runs died in 1-3 s with zero steps and no runner; the only success was the 4-minute public window). Built locally with gradle -Xmx700m --no-daemon, in-process Kotlin.
+
+## v24.7 (Khatmat management page)
+- Khatmat tab is now a list of named khatmat: add (name, kind, make active), edit (name, daily target and unit, reminder, repeat), set active, delete with confirmation. The last khatma of a kind cannot be deleted.
+- Progress, the daily wird and reminders follow the active khatma of each kind. A non-active khatma is kept but does not track or remind.
+- Storage: new prefs "khatmat_v2"; the v24.6 "khatmat" prefs are migrated once and left in place for rollback.
+- Tests: JVM suite passes (KhatmaListLogicTest). Not tested on a phone.
+- Build: signed locally, cert e4c456fc...9ff5e. GitHub Actions run 46056749740 succeeded on main while the repo was public.

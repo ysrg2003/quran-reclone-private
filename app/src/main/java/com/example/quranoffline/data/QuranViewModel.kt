@@ -47,6 +47,8 @@ data class QuranUiState(
     val saveMarks: List<SaveMark> = emptyList(),
     val khatmaHifz: KhatmaState = KhatmaState(SaveMarkKind.HIFZ),
     val khatmaRead: KhatmaState = KhatmaState(SaveMarkKind.READ),
+    val khatmaRecords: List<KhatmaRecord> = emptyList(),
+    val khatmaActive: Map<SaveMarkKind, String> = emptyMap(),
     val errorLogEnabled: Boolean = true,
     val goal: DailyGoal = DailyGoal(targetAyahs = 3, completedAyahs = 0, day = ""),
     val checkpoint: MemorizationCheckpoint? = null,
@@ -111,6 +113,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val correctedErrorStore = LocalRecitationErrorStore(application)
     private val saveMarkStore = LocalSaveMarkStore(application)
     private val khatmaStore = LocalKhatmaStore(application)
+    private val khatmaList = LocalKhatmaListStore(application)
     private var lastHifzIndex = -1
     /** When >= 0, tasmee stops once the reciter moves past this ayah index (selection-only tasmee). */
     private var tasmeeEndIndex = -1
@@ -146,6 +149,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             saveMarks = saveMarkStore.list(),
             khatmaHifz = khatmaStore.load(SaveMarkKind.HIFZ),
             khatmaRead = khatmaStore.load(SaveMarkKind.READ),
+            khatmaRecords = khatmaList.load(),
+            khatmaActive = SaveMarkKind.values().mapNotNull { k -> khatmaList.activeId(k)?.let { k to it } }.toMap(),
             errorLogEnabled = correctedErrorStore.enabled,
             goal = goalStore.current(),
             checkpoint = memorizationProgressStore.read(),
@@ -1832,6 +1837,53 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private fun putKhatma(k: KhatmaState) {
         khatmaStore.save(k)
         state.value = if (k.kind == SaveMarkKind.HIFZ) state.value.copy(khatmaHifz = k) else state.value.copy(khatmaRead = k)
+        refreshKhatmaList()
+    }
+
+    private fun refreshKhatmaList() {
+        state.value = state.value.copy(
+            khatmaHifz = khatmaStore.load(SaveMarkKind.HIFZ),
+            khatmaRead = khatmaStore.load(SaveMarkKind.READ),
+            khatmaRecords = khatmaList.load(),
+            khatmaActive = SaveMarkKind.values().mapNotNull { k -> khatmaList.activeId(k)?.let { k to it } }.toMap(),
+        )
+    }
+
+    /** Edits any khatma by id. Reminders and tracking follow only the active one of each kind. */
+    fun updateKhatma(id: String, change: (KhatmaState) -> KhatmaState) {
+        val records = khatmaList.load()
+        val r = records.firstOrNull { it.id == id } ?: return
+        val next = r.copy(state = change(r.state).copy(kind = r.kind))
+        khatmaList.saveAll(KhatmaListLogic.replace(records, next))
+        refreshKhatmaList()
+        if (khatmaList.activeId(r.kind) == id) com.example.quranoffline.KhatmaReminders.apply(getApplication(), next.state)
+    }
+
+    fun renameKhatma(id: String, name: String) { khatmaList.rename(id, name); refreshKhatmaList() }
+
+    fun addKhatma(name: String, kind: SaveMarkKind, makeActive: Boolean): String {
+        val r = khatmaList.add(name, kind)
+        if (makeActive) activateKhatma(r.id) else refreshKhatmaList()
+        return r.id
+    }
+
+    fun activateKhatma(id: String) {
+        val r = khatmaList.load().firstOrNull { it.id == id } ?: return
+        khatmaList.setActive(r.kind, id)
+        refreshKhatmaList()
+        com.example.quranoffline.KhatmaReminders.apply(getApplication(), r.state)
+    }
+
+    fun deleteKhatma(id: String) {
+        val r = khatmaList.load().firstOrNull { it.id == id } ?: return
+        if (khatmaList.delete(id) == null) { state.value = state.value.copy(notice = "لا يمكن حذف آخر ختمة من هذا النوع؛ التتبع يحتاج ختمة واحدة على الأقل."); return }
+        refreshKhatmaList()
+        khatmaList.active(r.kind)?.let { com.example.quranoffline.KhatmaReminders.apply(getApplication(), it.state) }
+    }
+
+    fun openKhatmaIndex(idx: Int) {
+        val a = state.value.allAyahs.getOrNull(idx) ?: run { state.value = state.value.copy(notice = "لا يوجد موضع محفوظ في هذه الختمة بعد."); return }
+        pageOfAyah(a.surah, a.ayah)?.let { jumpToPage(it) }
     }
 
     private fun recordKhatma(kind: SaveMarkKind, indices: List<Int>) {
