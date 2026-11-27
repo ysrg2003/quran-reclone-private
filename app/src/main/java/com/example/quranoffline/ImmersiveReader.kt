@@ -220,7 +220,11 @@ internal fun ImmersiveReader(
                             "سورة ${state.metadata?.sura(state.selectedSurah)?.arabicName ?: state.selectedSurah} • صفحة ${state.currentPage} من ${state.totalPages}",
                             Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Color.White,
                         )
-                        IconButton(onClick = viewModel::toggleHidden) {
+                        IconButton(onClick = {
+                            if (!state.hidden && state.selectedAyahIndices.isEmpty()) {
+                                android.widget.Toast.makeText(context, "حدّد آية أو أكثر أولاً (اضغط مطولاً على آية) ثم اضغط إخفاء", android.widget.Toast.LENGTH_LONG).show()
+                            } else viewModel.toggleHidden()
+                        }) {
                             Icon(if (state.hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff, if (state.hidden) "إظهار الآيات" else "إخفاء الآيات", tint = Color.White)
                         }
                         IconButton(

@@ -78,17 +78,20 @@ class AyahSegmentsTest {
 class HideAyahsRuleTest {
     private val page = listOf(2 to 1, 2 to 2, 2 to 3, 2 to 4)
     private fun hid(mode: Boolean, sel: Set<Pair<Int, Int>>, key: Pair<Int, Int>) = com.example.quranoffline.data.ayahHiddenInTasmee(mode, sel, page, key)
+    private fun hidden(mode: Boolean, sel: Set<Pair<Int, Int>>) = page.map { hid(mode, sel, it) }
 
-    @org.junit.Test fun offMeansNothingHidden() = page.forEach { org.junit.Assert.assertFalse(hid(false, setOf(2 to 2), it)) }
-    @org.junit.Test fun noSelectionHidesWholePage() = page.forEach { org.junit.Assert.assertTrue(hid(true, emptySet(), it)) }
-    // Al-Baqarah page 2: ayah 1 is the single word alif-lam-mim. Selecting only it used to hide just that ayah (and the basmala box).
-    @org.junit.Test fun selectionOfFirstAyahStillHidesTheWholePage() {
-        page.forEach { org.junit.Assert.assertTrue(hid(true, setOf(2 to 1), it)) }
+    @org.junit.Test fun offMeansNothingHidden() = org.junit.Assert.assertEquals(listOf(false, false, false, false), hidden(false, setOf(2 to 2)))
+    @org.junit.Test fun noSelectionHidesNothing() = org.junit.Assert.assertEquals(listOf(false, false, false, false), hidden(true, emptySet()))
+    @org.junit.Test fun selectionStartingAtFirstAyahHidesExactlyThoseAyahs() {
+        org.junit.Assert.assertEquals(listOf(true, false, false, false), hidden(true, setOf(2 to 1)))
+        org.junit.Assert.assertEquals(listOf(true, true, true, false), hidden(true, setOf(2 to 1, 2 to 2, 2 to 3)))
     }
-    @org.junit.Test fun selectionAnywhereHidesWholePage() {
-        page.forEach { org.junit.Assert.assertTrue(hid(true, setOf(2 to 40, 2 to 41), it)) }
-        page.forEach { org.junit.Assert.assertTrue(hid(true, setOf(2 to 3, 2 to 4, 2 to 5), it)) }
+    @org.junit.Test fun laterSelectionHidesExactlyThoseAyahs() {
+        org.junit.Assert.assertEquals(listOf(false, false, true, true), hidden(true, setOf(2 to 3, 2 to 4)))
+        org.junit.Assert.assertEquals(listOf(false, true, false, false), hidden(true, setOf(2 to 2)))
     }
+    @org.junit.Test fun selectionOnAnotherPageHidesNothingHere() = org.junit.Assert.assertEquals(listOf(false, false, false, false), hidden(true, setOf(2 to 40, 2 to 41)))
+    @org.junit.Test fun selectionPartlyOnPageHidesOnlyItsVisiblePart() = org.junit.Assert.assertEquals(listOf(false, false, true, true), hidden(true, setOf(2 to 3, 2 to 4, 2 to 5)))
 }
 
 class AyahSegmentsPropertyTest {

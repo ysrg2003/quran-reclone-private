@@ -75,20 +75,15 @@ fun ayahKeyAtOffset(segments: List<Triple<String, Int, Int>>, offset: Int): Stri
     segments.firstOrNull { offset >= it.second && offset < it.third }?.first ?: segments.lastOrNull()?.first
 
 /**
- * v22: "hide ayahs" hides the WHOLE shown page (every ayah and the opening basmala box). The user reported that with a
- * selection it hid only the basmala (the selected ayah was the single-word first ayah). The selection only sets the tasmee
- * range. Set to true to bring back "hide only the selected ayahs when they are on this page".
+ * v22.1 (user decision, Telegram 25402046): "hide ayahs" in the full-screen reader hides ONLY the selected ayahs, exactly
+ * their words and, for ayah 1, its opening basmala box. Nothing else is hidden. With no selection (or a selection on
+ * another page) nothing on the page is hidden. Set to false to hide the whole shown page instead (the v22 behaviour).
  */
-const val HIDE_ONLY_SELECTED = false
+const val HIDE_ONLY_SELECTED = true
 
-/**
- * Hide-ayahs rule for the tasmee view. With no selection the whole page is hidden. With a selection, only the selected
- * ayahs are hidden, but only when at least one of them is on the shown page; otherwise (selection on another page) the
- * whole page is hidden so the button never appears to do nothing.
- */
+/** Hide-ayahs rule for the full-screen reader (see [HIDE_ONLY_SELECTED]). pageKeys is kept for the whole-page mode. */
 fun ayahHiddenInTasmee(hiddenMode: Boolean, selectedKeys: Set<Pair<Int, Int>>, pageKeys: List<Pair<Int, Int>>, key: Pair<Int, Int>): Boolean {
     if (!hiddenMode) return false
     if (!HIDE_ONLY_SELECTED) return true
-    val selectionOnPage = pageKeys.any { it in selectedKeys }
-    return !selectionOnPage || key in selectedKeys
+    return key in selectedKeys
 }

@@ -107,7 +107,7 @@ internal fun WordReferenceLineView(
                     .padding(vertical = 8.dp),
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
-                color = if (state.hidden) Color.Transparent else textColor,
+                color = textColor,
                 textAlign = TextAlign.Center,
                 softWrap = false,
             )
