@@ -17,11 +17,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // Private release key lives outside the repo; path and password come from the build environment only.
+        System.getenv("RECLONE_KS")?.let { ks ->
+            create("reclone") {
+                storeFile = file(ks)
+                storePassword = System.getenv("RECLONE_KS_PASS")
+                keyAlias = "reclone"
+                keyPassword = System.getenv("RECLONE_KS_PASS")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // Private test build: non-debuggable (R8 too heavy for the build machine) and signed with the debug key so it
             // installs over the earlier debug-signed test build with the same app id.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (System.getenv("RECLONE_KS") != null) signingConfigs.getByName("reclone") else signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
