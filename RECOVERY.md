@@ -106,3 +106,6 @@ Two jobs: `apk` (tests, signed `assembleOnlineRelease`, apksigner verify, upload
 - Result: the Actions APK has the same size (17,297,662 bytes) as the archived v20.1 APK, an identical file list, byte-identical contents for every file outside META-INF (including all dex files), and cert sha256 `e4c456fc66939c6325619cd5013bd599fbf0da679c9a73fbdc18f769fec9ff5e`. The whole-file sha256 differs (the signature block in META-INF carries different data). Tests passed (the job succeeded).
 - Native job in the same run: the CI rebuild of libwhisper_jni.so has the identical list of dynamic symbols but is not byte-identical to the committed binary (3,020,552 vs 3,020,584 bytes). The committed binary stays.
 - If Actions fails to start again, check Settings > Billing and plans for ysrg2003 first.
+
+## Status
+Latest release: v20.2 (tag apk-v20.2, same release key e4c456fc...9ff5e). Next: v21 (selection model, tasmee range, auto-advance).
