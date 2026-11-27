@@ -45,6 +45,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
@@ -195,6 +197,7 @@ private fun QuranOfflineApp(
     var tab by remember { mutableIntStateOf(0) }
     var immersive by rememberSaveable { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var showGoTo by remember { mutableStateOf(false) }
     var showLegalNotices by rememberSaveable { mutableStateOf(false) }
 
@@ -223,7 +226,7 @@ private fun QuranOfflineApp(
                         IconButton(onClick = { tab = 4 }) {
                             Icon(Icons.Default.MenuBook, contentDescription = "القراءة والاستماع", tint = Color.White)
                         }
-                        IconButton(onClick = { tab = 5 }) {
+                        IconButton(onClick = { showSettings = true }) {
                             Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = Color.White)
                         }
                         Surface(
@@ -248,14 +251,15 @@ private fun QuranOfflineApp(
                     ),
                 )
                 ScrollableTabRow(
-                    selectedTabIndex = tab,
+                    selectedTabIndex = if (tab > 5) tab - 1 else tab,
                     containerColor = Color(0xFF0F5B4D),
                     contentColor = Color.White,
                     edgePadding = 8.dp,
                     indicator = { positions ->
-                        if (tab < positions.size) {
+                        val shown = if (tab > 5) tab - 1 else tab
+                        if (shown < positions.size) {
                             TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorOffset(positions[tab]),
+                                modifier = Modifier.tabIndicatorOffset(positions[shown]),
                                 height = 3.dp,
                                 color = Color(0xFFF2C879),
                             )
@@ -263,6 +267,7 @@ private fun QuranOfflineApp(
                     },
                 ) {
                     listOf("الحفظ والتسميع", "السور", "الأجزاء", "السجل", "القراءة", "الإعدادات", "الختمات").forEachIndexed { index, title ->
+                        if (index == 5) return@forEachIndexed // settings live behind the gear icon only
                         Tab(
                             selected = tab == index,
                             onClick = { tab = index },
@@ -366,16 +371,6 @@ private fun QuranOfflineApp(
                 onNextPage = viewModel::nextPage,
                 modifier = Modifier.padding(padding),
             )
-            5 -> SettingsScreen(
-                state = state,
-                onModeChange = viewModel::setMode,
-                onDownload = viewModel::downloadCurrentSurah,
-                onDeleteDownload = viewModel::deleteCurrentSurah,
-                onUpdateCorrectionSettings = viewModel::updateCorrectionSettings,
-                onResetCorrectionSettings = viewModel::resetCorrectionSettings,
-                onShowLegalNotices = { showLegalNotices = true },
-                modifier = Modifier.padding(padding),
-            )
             6 -> KhatmaScreen(
                 state = state,
                 onTarget = viewModel::setKhatmaTarget,
@@ -390,6 +385,12 @@ private fun QuranOfflineApp(
         }
         }
         if (immersive) ImmersiveReader(state = state, viewModel = viewModel, onStartListening = startRecitation, onExit = { immersive = false })
+        if (showSettings) SettingsLayer(
+            state = state, onClose = { showSettings = false },
+            onModeChange = viewModel::setMode, onDownload = viewModel::downloadCurrentSurah, onDeleteDownload = viewModel::deleteCurrentSurah,
+            onUpdateCorrectionSettings = viewModel::updateCorrectionSettings, onResetCorrectionSettings = viewModel::resetCorrectionSettings,
+            onShowLegalNotices = { showLegalNotices = true },
+        )
         if (showSearch) QuranSearchOverlay(
             state = state, viewModel = viewModel, onClose = { showSearch = false },
             onOpenAyah = { surah, ayah -> viewModel.pageOfAyah(surah, ayah)?.let { viewModel.jumpToPage(it) }; showSearch = false; tab = 4 },
@@ -2140,6 +2141,7 @@ private fun TypographySettingsCard(
 @Composable
 private fun SettingsScreen(
     state: com.example.quranoffline.data.QuranUiState,
+    section: Int,
     onModeChange: (AssetMode) -> Unit,
     onDownload: () -> Unit,
     onDeleteDownload: () -> Unit,
@@ -2148,47 +2150,99 @@ private fun SettingsScreen(
     onShowLegalNotices: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val heading = Color(0xFF123F35)
     LazyColumn(
         modifier = modifier.fillMaxSize().background(Color(0xFFF7F8F4)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            Text("الإعدادات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
-            Text("تُضبط مرة واحدة وتبقى بعيدة عن واجهة الحفظ اليومية.", color = Color(0xFF66736C))
-        }
-        item { TypographySettingsCard(state.correctionSettings, onUpdateCorrectionSettings) }
-        item { Text("الحفظ والتسميع والتصحيح", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
-        item { CorrectionSettingsCard(state.correctionSettings, onUpdateCorrectionSettings, onResetCorrectionSettings) }
-        item { HiddenViewSettingsCard() }
-        item { QuranComLayoutSettingsCard() }
-        item { Text("المحرك والملفات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
-        item { EngineCard() }
-        item { Text("إعدادات التنزيل", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
-        item { AudioDownloadSettingsCard(state.metadata?.suras.orEmpty()) }
-        item { WordAudioSettingsCard(state.metadata?.suras.orEmpty()) }
-        item { BulkDownloadCard(state.metadata?.suras.orEmpty()) }
-        item { RecognitionEngineSettingsCard() }
-        item { OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload) }
-        item {
-            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("قواعد البيانات في هذه النسخة", fontWeight = FontWeight.Bold)
-                    Text("البسملة الافتتاحية عنصر مستقل لا يُحسب ضمن كلمات الآية، والحروف المقطعة تُطابق كلمة مرجعية واحدة مع وحدات نطق مستقلة.", color = Color(0xFF66736C))
-                }
+        when (section) {
+            0 -> item { TypographySettingsCard(state.correctionSettings, onUpdateCorrectionSettings) }
+            1 -> {
+                item { CorrectionSettingsCard(state.correctionSettings, onUpdateCorrectionSettings, onResetCorrectionSettings) }
+                item { HiddenViewSettingsCard() }
             }
-        }
-        item {
-            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("الحقوق وإشعارات المصادر", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
-                    Text("تتضمن النسخة إشعاراً بالمكونات المفتوحة المصدر وملاحظات الأصول التي تحتاج إذناً خاصاً قبل النشر العام أو التجاري.", color = Color(0xFF66736C), textAlign = TextAlign.Right)
-                    OutlinedButton(onClick = onShowLegalNotices, modifier = Modifier.fillMaxWidth()) {
-                        Text("عرض إشعارات المصادر")
+            2 -> item { QuranComLayoutSettingsCard() }
+            3 -> {
+                item { EngineCard() }
+                item { RecognitionEngineSettingsCard() }
+            }
+            4 -> {
+                item { AudioDownloadSettingsCard(state.metadata?.suras.orEmpty()) }
+                item { WordAudioSettingsCard(state.metadata?.suras.orEmpty()) }
+                item { BulkDownloadCard(state.metadata?.suras.orEmpty()) }
+                item { OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload) }
+            }
+            else -> {
+                item {
+                    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("قواعد البيانات في هذه النسخة", fontWeight = FontWeight.Bold)
+                            Text("البسملة الافتتاحية عنصر مستقل لا يُحسب ضمن كلمات الآية، والحروف المقطعة تُطابق كلمة مرجعية واحدة مع وحدات نطق مستقلة.", color = Color(0xFF66736C))
+                        }
+                    }
+                }
+                item {
+                    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("الحقوق وإشعارات المصادر", fontWeight = FontWeight.Bold, color = heading)
+                            Text("تتضمن النسخة إشعاراً بالمكونات المفتوحة المصدر وملاحظات الأصول التي تحتاج إذناً خاصاً قبل النشر العام أو التجاري.", color = Color(0xFF66736C), textAlign = TextAlign.Right)
+                            OutlinedButton(onClick = onShowLegalNotices, modifier = Modifier.fillMaxWidth()) { Text("عرض إشعارات المصادر") }
+                        }
                     }
                 }
             }
         }
         if (state.notice.isNotBlank()) item { Text(state.notice, color = Color(0xFF36584B)) }
+    }
+}
+
+internal val settingsSections = listOf(
+    "المظهر والخط" to "حجم الخط وشكل عرض النص",
+    "الحفظ والتسميع والتصحيح" to "قواعد التصحيح وعرض الإخفاء",
+    "تخطيط المصحف" to "تخطيط quran.com أو تخطيط الكلمات",
+    "المحرك والتعرف على الصوت" to "محرك التعرف ومحرك التسميع",
+    "التنزيلات والصوت" to "أصوات الآيات والكلمات والتنزيل الكامل",
+    "حول والحقوق" to "قواعد البيانات وإشعارات المصادر",
+)
+
+/** The settings layer: opened only from the gear icon; a list of sections, a tap opens that section. */
+@Composable
+private fun SettingsLayer(
+    state: com.example.quranoffline.data.QuranUiState,
+    onClose: () -> Unit,
+    onModeChange: (AssetMode) -> Unit,
+    onDownload: () -> Unit,
+    onDeleteDownload: () -> Unit,
+    onUpdateCorrectionSettings: ((CorrectionSettings) -> CorrectionSettings) -> Unit,
+    onResetCorrectionSettings: () -> Unit,
+    onShowLegalNotices: () -> Unit,
+) {
+    var section by remember { mutableStateOf<Int?>(null) }
+    androidx.activity.compose.BackHandler { if (section != null) section = null else onClose() }
+    Column(Modifier.fillMaxSize().background(Color(0xFFF7F8F4))) {
+        Surface(color = Color(0xFF0F5B4D)) {
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { if (section != null) section = null else onClose() }) {
+                    Icon(androidx.compose.material.icons.Icons.Default.ArrowBack, "رجوع", tint = Color.White)
+                }
+                Text(section?.let { settingsSections[it].first } ?: "الإعدادات", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        val sec = section
+        if (sec == null) {
+            LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                itemsIndexed(settingsSections) { index, (title, subtitle) ->
+                    Card(onClick = { section = index }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text(title, fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+                            Text(subtitle, color = Color(0xFF66736C), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        } else {
+            SettingsScreen(state, sec, onModeChange, onDownload, onDeleteDownload, onUpdateCorrectionSettings, onResetCorrectionSettings, onShowLegalNotices)
+        }
     }
 }
 
