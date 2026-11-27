@@ -95,4 +95,22 @@ class AudioDownloaderTest {
         assertEquals(0, store.surahCount(2)); assertEquals(5L, store.usedBytes())
         store.deleteAll(); assertEquals(0L, store.usedBytes())
     }
+
+    @Test fun manifestDeclaresNetworkStatePermission() {
+        // v12/v14 crashed on Download: ConnectivityManager was read without this permission (SecurityException).
+        val m = java.io.File("src/main/AndroidManifest.xml").readText()
+        assertTrue(m.contains("android.permission.ACCESS_NETWORK_STATE"))
+        assertTrue(m.contains("android.permission.INTERNET"))
+    }
+
+    @Test fun downloadSurahNeverThrowsEvenIfConnectionBlowsUp() {
+        val d = AudioDownloader(store, networkAllowed = { true }, sleeper = {}, open = { throw SecurityException("boom") })
+        val r = d.downloadSurah(1, 7, { false }) { _, _ -> }
+        assertTrue(r is AudioDownloader.Result.Failed)
+    }
+
+    @Test fun fetchTurnsUnexpectedExceptionIntoFailure() {
+        val d = AudioDownloader(store, networkAllowed = { true }, sleeper = {}, open = { throw IllegalStateException("x") })
+        assertTrue(d.fetch(url, store.part(1, 6), store.file(1, 6)) { false } is AudioDownloader.Result.Failed)
+    }
 }

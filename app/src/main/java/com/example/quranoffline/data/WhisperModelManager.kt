@@ -32,6 +32,7 @@ class WhisperModelManager private constructor(private val context: Context) {
         if (context.filesDir.usableSpace < WhisperModelStore.SIZE + 50L * 1024 * 1024) { _state.value = State(false, "المساحة غير كافية"); return }
         cancel = false; _state.value = State(true, "جارٍ التنزيل")
         pool.execute {
+          try {
             val done = java.io.File(store.part().path + ".done")
             val r = AudioDownloader(store = AudioPackStore(java.io.File(context.filesDir, "whisper_unused")), networkAllowed = audio::networkAllowed)
                 .let { if (!audio.networkAllowed()) AudioDownloader.Result.Failed("الشبكة غير متاحة أو الوضع Wi-Fi فقط مفعّل") else it.fetch(WhisperModelStore.URL, store.part(), done) { cancel } }
@@ -41,6 +42,7 @@ class WhisperModelManager private constructor(private val context: Context) {
                 is AudioDownloader.Result.Done -> if (done.renameTo(store.part()) && store.verifyAndInstall()) "اكتمل التنزيل وتم التحقق من البصمة" else "فشل التحقق من البصمة (sha256)، حُذف الملف"
             }
             _state.value = State(false, msg); _revision.value++
+          } catch (e: Throwable) { _state.value = State(false, "خطأ غير متوقع: ${e.message ?: e.javaClass.simpleName}") }
         }
     }
     fun pause() { cancel = true }

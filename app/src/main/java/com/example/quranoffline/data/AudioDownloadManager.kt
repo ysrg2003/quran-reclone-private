@@ -33,12 +33,14 @@ class AudioDownloadManager private constructor(private val context: Context) {
         get() = prefs.getBoolean("wifi_only", true)
         set(v) { prefs.edit().putBoolean("wifi_only", v).apply() }
 
-    fun networkAllowed(): Boolean {
+    fun networkAllowed(): Boolean = try {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return false
-        if (!wifiOnly) return true
-        return !cm.isActiveNetworkMetered || caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            (!wifiOnly || !cm.isActiveNetworkMetered || caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))
+    } catch (e: Exception) {
+        // Never crash the app because the network state cannot be read; honor Wi-Fi-only conservatively.
+        !wifiOnly
     }
 
     /** Known size in bytes of one surah for a reciter, or null when not yet measured. */
@@ -57,6 +59,7 @@ class AudioDownloadManager private constructor(private val context: Context) {
     fun measure(reciter: Int, ayahCounts: List<Int>) {
         if (reciter == Reciters.DEFAULT_ID || measuring.putIfAbsent(reciter, true) != null) return
         measurePool.execute {
+          try {
             val dl = AudioDownloader(store(reciter), reciter, ::networkAllowed)
             try {
                 for (s in 1..114) {
@@ -75,6 +78,7 @@ class AudioDownloadManager private constructor(private val context: Context) {
                     _revision.value++
                 }
             } finally { measuring.remove(reciter); _revision.value++ }
+          } catch (e: Throwable) { _measure.value = _measure.value + (reciter to "تعذر القياس: ${e.message ?: e.javaClass.simpleName}") }
         }
     }
     fun stopMeasure(reciter: Int) { measuring.remove(reciter) }
@@ -90,9 +94,9 @@ class AudioDownloadManager private constructor(private val context: Context) {
         cancel[k] = false
         set(k, JobState(true, store.surahCount(surah), ayahCount, "جارٍ التنزيل"))
         pool.execute {
-            val r = AudioDownloader(store, reciter, ::networkAllowed).downloadSurah(surah, ayahCount, { cancel[k] == true }) { d, t ->
+            val r = try { AudioDownloader(store, reciter, ::networkAllowed).downloadSurah(surah, ayahCount, { cancel[k] == true }) { d, t ->
                 set(k, JobState(true, d, t, "جارٍ التنزيل"))
-            }
+            } } catch (e: Throwable) { AudioDownloader.Result.Failed("خطأ غير متوقع: ${e.message ?: e.javaClass.simpleName}") }
             val msg = when (r) {
                 is AudioDownloader.Result.Done -> "اكتمل التنزيل"
                 is AudioDownloader.Result.Cancelled -> "موقوف مؤقتًا، يمكن المتابعة"

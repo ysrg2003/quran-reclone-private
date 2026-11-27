@@ -32,7 +32,7 @@ class AudioDownloader(
             if (!networkAllowed()) return Result.Failed("الشبكة غير متاحة أو الوضع Wi-Fi فقط مفعّل")
             val url = urls[a] ?: return Result.Failed("لا يوجد رابط للآية $a")
             if (store.localAyah(surah, a) == null) {
-                val r = fetch(url, store.part(surah, a), store.file(surah, a), cancelled)
+                val r = try { fetch(url, store.part(surah, a), store.file(surah, a), cancelled) } catch (e: Throwable) { Result.Failed("خطأ: ${e.message ?: e.javaClass.simpleName}") }
                 if (r is Result.Cancelled || r is Result.Failed) return r
             }
             bytes += store.file(surah, a).length(); done++; progress(done, ayahCount)
@@ -67,7 +67,7 @@ class AudioDownloader(
         var attempts = 0
         while (true) {
             val have = if (part.isFile) part.length() else 0L
-            val c = open(url)
+            val c = try { open(url) } catch (e: Exception) { if (++attempts > 3) return Result.Failed("تعذر فتح الاتصال: ${e.message ?: e.javaClass.simpleName}"); continue }
             try {
                 c.connectTimeout = 15000; c.readTimeout = 30000
                 if (have > 0) c.setRequestProperty("Range", "bytes=$have-")
@@ -100,8 +100,8 @@ class AudioDownloader(
                 }
                 if (!part.renameTo(dest)) return Result.Failed("تعذر حفظ الملف")
                 return Result.Done(1, dest.length())
-            } catch (e: java.io.IOException) {
-                if (++attempts > 3) return Result.Failed("انقطع الاتصال: ${e.message}")
+            } catch (e: Exception) {
+                if (++attempts > 3) return Result.Failed("انقطع الاتصال: ${e.message ?: e.javaClass.simpleName}")
             } finally { c.disconnect() }
         }
     }
