@@ -412,6 +412,7 @@ private fun QuranOfflineApp(
                 state = state, surah = anchor.first, ayah = anchor.second, onDismiss = { tasmeeRangeRequest.value = false },
                 onScope = { sc -> viewModel.prepareTasmeeRange(sc, anchor.first, anchor.second) },
                 onCustom = { s1, a1, s2, a2 -> viewModel.prepareTasmeeCustom(s1, a1, s2, a2) },
+                onNumberRange = { byJuz, a, b -> viewModel.prepareTasmeeByRange(byJuz, a, b) },
             )
         }
         if (immersive) ImmersiveReader(state = state, viewModel = viewModel, onStartListening = startRecitation, onExit = { immersive = false; if (tab == 4) tab = 0 })

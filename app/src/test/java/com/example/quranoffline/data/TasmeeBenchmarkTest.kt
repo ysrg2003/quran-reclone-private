@@ -60,3 +60,37 @@ class TasmeeBenchmarkTest {
         println("BENCH\n$sb")
     }
 }
+
+class TasmeeMismatchBenchmarkTest {
+    private fun load(): List<QuranAyah>? {
+        val f = File(System.getenv("QURAN_BENCH_TSV") ?: "/tmp/quran_words.tsv")
+        if (!f.exists()) return null
+        return f.readLines().map { line ->
+            val p = line.split('\t')
+            val words = p.drop(2).mapIndexed { i, w -> val (t, m) = w.split('|'); QuranWord(i, t, m) }
+            QuranAyah(p[0].toInt(), p[1].toInt(), words.joinToString(" ") { it.text }, words.joinToString(" ") { it.matchText }, words)
+        }
+    }
+
+    /** Recites correctly but injects wrong words (noisy recognizer): every wrong stable token triggers the later-ayah jump scan. */
+    @Test fun mismatchingTokensCost() {
+        val ayahs = load(); assumeTrue(ayahs != null); ayahs!!
+        val tracker = RecitationProgressTracker(ayahs)
+        val spoken = ayahs.flatMap { it.words }.drop(200).take(600).map { it.matchText }.toMutableList()
+        val wrong = listOf("سلام", "كتاب", "بيت", "قمر")
+        val times = ArrayList<Long>()
+        var seg = ArrayList<String>()
+        var k = 0
+        for (w in spoken) {
+            seg += if (k++ % 5 == 3) wrong[k % wrong.size] else w
+            if (seg.size >= 6) {
+                val t0 = System.nanoTime()
+                tracker.update(RecitationProgressInput(seg.joinToString(" "), true, true))
+                times += System.nanoTime() - t0
+                seg = ArrayList()
+            }
+        }
+        val sorted = times.sorted()
+        println("MISMATCH stable updates n=${times.size} median ${sorted[sorted.size / 2] / 1000} us, p90 ${sorted[sorted.size * 9 / 10] / 1000} us, max ${sorted.last() / 1000} us")
+    }
+}

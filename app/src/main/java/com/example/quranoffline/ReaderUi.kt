@@ -213,7 +213,10 @@ internal fun TasmeeRangeSheet(
     onDismiss: () -> Unit,
     onScope: (ReaderScope) -> Unit,
     onCustom: (Int, Int, Int, Int) -> Unit,
+    /** v24.4: when set, adds page-range and juz-range entry rows (byJuz, from, to). */
+    onNumberRange: ((Boolean, Int, Int) -> Unit)? = null,
 ) {
+    var numberRange by remember { mutableStateOf<Boolean?>(null) }
     val md = state.metadata?.ayah(surah, ayah)
     val suraName = state.metadata?.sura(surah)?.arabicName ?: "$surah"
     val quarterInHizb = md?.let { ((it.quarter - 1) % 4) + 1 } ?: 1
@@ -232,12 +235,33 @@ internal fun TasmeeRangeSheet(
             row("نهاية الربع $quarterInHizb الحزب $hizb") { onScope(ReaderScope.HIZB) }
             row("المصحف كاملاً (بلا حد)") { onScope(ReaderScope.QURAN) }
             HorizontalDivider()
+            if (onNumberRange != null) {
+                Text("نطاق صفحات (من صفحة إلى صفحة)", Modifier.fillMaxWidth().clickable { numberRange = false }.padding(horizontal = 24.dp, vertical = 14.dp), fontSize = 17.sp)
+                Text("نطاق أجزاء (من جزء إلى جزء)", Modifier.fillMaxWidth().clickable { numberRange = true }.padding(horizontal = 24.dp, vertical = 14.dp), fontSize = 17.sp)
+            }
             Row(Modifier.fillMaxWidth().clickable { custom = true }.padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Settings, null)
                 Spacer(Modifier.width(16.dp))
                 Text("مخصص (من سورة/آية إلى سورة/آية)", fontSize = 17.sp)
             }
         }
+    }
+    numberRange?.let { byJuz ->
+        var f by remember { mutableStateOf("") }
+        var t by remember { mutableStateOf("") }
+        val fi = f.toIntOrNull(); val ti = t.toIntOrNull()
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { numberRange = null },
+            title = { Text(if (byJuz) "تسميع من جزء إلى جزء" else "تسميع من صفحة إلى صفحة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.OutlinedTextField(value = f, onValueChange = { f = it.filter(Char::isDigit).take(3) }, singleLine = true, label = { Text(if (byJuz) "من الجزء (1-30)" else "من الصفحة (1-604)") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+                    androidx.compose.material3.OutlinedTextField(value = t, onValueChange = { t = it.filter(Char::isDigit).take(3) }, singleLine = true, label = { Text(if (byJuz) "إلى الجزء (1-30)" else "إلى الصفحة (1-604)") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+                }
+            },
+            confirmButton = { androidx.compose.material3.TextButton(enabled = fi != null && ti != null, onClick = { numberRange = null; onDismiss(); onNumberRange?.invoke(byJuz, fi!!, ti!!) }) { Text("حدّد") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { numberRange = null }) { Text("إلغاء") } },
+        )
     }
     if (custom) CustomListenDialog(state, surah, ayah, title = "تسميع مخصص", goLabel = "ابدأ", withRepeat = false, onDismiss = { custom = false }, onGo = { a, b, c, d, _ -> custom = false; onDismiss(); onCustom(a, b, c, d) })
 }

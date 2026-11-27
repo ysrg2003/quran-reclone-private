@@ -1928,6 +1928,19 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         announceTasmeeEnd(last)
     }
 
+    /** v24.4: tasmee from page [from] to page [to] (inclusive, either order), or from juz [from] to juz [to]. */
+    fun prepareTasmeeByRange(byJuz: Boolean, from: Int, to: Int) {
+        val st = state.value; val md = st.metadata ?: return
+        val all = st.allAyahs
+        val values = all.map { a -> md.ayah(a.surah, a.ayah)?.let { if (byJuz) it.juz else it.page } ?: -1 }
+        val span = if (byJuz) TasmeeRanges.span(values, from, to, 1, 30) else TasmeeRanges.span(values, from, to, 1, 604)
+        if (span == null) { state.value = st.copy(notice = if (byJuz) "رقم الجزء يجب أن يكون بين 1 و30." else "رقم الصفحة يجب أن يكون بين 1 و604."); return }
+        val f = all[span.first]
+        startMemorizationFrom(f.surah, f.ayah)
+        tasmeeEndIndex = span.second
+        announceTasmeeEnd(span.second)
+    }
+
     /** Tells the user where the chosen tasmee range stops (v24.3). */
     private fun announceTasmeeEnd(lastIndex: Int) {
         val st = state.value
