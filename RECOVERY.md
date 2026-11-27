@@ -80,7 +80,7 @@ The 4 skipped tests (`RecognizerSpellingCorpusTest`, `ImlaeiCorpusAuditTest`, `T
 
 ## Binary pieces and how each is obtained
 
-- `app/src/main/jniLibs/arm64-v8a/libwhisper_jni.so` (3 MB, whisper.cpp, MIT): committed in git. It was recovered from the v20 APK, so its C++ build recipe is not in this repo. To rebuild it you need the NDK and whisper.cpp source; not done.
+- `app/src/main/jniLibs/arm64-v8a/libwhisper_jni.so` (3 MB, whisper.cpp, MIT): committed in git (taken from the v20 APK). Its recipe is now in `native/` (JNI source, CMakeLists, `build.sh`, README with what is proven vs reconstructed). A rebuild matches in size and in all 3,817 dynamic symbols but is not byte-identical, so the committed binary stays.
 - `AudioPackSizes.kt`: in git; re-measure with HEAD requests if the audio mirror changes (see table above).
 - Quran text, layout and timing assets, fonts: in git under `app/src/main/assets`. Quran Foundation content is never redistributed from this repo; users download packs into private storage in the app.
 
@@ -97,3 +97,9 @@ The 4 skipped tests (`RecognizerSpellingCorpusTest`, `ImlaeiCorpusAuditTest`, `T
 - Unit tests that use ASR and pairs data files (`ASR_TSV`, `PAIRS_TSV`, `WORDS_TSV`) were run without those files after the wipe. They passed (193).
 - v12 to v20 source was rebuilt by replaying logged edit commands onto the v11 bundle. The v20.1 APK matches the v20 file list, and the dex differs only by the v20.1 change.
 - The original base project is never pushed to its own origin. Only this private repo gets pushes.
+
+## GitHub Actions (`.github/workflows/build.yml`)
+
+Two jobs: `apk` (tests, signed `assembleOnlineRelease`, apksigner verify, uploads APK + file list + dex hashes as an artifact) and `native` (rebuilds `libwhisper_jni.so` with `native/build.sh` pinned to whisper.cpp 79b11911..., compares symbols with the committed binary, uploads the result).
+- Repo secrets (set 2026-11-27, values never in git or logs): `RECLONE_KS_B64` (keystore, base64) and `RECLONE_KS_PASS`. To reset them, use the repo's Settings > Secrets and variables > Actions, or the API with a token that has `secrets: write`. The same keystore as in Drive must be used, or the cert sha256 will change.
+- Status on 2026-11-27: the workflow was pushed and run twice, and a trivial `echo hello` workflow was run too. All three runs failed within seconds with no steps and no logs, so the runner never started. That points to an account-level block (GitHub Actions billing or spending limit for private repos), not to the workflow. It has not been verified by a successful run. After the account is fixed, run the workflow from the Actions tab (or push) and compare the artifact with the archived APK: same file list, same `dex-hashes.txt`, cert `e4c456fc...9ff5e`.
