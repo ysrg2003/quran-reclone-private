@@ -39,6 +39,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MoreVert
@@ -186,9 +187,11 @@ private fun QuranOfflineApp(
     }
     val resumeRecitation = startRecitation
     var tab by remember { mutableIntStateOf(0) }
+    var immersive by rememberSaveable { mutableStateOf(false) }
     var showLegalNotices by rememberSaveable { mutableStateOf(false) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        Box(Modifier.fillMaxSize()) {
         Scaffold(
         topBar = {
             Column {
@@ -200,6 +203,9 @@ private fun QuranOfflineApp(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { immersive = true }) {
+                            Icon(Icons.Default.Fullscreen, contentDescription = "قراءة بملء الشاشة", tint = Color.White)
+                        }
                         IconButton(onClick = { tab = 4 }) {
                             Icon(Icons.Default.MenuBook, contentDescription = "القراءة والاستماع", tint = Color.White)
                         }
@@ -359,6 +365,8 @@ private fun QuranOfflineApp(
                 LegalNoticesDialog(onDismiss = { showLegalNotices = false })
             }
         }
+        }
+        if (immersive) ImmersiveReader(state = state, viewModel = viewModel, onStartListening = startRecitation, onExit = { immersive = false })
         }
     }
 }
@@ -1726,7 +1734,7 @@ private fun ReaderScreen(
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
-private fun MushafPageSurface(
+internal fun MushafPageSurface(
     pageAyahs: List<QuranAyah>,
     state: com.example.quranoffline.data.QuranUiState,
     onSetStart: (Int, Int, Int, Boolean) -> Unit,
@@ -1743,6 +1751,7 @@ private fun MushafPageSurface(
     textScale: Float,
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
+    onPlainTap: (() -> Unit)? = null,
 ) {
     var horizontalDrag by remember { mutableFloatStateOf(0f) }
     // Build the expensive lookup structures once per page surface. Reusing
@@ -1833,6 +1842,7 @@ private fun MushafPageSurface(
                             onOpenAyahActions = onOpenAyahActions,
                             onTapAyah = onTapAyah,
                             onLongPressAyah = onLongPressAyah,
+                            onPlainTap = onPlainTap,
                         )
                     }
                     }

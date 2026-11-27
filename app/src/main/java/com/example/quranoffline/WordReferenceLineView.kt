@@ -47,6 +47,7 @@ internal fun WordReferenceLineView(
     onOpenAyahActions: (Int, Int) -> Unit,
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
+    onPlainTap: (() -> Unit)? = null,
 ) {
     val ayahs = androidx.compose.runtime.remember(line, ayahsByKey, pageAyahsByKey) {
         line.ayahKeys.mapNotNull { key -> ayahsByKey[key] ?: pageAyahsByKey[key] }
@@ -104,7 +105,8 @@ internal fun WordReferenceLineView(
                 .background(background)
                 .combinedClickable(
                     onClick = {
-                        primary?.let { ayah ->
+                        if (onPlainTap != null && state.selectedAyahIndices.isEmpty()) onPlainTap()
+                        else primary?.let { ayah ->
                             if (state.selectedAyahIndices.isNotEmpty()) onTapAyah(ayah.surah, ayah.ayah)
                             else onOpenAyahActions(ayah.surah, ayah.ayah)
                         }
