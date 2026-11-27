@@ -77,6 +77,7 @@ class ReferenceTimingRepository {
 
 /** Plays a local file or streams a public URL without persisting the streamed media. */
 class ReferenceAudioPlayer(private val context: Context) {
+    init { Reciters.ensureLoaded(context) }
     private val mainHandler = Handler(Looper.getMainLooper())
     private var player: MediaPlayer? = null
     private val audioWorker=java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -263,7 +264,7 @@ class ReferenceAudioPlayer(private val context: Context) {
 
     private fun localAyahFile(source:String):java.io.File?=runCatching{
         val u=java.net.URI(source);if(u.host!="ayah")return null
-        val p=u.path.trim('/').split('/');AudioPackStore(context).localAyah(p[0].toInt(),p[1].toInt())
+        val p=u.path.trim('/').split('/');AudioPackStore(context, Reciters.currentId).localAyah(p[0].toInt(),p[1].toInt())
     }.getOrNull()
 
     private fun playResolvedDataSource(source:String,assetPath:String?,segment:TimingSegment?,onFinished:()->Unit){

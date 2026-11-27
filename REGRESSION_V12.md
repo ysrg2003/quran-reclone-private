@@ -10,3 +10,8 @@ Manual on device (UNTESTED by me, no device available):
 6. Download Al-Fatiha, airplane mode, ayah audio plays offline.
 7. Pause/resume, delete one surah, delete all, Wi-Fi-only toggle with mobile data.
 8. Uninstall removes files (private storage).
+
+## v14 additions
+- Reciter picker (Settings download card and reader screen). Default stays reciter 6 (Husary murattal) = v11 source. Pick another and streaming/ downloaded files use it.
+- Downloads per reciter in separate private folders; reciter 6 folder unchanged from v12.
+- Manual: switch reciter in reader, play ayah (streams); download a surah for reciter 7, airplane mode, plays offline; switch back to 6, uses 6's files only.

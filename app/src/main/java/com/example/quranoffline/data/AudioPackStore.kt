@@ -5,7 +5,7 @@ import java.io.File
 
 /** Private, app-only storage for user-requested ayah audio (Husary via Quran.com). Never exported. */
 class AudioPackStore(private val root: File) {
-    constructor(context: Context) : this(File(context.filesDir, "audio_packs/husary"))
+    constructor(context: Context, reciterId: Int = Reciters.DEFAULT_ID) : this(dirFor(context, reciterId))
 
     fun file(surah: Int, ayah: Int) = File(root, "%03d%03d.mp3".format(surah, ayah))
     fun part(surah: Int, ayah: Int) = File(root, "%03d%03d.mp3.part".format(surah, ayah))
@@ -21,4 +21,12 @@ class AudioPackStore(private val root: File) {
     }
     fun deleteAll() { root.listFiles()?.forEach { it.delete() } }
     fun ensureDir() { root.mkdirs() }
+
+    companion object {
+        /** Reciter 6 keeps the v12 folder name so earlier downloads stay valid. */
+        fun dirFor(context: Context, reciterId: Int) = File(context.filesDir, if (reciterId == Reciters.DEFAULT_ID) "audio_packs/husary" else "audio_packs/r$reciterId")
+        fun rootAll(context: Context) = File(context.filesDir, "audio_packs")
+        fun usedBytesAll(context: Context): Long = rootAll(context).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        fun deleteEverything(context: Context) { rootAll(context).deleteRecursively() }
+    }
 }

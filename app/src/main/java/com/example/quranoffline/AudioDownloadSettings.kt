@@ -15,47 +15,80 @@ import com.example.quranoffline.data.QuranSuraMetadata
 
 private fun mb(b: Long) = "%.1f ميغابايت".format(b / 1048576.0)
 
-/** Settings > Download settings. Optional offline copy of ayah audio; streaming remains the default. */
+/** Compact reciter dropdown, shared by Settings and the reader screen. Selection is remembered. */
+@Composable
+fun ReciterPicker(onChanged: () -> Unit = {}, dark: Boolean = false) {
+    val ctx = LocalContext.current
+    var selected by remember { mutableStateOf(com.example.quranoffline.data.Reciters.run { ensureLoaded(ctx); currentId }) }
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }, Modifier.fillMaxWidth()) {
+            Text("القارئ: ${com.example.quranoffline.data.Reciters.byId(selected).label}", color = if (dark) Color.White else Color.Unspecified)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            com.example.quranoffline.data.Reciters.all.forEach { r ->
+                DropdownMenuItem(text = { Text(r.label) }, onClick = {
+                    com.example.quranoffline.data.Reciters.select(ctx, r.id); selected = r.id; open = false; onChanged()
+                })
+            }
+        }
+    }
+}
+
+/** Settings > Download settings. Optional per-reciter offline ayah audio; streaming remains the default. */
 @Composable
 fun AudioDownloadSettingsCard(suras: List<QuranSuraMetadata>) {
     val ctx = LocalContext.current
     val mgr = remember { AudioDownloadManager.get(ctx) }
     val jobs by mgr.jobs.collectAsState()
     val rev by mgr.revision.collectAsState()
+    val meas by mgr.measureStatus.collectAsState()
     var wifi by remember { mutableStateOf(mgr.wifiOnly) }
     var expanded by remember { mutableStateOf(false) }
     var confirmAll by remember { mutableStateOf(false) }
-    val used = remember(rev, jobs) { mgr.store.usedBytes() }
+    var picked by remember { mutableStateOf(com.example.quranoffline.data.Reciters.run { ensureLoaded(ctx); currentId }) }
+    val rec = com.example.quranoffline.data.Reciters.byId(picked)
+    val usedAll = remember(rev, jobs) { mgr.usedBytesAll() }
+    val usedRec = remember(rev, jobs, picked) { mgr.usedBytes(picked) }
+    val total = remember(rev, picked) { mgr.totalSize(picked) }
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("إعدادات التنزيل", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
-            Text("تنزيل صوت الآيات (الحصري، مرتل) من Quran.com اختياري. بدون تنزيل يبقى الصوت يُبثّ من الإنترنت كما كان. الملفات تُحفظ في تخزين التطبيق الخاص فقط، ولا تظهر لتطبيقات أخرى، وتُحذف عند إلغاء التثبيت أو من هنا.", color = Color(0xFF66736C))
-            Text("الحجم الكامل لصوت المصحف: ${mb(AudioPackSizes.total)}. المستخدم الآن: ${mb(used)}.")
+            Text("تنزيل صوت الآيات من Quran.com اختياري. بدون تنزيل يبقى الصوت يُبثّ من الإنترنت كما كان. الملفات تُحفظ في تخزين التطبيق الخاص فقط ولا تظهر لتطبيقات أخرى، وكل قارئ له مجلد منفصل، وتُحذف عند إلغاء التثبيت أو من هنا.", color = Color(0xFF66736C))
+            ReciterPicker(onChanged = { }.let { { picked = com.example.quranoffline.data.Reciters.currentId } })
+            Text("حجم صوت المصحف كاملاً لهذا القارئ: ${total?.let { mb(it) } ?: "غير مقاس بعد"}. المنزّل لهذا القارئ: ${mb(usedRec)}. المنزّل لكل القرّاء: ${mb(usedAll)}.")
+            if (picked != com.example.quranoffline.data.Reciters.DEFAULT_ID && total == null) {
+                val running = meas[picked]
+                OutlinedButton(onClick = { mgr.measure(picked, suras.map { it.ayahCount }) }, Modifier.fillMaxWidth()) { Text("قياس الأحجام (في الخلفية)") }
+                if (running != null) Text(running, color = Color(0xFF66736C))
+            }
             Text("مكان التخزين: تخزين التطبيق الداخلي الخاص (غير قابل للتغيير).", color = Color(0xFF66736C))
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text("التنزيل عبر Wi-Fi فقط", Modifier.weight(1f))
                 Switch(checked = wifi, onCheckedChange = { wifi = it; mgr.wifiOnly = it })
             }
-            Text("الصوت: Quran.com / Quran Foundation، القارئ: محمود خليل الحصري.", color = Color(0xFF66736C))
-            Text("ملاحظة: تنزيل كلمات الآيات الصوتية وبيانات النص غير مفعّل في هذه النسخة؛ النص مدمج أصلًا في التطبيق، وصوت الكلمة يبقى عبر الإنترنت.", color = Color(0xFF66736C))
+            Text("الصوت: Quran.com / Quran Foundation، القارئ: ${rec.label}.", color = Color(0xFF66736C))
+            Text("ملاحظة: تنزيل صوت الكلمات غير مفعّل (نحو 4.4 جيغابايت تقديريًا)؛ النص مدمج أصلًا في التطبيق، وصوت الكلمة يبقى عبر الإنترنت.", color = Color(0xFF66736C))
             OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(if (expanded) "إخفاء قائمة السور" else "اختيار السور للتنزيل") }
             if (expanded) suras.forEach { s ->
-                val job = jobs[s.index] ?: AudioDownloadManager.JobState()
-                val have = remember(rev, jobs) { mgr.store.surahCount(s.index) }
+                val job = jobs[mgr.key(picked, s.index)] ?: AudioDownloadManager.JobState()
+                val have = remember(rev, jobs, picked) { mgr.store(picked).surahCount(s.index) }
                 val complete = have == s.ayahCount
+                val size = mgr.surahSize(picked, s.index)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("${s.index}. ${s.arabicName}  (${mb(AudioPackSizes.surah(s.index))})", fontWeight = FontWeight.SemiBold)
+                    Text("${s.index}. ${s.arabicName}  (${size?.let { mb(it) } ?: "حجم غير مقاس"})", fontWeight = FontWeight.SemiBold)
                     Text(if (job.running) "$have/${s.ayahCount} آية، ${job.message}" else if (complete) "منزّلة بالكامل" else if (have > 0) "$have/${s.ayahCount} آية. ${job.message}" else job.message.ifBlank { "غير منزّلة" }, color = Color(0xFF66736C))
                     if (job.running && job.total > 0) LinearProgressIndicator(progress = { job.done.toFloat() / job.total }, Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (job.running) OutlinedButton(onClick = { mgr.pause(s.index) }) { Text("إيقاف مؤقت") }
-                        else if (!complete) OutlinedButton(onClick = { mgr.start(s.index, s.ayahCount) }) { Text(if (have > 0) "متابعة" else "تنزيل") }
-                        if (have > 0 && !job.running) OutlinedButton(onClick = { mgr.delete(s.index) }) { Text("حذف") }
-                        if (complete && !job.running) OutlinedButton(onClick = { mgr.delete(s.index); mgr.start(s.index, s.ayahCount) }) { Text("إعادة التنزيل") }
+                        if (job.running) OutlinedButton(onClick = { mgr.pause(picked, s.index) }) { Text("إيقاف مؤقت") }
+                        else if (!complete) OutlinedButton(onClick = { mgr.start(picked, s.index, s.ayahCount) }) { Text(if (have > 0) "متابعة" else "تنزيل") }
+                        if (have > 0 && !job.running) OutlinedButton(onClick = { mgr.delete(picked, s.index) }) { Text("حذف") }
+                        if (complete && !job.running) OutlinedButton(onClick = { mgr.delete(picked, s.index); mgr.start(picked, s.index, s.ayahCount) }) { Text("إعادة التنزيل") }
                     }
                 }
             }
-            if (used > 0) OutlinedButton(onClick = { confirmAll = true }, Modifier.fillMaxWidth()) { Text("حذف كل الصوت المنزّل") }
+            if (usedRec > 0) OutlinedButton(onClick = { mgr.deleteReciter(picked) }, Modifier.fillMaxWidth()) { Text("حذف تنزيلات هذا القارئ") }
+            if (usedAll > 0) OutlinedButton(onClick = { confirmAll = true }, Modifier.fillMaxWidth()) { Text("حذف كل الصوت المنزّل (كل القرّاء)") }
         }
     }
     if (confirmAll) AlertDialog(onDismissRequest = { confirmAll = false },

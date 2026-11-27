@@ -46,7 +46,7 @@ class AudioDownloaderTest {
     @Before fun setUp() { store = AudioPackStore(Files.createTempDirectory("packs").toFile().also { it.mkdirs() }) }
     @After fun tearDown() { store.deleteAll() }
 
-    private fun dl() = AudioDownloader(store, { true }, { sleeps += it }, { Fake() })
+    private fun dl() = AudioDownloader(store, networkAllowed = { true }, sleeper = { sleeps += it }, open = { Fake() })
     private val url = "http://localhost/a.mp3"
 
     @Test fun downloadsCompleteFileAndOnlyThenCountsAsLocal() {

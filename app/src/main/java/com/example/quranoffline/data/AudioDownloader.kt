@@ -9,6 +9,7 @@ import org.json.JSONObject
 /** Downloads one surah of ayah audio into [AudioPackStore]. Resumes partial files, honors 429/Retry-After. */
 class AudioDownloader(
     private val store: AudioPackStore,
+    private val reciterId: Int = Reciters.DEFAULT_ID,
     private val networkAllowed: () -> Boolean,
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) },
     private val open: (String) -> HttpURLConnection = { (URI(it).toURL().openConnection() as HttpURLConnection) },
@@ -39,8 +40,8 @@ class AudioDownloader(
         return Result.Done(done, bytes)
     }
 
-    private fun listUrls(surah: Int): Map<Int, String> {
-        val c = open("${QuranComAudio.API}/recitations/${QuranComAudio.AYAH_RECITATION_ID}/by_chapter/$surah?per_page=300")
+    fun listUrls(surah: Int): Map<Int, String> {
+        val c = open("${QuranComAudio.API}/recitations/$reciterId/by_chapter/$surah?per_page=300")
         try {
             c.connectTimeout = 15000; c.readTimeout = 30000; c.setRequestProperty("Accept", "application/json")
             check(c.responseCode == 200) { "HTTP ${c.responseCode}" }
@@ -50,10 +51,16 @@ class AudioDownloader(
                 val r = rows.getJSONObject(i)
                 val key = r.getString("verse_key").split(":")
                 require(key[0].toInt() == surah)
-                out[key[1].toInt()] = QuranComAudio.media(r.getString("url"), QuranComAudio.API)
+                out[key[1].toInt()] = QuranComAudio.media(r.getString("url"), "https://verses.quran.com/")
             }
             return out
         } finally { c.disconnect() }
+    }
+
+    /** Content-Length of one remote file, or null when unavailable. */
+    fun contentLength(url: String): Long? {
+        val c = open(url)
+        return try { c.requestMethod = "HEAD"; c.connectTimeout = 15000; c.readTimeout = 20000; if (c.responseCode == 200) c.getHeaderField("Content-Length")?.toLongOrNull() else null } catch (e: Exception) { null } finally { c.disconnect() }
     }
 
     internal fun fetch(url: String, part: File, dest: File, cancelled: () -> Boolean): Result {

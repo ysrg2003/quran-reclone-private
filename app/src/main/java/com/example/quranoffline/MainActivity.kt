@@ -1603,6 +1603,7 @@ private fun ReaderScreen(
                             FilterChip(selected = state.readerScope == scope, onClick = { onScope(scope) }, label = { Text(readerScopeLabel(scope)) })
                         }
                     }
+                    ReciterPicker(dark = true)
                     if (state.readerPlaying) {
                         OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Stop, contentDescription = null, tint = Color.White)
