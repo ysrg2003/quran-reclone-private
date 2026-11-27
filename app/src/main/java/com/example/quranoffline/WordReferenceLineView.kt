@@ -244,7 +244,7 @@ private fun annotatedWordReferenceLine(
             val color = statusHighlightColor(status)
             if (color != null) ranges += Triple(start, end, color)
             // revealed in hide mode: judged (not merely pending) or an observed word
-            if (hiddenMode && ((status != null && status != WordStatus.UNCERTAIN) || wordEval?.observed != null)) revealed += start to end
+            if (hiddenMode && com.example.quranoffline.data.WordDisplayRules.pageWordVisible(true, status, wordEval?.observed != null)) revealed += start to end
             searchFrom = end
             if (range != null) lineCursor = end
         }
