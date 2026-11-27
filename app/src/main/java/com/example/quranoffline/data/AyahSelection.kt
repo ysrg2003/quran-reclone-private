@@ -43,17 +43,30 @@ object SelectionRange {
     }
 }
 
-/** Character span of each ayah inside one mushaf line: key, start, endExclusive. An ayah ends at its own end marker. */
+/**
+ * Character span of each ayah inside one mushaf line: key, start, endExclusive.
+ * The bundled line data lists only SOME of the ayahs on a line (an ayah that begins in the middle of a line is missing
+ * from ayahKeys), so the end markers decide: the text up to marker N is ayah N, and the text after the last marker is ayah N+1.
+ */
 fun ayahSegments(line: WordReferenceLine): List<Triple<String, Int, Int>> {
     if (line.ayahKeys.isEmpty()) return emptyList()
-    val out = ArrayList<Triple<String, Int, Int>>(line.ayahKeys.size)
+    val len = line.text.length
+    val markers = line.ayahNumbers.sortedBy { it.start }
+    val firstKey = line.ayahKeys.first()
+    val lastKey = line.ayahKeys.last()
+    fun surahFor(ayahNo: Int, fallback: String): String =
+        (line.ayahKeys.firstOrNull { it.substringAfter(':').toIntOrNull() == ayahNo } ?: fallback).substringBefore(':')
+    if (markers.isEmpty()) return listOf(Triple(lastKey, 0, len))
+    val out = ArrayList<Triple<String, Int, Int>>(markers.size + 1)
     var from = 0
-    line.ayahKeys.forEachIndexed { i, key ->
-        val num = key.substringAfter(':').toIntOrNull()
-        val marker = line.ayahNumbers.firstOrNull { it.number == num }
-        val end = if (i == line.ayahKeys.lastIndex) line.text.length else (marker?.end ?: line.text.length).coerceIn(from, line.text.length)
-        out += Triple(key, from, end)
+    markers.forEach { m ->
+        val end = m.end.coerceIn(from, len)
+        out += Triple("${surahFor(m.number, firstKey)}:${m.number}", from, end)
         from = end
+    }
+    if (from < len) {
+        val next = markers.last().number + 1
+        out += Triple("${surahFor(next, lastKey)}:$next", from, len)
     }
     return out
 }

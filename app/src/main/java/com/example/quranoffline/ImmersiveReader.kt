@@ -20,7 +20,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +67,16 @@ internal fun ImmersiveReader(
         onDispose { controller?.show(WindowInsetsCompat.Type.systemBars()) }
     }
     val toggle = { barsVisible = !barsVisible }
+    val scroll = rememberScrollState()
+    val ayahY = remember { HashMap<String, Int>() }
+    // The shown page follows tasmee; start each new page at its top, then bring the ayah being recited into view.
+    LaunchedEffect(state.currentPage) { scroll.scrollTo(0) }
+    LaunchedEffect(state.currentAyahIndex, state.currentPage, state.listening) {
+        if (!state.listening) return@LaunchedEffect
+        val cur = state.allAyahs.getOrNull(state.currentAyahIndex) ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(80)
+        ayahY["${cur.surah}:${cur.ayah}"]?.let { scroll.animateScrollTo((it - 260).coerceAtLeast(0)) }
+    }
     val scale = state.correctionSettings.mushafTextScale
     Box(
         Modifier.fillMaxSize().background(Color(0xFFFFFEF8)).pointerInput(Unit) {
@@ -78,7 +91,7 @@ internal fun ImmersiveReader(
         Column(
             Modifier.fillMaxSize()
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { toggle() }
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(horizontal = 2.dp),
         ) {
             // Tasmee/hide/results use the same word view as the memorization section, so colours, hide-ayahs,
@@ -112,11 +125,13 @@ internal fun ImmersiveReader(
                         )
                     }
                     val selKeys = remember(state.selectedAyahIndices, state.allAyahs) { state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.let { a -> a.surah to a.ayah } }.toSet() }
+                    val selOnPage = state.ayahs.any { (it.surah to it.ayah) in selKeys }
                     state.ayahs.forEachIndexed { index, ayah ->
+                      Box(Modifier.onGloballyPositioned { ayahY["${ayah.surah}:${ayah.ayah}"] = it.positionInParent().y.toInt() }) {
                         AyahBlock(
                             ayah = ayah,
                             // With a selection, tasmee hides only the selected ayahs; the rest stay visible.
-                            hidden = state.hidden && (selKeys.isEmpty() || (ayah.surah to ayah.ayah) in selKeys),
+                            hidden = state.hidden && (!selOnPage || (ayah.surah to ayah.ayah) in selKeys),
                             evaluation = state.evaluation,
                             openingBasmalaEvaluation = state.openingBasmalaEvaluation,
                             openingBasmalaWordIndex = state.openingBasmalaWordIndex,
@@ -132,6 +147,7 @@ internal fun ImmersiveReader(
                             onReadFromHere = viewModel::playFromHere,
                             onPlainTap = toggle,
                         )
+                      }
                     }
                 }
             } else MushafPageSurface(
@@ -157,7 +173,7 @@ internal fun ImmersiveReader(
                 onPlainTap = toggle,
                 onClearSelection = viewModel::clearAyahSelection,
                 fullBleed = true,
-                minHeightDp = LocalConfiguration.current.screenHeightDp,
+                minHeightDp = (view.height / LocalDensity.current.density).toInt().coerceAtLeast(LocalConfiguration.current.screenHeightDp),
             )
         }
         radialAyah?.let { (rs, ra) ->

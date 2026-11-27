@@ -49,4 +49,16 @@ class KhatmaTest {
         val s = KhatmaLogic.record(base, (0 until 6236).toList(), "d1", 123L)
         assertEquals(1, s.completed); assertEquals(0L, s.startMillis)
     }
+
+    @Test fun wirdUnitsConvertToAyahs() {
+        assertEquals(20, KhatmaLogic.targetInAyahs(20, 0))
+        assertEquals(11, KhatmaLogic.targetInAyahs(1, 1))   // ceil(6236/604)
+        assertEquals(55, KhatmaLogic.targetInAyahs(1, 2))   // ceil(6236/114)
+        val s = base.copy(dailyTarget = 2, targetUnit = 1)
+        assertEquals(21, s.targetAyahs)
+        assertEquals(false, s.wirdDone)
+        assertEquals(true, KhatmaLogic.record(s, (0 until 21).toList(), "d1", 1L).wirdDone)
+        assertEquals(false, base.wirdDone)                                   // no target, nothing read today
+        assertEquals(true, KhatmaLogic.record(base, listOf(0), "d1", 1L).wirdDone) // no target: any reading counts
+    }
 }

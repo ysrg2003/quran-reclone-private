@@ -17,14 +17,29 @@ data class KhatmaState(
     val reminderMinute: Int = 0,
     /** Time of the first ayah recorded in the current khatma (0 = not started). Used for the finish estimate. */
     val startMillis: Long = 0L,
+    /** Unit of dailyTarget: 0 ayahs, 1 pages, 2 surahs. */
+    val targetUnit: Int = 0,
+    /** Repeat the reminder every N minutes (max 3 times) while today's wird is not done; 0 = off. */
+    val repeatMinutes: Int = 0,
 ) {
     val coveredCount: Int get() = covered.cardinality()
     val todayCount: Int get() = today.cardinality()
+    /** dailyTarget in ayahs. Pages and surahs are averages (6236/604 and 6236/114), so they are approximate. */
+    val targetAyahs: Int get() = KhatmaLogic.targetInAyahs(dailyTarget, targetUnit)
+    val wirdDone: Boolean get() = if (targetAyahs > 0) todayCount >= targetAyahs else todayCount > 0
 }
 
 /** Pure logic, JVM-testable. Ayah indices are global mushaf positions 0..6235. */
 object KhatmaLogic {
     const val TOTAL = 6236
+    const val AYAHS_PER_PAGE = 6236.0 / 604.0
+    const val AYAHS_PER_SURAH = 6236.0 / 114.0
+
+    fun targetInAyahs(value: Int, unit: Int): Int = when (unit) {
+        1 -> Math.ceil(value * AYAHS_PER_PAGE).toInt()
+        2 -> Math.ceil(value * AYAHS_PER_SURAH).toInt()
+        else -> value
+    }
 
     fun record(state: KhatmaState, indices: Collection<Int>, dayKey: String, nowMillis: Long = 0L): KhatmaState {
         val valid = indices.filter { it in 0 until TOTAL }
@@ -49,7 +64,7 @@ object KhatmaLogic {
         val days = if (s.startMillis <= 0L) 1L else ((nowMillis - s.startMillis) / dayMs + 1).coerceAtLeast(1L)
         val pace = if (covered > 0 && s.startMillis > 0L) covered.toDouble() / days else 0.0
         val byPace = if (pace > 0.0) Math.ceil(remaining / pace).toInt() else null
-        val byTarget = if (s.dailyTarget > 0) Math.ceil(remaining.toDouble() / s.dailyTarget).toInt() else null
+        val byTarget = if (s.targetAyahs > 0) Math.ceil(remaining.toDouble() / s.targetAyahs).toInt() else null
         return Estimate(remaining, pace, byPace, byTarget)
     }
 
@@ -92,6 +107,8 @@ class LocalKhatmaStore(context: Context) {
             reminderHour = prefs.getInt("$k.remH", 20),
             reminderMinute = prefs.getInt("$k.remM", 0),
             startMillis = prefs.getLong("$k.start", 0L),
+            targetUnit = prefs.getInt("$k.unit", 0),
+            repeatMinutes = prefs.getInt("$k.rep", 0),
         )
     }
 
@@ -108,6 +125,8 @@ class LocalKhatmaStore(context: Context) {
             .putInt("$k.remH", s.reminderHour)
             .putInt("$k.remM", s.reminderMinute)
             .putLong("$k.start", s.startMillis)
+            .putInt("$k.unit", s.targetUnit)
+            .putInt("$k.rep", s.repeatMinutes)
             .apply()
     }
 }

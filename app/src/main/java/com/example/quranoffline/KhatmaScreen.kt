@@ -32,11 +32,13 @@ fun KhatmaScreen(
     onReminder: (SaveMarkKind, Boolean, Int, Int) -> Unit,
     onOpen: (SaveMarkKind) -> Unit,
     modifier: Modifier = Modifier,
+    onTargetUnit: (SaveMarkKind, Int) -> Unit = { _, _ -> },
+    onRepeat: (SaveMarkKind, Int) -> Unit = { _, _ -> },
 ) {
     Column(modifier.fillMaxSize().background(Color(0xFFF7F8F4)).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("الختمات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        KhatmaCard("ختمة التسميع والحفظ", state.khatmaHifz, state, onTarget, onReminder, onOpen)
-        KhatmaCard("ختمة القراءة والاستماع", state.khatmaRead, state, onTarget, onReminder, onOpen)
+        KhatmaCard("ختمة التسميع والحفظ", state.khatmaHifz, state, onTarget, onReminder, onOpen, onTargetUnit, onRepeat)
+        KhatmaCard("ختمة القراءة والاستماع", state.khatmaRead, state, onTarget, onReminder, onOpen, onTargetUnit, onRepeat)
         Text("تُحسب الآية في ختمة التسميع بعد الانتقال منها، وفي ختمة القراءة عند سماعها بصوت القارئ أو عند تقليب الصفحة للأمام.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
     }
 }
@@ -45,6 +47,7 @@ fun KhatmaScreen(
 private fun KhatmaCard(
     title: String, k: KhatmaState, state: QuranUiState,
     onTarget: (SaveMarkKind, Int) -> Unit, onReminder: (SaveMarkKind, Boolean, Int, Int) -> Unit, onOpen: (SaveMarkKind) -> Unit,
+    onTargetUnit: (SaveMarkKind, Int) -> Unit, onRepeat: (SaveMarkKind, Int) -> Unit,
 ) {
     val last = state.allAyahs.getOrNull(k.lastIndex)
     val suraName = last?.let { a -> state.metadata?.sura(a.surah)?.arabicName }
@@ -66,15 +69,21 @@ private fun KhatmaCard(
             if (k.coveredCount > 0) {
                 Text("المتبقي: ${est.remaining} آية")
                 est.daysByPace?.let { Text("بوتيرتك الحالية (${"%.1f".format(est.pacePerDay)} آية/يوم) تنتهي بعد $it يوماً، في ${dateAfter(it)}") }
-                est.daysByTarget?.let { Text("بالهدف اليومي (${k.dailyTarget} آية) تنتهي بعد $it يوماً، في ${dateAfter(it)}") }
+                est.daysByTarget?.let { Text("بالورد اليومي (${k.dailyTarget} ${listOf("آية", "صفحة", "سورة")[k.targetUnit.coerceIn(0, 2)]}${if (k.targetUnit > 0) "، تقريبياً" else ""}) تنتهي بعد $it يوماً، في ${dateAfter(it)}") }
             }
             OutlinedButton(onClick = { onOpen(k.kind) }, enabled = last != null, modifier = Modifier.fillMaxWidth()) { Text("افتح موضعي في الختمة") }
             HorizontalDivider()
-            Text("الورد اليومي: اليوم ${k.todayCount}" + if (k.dailyTarget > 0) " من ${k.dailyTarget} آية" else " آية")
+            Text("الورد اليومي: اليوم ${k.todayCount} آية" + if (k.targetAyahs > 0) " من ${k.targetAyahs} آية" else "")
+            if (k.targetAyahs > 0) {
+                val wp = (k.todayCount * 100f / k.targetAyahs).coerceAtMost(100f)
+                LinearProgressIndicator(progress = { wp / 100f }, modifier = Modifier.fillMaxWidth())
+                Text("تقدم ورد اليوم: ${"%.0f".format(wp)}%")
+            }
+            PickerField("وحدة الورد", listOf("آيات", "صفحات", "سور")[k.targetUnit.coerceIn(0, 2)], listOf("آيات" to 0, "صفحات" to 1, "سور" to 2), { onTargetUnit(k.kind, it) })
             OutlinedTextField(
                 value = targetText,
                 onValueChange = { v -> targetText = v.filter(Char::isDigit).take(4); onTarget(k.kind, targetText.toIntOrNull() ?: 0) },
-                label = { Text("الهدف اليومي (عدد الآيات)") }, singleLine = true,
+                label = { Text("الورد اليومي (العدد بالوحدة المختارة)") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(),
             )
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -87,6 +96,7 @@ private fun KhatmaCard(
             if (k.reminderOn) {
                 PickerField("الساعة", "%02d".format(k.reminderHour), (0..23).map { "%02d".format(it) to it }, { onReminder(k.kind, true, it, k.reminderMinute) })
                 PickerField("الدقيقة", "%02d".format(k.reminderMinute), (0..55 step 5).map { "%02d".format(it) to it }, { onReminder(k.kind, true, k.reminderHour, it) })
+                PickerField("تكرار التذكير إن لم يكتمل الورد", if (k.repeatMinutes == 0) "بدون تكرار" else "كل ${k.repeatMinutes} دقيقة (حتى 3 مرات)", listOf("بدون تكرار" to 0, "كل 10 دقائق" to 10, "كل 30 دقيقة" to 30, "كل ساعة" to 60), { onRepeat(k.kind, it) })
                 key(statusTick) { Text(KhatmaReminders.status(ctx, k), style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C)) }
                 OutlinedButton(onClick = {
                     if (Build.VERSION.SDK_INT >= 33 && !KhatmaReminders.notificationsAllowed(ctx)) permission.launch(Manifest.permission.POST_NOTIFICATIONS)

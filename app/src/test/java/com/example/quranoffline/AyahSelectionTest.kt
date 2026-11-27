@@ -54,19 +54,23 @@ class AyahSegmentsTest {
     private fun line(text: String, keys: List<String>, nums: List<Triple<Int, Int, Int>>) =
         com.example.quranoffline.data.WordReferenceLine(1, "ayah", text, keys,
             nums.map { com.example.quranoffline.data.WordReferenceAyahNumber(it.first, it.second, "x", it.third) })
+    private fun seg(l: com.example.quranoffline.data.WordReferenceLine) = com.example.quranoffline.data.ayahSegments(l)
 
-    @org.junit.Test fun segmentsFollowEndMarkers() {
-        // "aaaa(1)bbbb(2)cccc" : ayah 1 ends at its marker, ayah 2 at its marker, ayah 3 continues to line end
-        val l = line("aaaa1bbbb2cccc", listOf("2:1", "2:2", "2:3"), listOf(Triple(4, 5, 1), Triple(9, 10, 2)))
-        val seg = com.example.quranoffline.data.ayahSegments(l)
-        org.junit.Assert.assertEquals(listOf(Triple("2:1", 0, 5), Triple("2:2", 5, 10), Triple("2:3", 10, 14)), seg)
-        org.junit.Assert.assertEquals("2:1", com.example.quranoffline.data.ayahKeyAtOffset(seg, 2))
-        org.junit.Assert.assertEquals("2:2", com.example.quranoffline.data.ayahKeyAtOffset(seg, 5))
-        org.junit.Assert.assertEquals("2:3", com.example.quranoffline.data.ayahKeyAtOffset(seg, 13))
+    // Real bundled data, Al-Baqarah page 2: line 4 = end of ayah 2 + start of ayah 3, yet ayahKeys lists only 2:2.
+    @org.junit.Test fun ayahStartingMidLineIsRecovered() {
+        val l = line("x".repeat(76), listOf("2:2"), listOf(Triple(16, 17, 2)))
+        org.junit.Assert.assertEquals(listOf(Triple("2:2", 0, 17), Triple("2:3", 17, 76)), seg(l))
     }
-
+    @org.junit.Test fun lineWithTwoMarkersAndNoTail() {
+        val l = line("x".repeat(51), listOf("1:3", "1:4"), listOf(Triple(24, 25, 3), Triple(50, 51, 4)))
+        org.junit.Assert.assertEquals(listOf(Triple("1:3", 0, 25), Triple("1:4", 25, 51)), seg(l))
+    }
     @org.junit.Test fun continuingAyahWithoutMarkerTakesWholeLine() {
-        val l = line("aaaaaa", listOf("2:5"), emptyList())
-        org.junit.Assert.assertEquals(listOf(Triple("2:5", 0, 6)), com.example.quranoffline.data.ayahSegments(l))
+        org.junit.Assert.assertEquals(listOf(Triple("2:5", 0, 57)), seg(line("x".repeat(57), listOf("2:5"), emptyList())))
+    }
+    @org.junit.Test fun hitTest() {
+        val s = seg(line("x".repeat(76), listOf("2:2"), listOf(Triple(16, 17, 2))))
+        org.junit.Assert.assertEquals("2:2", com.example.quranoffline.data.ayahKeyAtOffset(s, 3))
+        org.junit.Assert.assertEquals("2:3", com.example.quranoffline.data.ayahKeyAtOffset(s, 40))
     }
 }

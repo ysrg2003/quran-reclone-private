@@ -189,6 +189,9 @@ private fun QuranOfflineApp(
         if (state.inputMode == RecitationInputMode.TYPING) {
             viewModel.startTypedRecitation()
         } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            // A selected block decides the start (first selected ayah) and the end (last selected ayah), in every tab.
+            val sel = state.selectedAyahIndices
+            if (sel.isNotEmpty() && !state.listening) state.allAyahs.getOrNull(sel.first())?.let { viewModel.prepareTasmeeForSelection(it.surah, it.ayah) }
             viewModel.startListening()
         } else {
             onRequestMicrophone()
@@ -378,6 +381,8 @@ private fun QuranOfflineApp(
                 state = state,
                 onTarget = viewModel::setKhatmaTarget,
                 onReminder = viewModel::setKhatmaReminder,
+                onTargetUnit = viewModel::setKhatmaTargetUnit,
+                onRepeat = viewModel::setKhatmaRepeat,
                 onOpen = { kind -> viewModel.openKhatmaPosition(kind); tab = 4 },
                 modifier = Modifier.padding(padding),
             )
@@ -582,6 +587,8 @@ private fun SectionHeader(title: String, subtitle: String) {
     }
 }
 
+private const val SHOW_TODAY_GOAL_BOX = false
+
 @Composable
 private fun MemorizationScreen(
     state: com.example.quranoffline.data.QuranUiState,
@@ -617,7 +624,19 @@ private fun MemorizationScreen(
             }
         }
     }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Items before the ayah list: recitation card (1), header, title, muqatta'at, metadata, navigation (5), recitation card if not focus,
+    // optional current-word card, hide button (1).
+    val showWordCard = state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()
+    val lead = (if (focusRecitation) 1 else 0) + 5 + (if (!focusRecitation) 1 else 0) + (if (showWordCard) 1 else 0) + 1
+    LaunchedEffect(state.currentAyahIndex, state.currentPage, state.listening) {
+        if (!state.listening) return@LaunchedEffect
+        val cur = state.allAyahs.getOrNull(state.currentAyahIndex) ?: return@LaunchedEffect
+        val i = state.ayahs.indexOfFirst { it.surah == cur.surah && it.ayah == cur.ayah }
+        if (i >= 0) listState.animateScrollToItem(lead + i)
+    }
     LazyColumn(
+        state = listState,
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFF7F8F4))
@@ -735,7 +754,8 @@ private fun MemorizationScreen(
                 }
             }
         }
-        item { GoalCard(state.goal, onSetGoal) }
+        // Hidden in v21.1 (the Khatmat tab covers the daily wird). Code and saved goal data are kept; set to true to bring it back.
+        if (SHOW_TODAY_GOAL_BOX) item { GoalCard(state.goal, onSetGoal) }
         if (state.notice.isNotBlank()) {
             item {
                 Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE7F3EE))) {
@@ -1947,10 +1967,10 @@ internal fun MushafPageSurface(
                     }
                     Box(Modifier.fillMaxWidth().then(if (sideways) Modifier.nestedScroll(edgeSwipe).horizontalScroll(rememberScrollState()) else Modifier)) {
                     Column(
-                        (if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth()).then(if (fullBleed && minHeightDp > 0) Modifier.heightIn(min = (minHeightDp - 12).dp) else Modifier),
+                        (if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth()).then(if (fullBleed && minHeightDp > 0) Modifier.heightIn(min = minHeightDp.dp) else Modifier),
                         verticalArrangement = if (fullBleed) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
                     ) {
-                    val circleLine = if (selectedIndices.isEmpty()) -1 else wordReferenceLines.firstOrNull { l -> l.ayahKeys.any { k -> ayahIndexByKey[k]?.let(selectedIndices::contains) == true } }?.number ?: -1
+                    val circleLine = if (selectedIndices.isEmpty()) -1 else wordReferenceLines.firstOrNull { l -> com.example.quranoffline.data.ayahSegments(l).any { sg -> ayahIndexByKey[sg.first]?.let(selectedIndices::contains) == true } }?.number ?: -1
                     wordReferenceLines.forEach { line ->
                         WordReferenceLineView(
                             line = line,
@@ -2320,7 +2340,9 @@ internal fun MuqattaatOpeningCard(
             if (after != null) {
                 Text("هذه السورة تبدأ بحروف مقطعة. اختر طريقة التسميع:", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
                 val (s, a, w) = after
-                val label = if (w == 0) "التسميع من الآية $a (بعد الحروف المقطعة)" else "التسميع من بعد الحروف المقطعة (الآية $a، الكلمة ${w + 1})"
+                // Always the ayah's own mushaf number, followed by its first words, so the start is unambiguous.
+                val first = state.allAyahs.firstOrNull { it.surah == s && it.ayah == a }?.words?.drop(w)?.take(3)?.joinToString(" ") { it.text }.orEmpty()
+                val label = "التسميع من الآية $a" + (if (w > 0) "، الكلمة ${w + 1}" else "") + if (first.isNotBlank()) " «$first»" else ""
                 Button(onClick = { onAfterOpening(s, a, w) }, modifier = Modifier.fillMaxWidth()) { Text(label) }
                 OutlinedButton(onClick = { onFromBeginning(s, 1) }, modifier = Modifier.fillMaxWidth()) { Text("من بداية السورة") }
             }

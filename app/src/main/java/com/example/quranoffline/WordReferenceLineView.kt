@@ -62,9 +62,7 @@ internal fun WordReferenceLineView(
         line.ayahKeys.mapNotNull { key -> ayahsByKey[key] ?: pageAyahsByKey[key] }
     }
     val primary = ayahs.firstOrNull()
-    val active = ayahs.any { state.readerCurrentKey == it.selectionKey() }
     val background = when {
-        active -> Color(0xFFEAF4EE)
         else -> Color.Transparent
     }
     val fontSize = (22f * textScale).sp
@@ -158,12 +156,15 @@ internal fun WordReferenceLineView(
             val selectedKeys = androidx.compose.runtime.remember(selectedIndices, segments, ayahIndexByKey) {
                 segments.filter { ayahIndexByKey[it.first]?.let(selectedIndices::contains) == true }
             }
+            val playKey = state.readerCurrentKey
+            val playing = androidx.compose.runtime.remember(segments, playKey) { if (playKey == null) emptyList() else segments.filter { it.first == playKey } }
             Text(
-                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys) {
+                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys, playing) {
                     val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets)
-                    if (selectedKeys.isEmpty()) base else buildAnnotatedString {
+                    if (selectedKeys.isEmpty() && playing.isEmpty()) base else buildAnnotatedString {
                         append(base)
                         selectedKeys.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = Color(0xFFFFE0A6)), st, en) }
+                        playing.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = Color(0xFFBFE3CF)), st, en) }
                     }
                 },
                 onTextLayout = { r ->

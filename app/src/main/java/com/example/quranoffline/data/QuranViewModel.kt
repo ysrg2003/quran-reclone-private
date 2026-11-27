@@ -1677,8 +1677,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val surah = parts.getOrNull(0)?.toIntOrNull() ?: return
         val ayah = parts.getOrNull(1)?.toIntOrNull() ?: return
         val idx = state.value.allAyahs.indexOfFirst { it.surah == surah && it.ayah == ayah }
-        recordMark(SaveMarkKind.READ, surah, ayah, if (idx >= 0) pageForAyahIndex(idx) else state.value.currentPage, 0)
+        val page = if (idx >= 0) pageForAyahIndex(idx) else state.value.currentPage
+        recordMark(SaveMarkKind.READ, surah, ayah, page, 0)
         if (idx >= 0) recordKhatma(SaveMarkKind.READ, listOf(idx))
+        // The shown page follows the ayah being heard (the highlight is drawn on that ayah only).
+        if (page != state.value.currentPage && !state.value.listening) showPage(page)
     }
 
     fun setErrorLogEnabled(on: Boolean) {
@@ -1753,7 +1756,15 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         putKhatma(after)
     }
 
-    fun setKhatmaTarget(kind: SaveMarkKind, ayahsPerDay: Int) = putKhatma(khatmaOf(kind).copy(dailyTarget = ayahsPerDay.coerceIn(0, 6236)))
+    fun setKhatmaTarget(kind: SaveMarkKind, perDay: Int) = putKhatma(khatmaOf(kind).copy(dailyTarget = perDay.coerceIn(0, 6236)))
+
+    fun setKhatmaTargetUnit(kind: SaveMarkKind, unit: Int) = putKhatma(khatmaOf(kind).copy(targetUnit = unit.coerceIn(0, 2)))
+
+    fun setKhatmaRepeat(kind: SaveMarkKind, minutes: Int) {
+        val k = khatmaOf(kind).copy(repeatMinutes = minutes.coerceIn(0, 240))
+        putKhatma(k)
+        com.example.quranoffline.KhatmaReminders.apply(getApplication(), k)
+    }
 
     fun setKhatmaReminder(kind: SaveMarkKind, on: Boolean, hour: Int, minute: Int) {
         val k = khatmaOf(kind).copy(reminderOn = on, reminderHour = hour.coerceIn(0, 23), reminderMinute = minute.coerceIn(0, 59))
