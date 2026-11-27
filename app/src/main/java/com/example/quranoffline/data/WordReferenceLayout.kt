@@ -21,6 +21,24 @@ data class WordReferenceLine(
     val wordRanges: Map<String, Pair<Int, Int>> = emptyMap(),
 )
 
+/**
+ * v23.1: Android shapes the multi-digit ayah-end numbers of the KFGQPC font in reverse order
+ * (user screenshot, page 3: 12 drew as 21, 10 drew as a dot outside the circle). The stored text is
+ * correct (bundled and quran.com layouts, checked for all 6236). Only the string handed to the text
+ * renderer has the digits of each 2+ digit number reversed, same length, so every offset stays valid.
+ */
+fun WordReferenceLine.displayText(): String {
+    if (ayahNumbers.isEmpty()) return text
+    var sb: StringBuilder? = null
+    for (n in ayahNumbers) {
+        if (n.end - n.start < 2 || n.start < 0 || n.end > text.length) continue
+        if (sb == null) sb = StringBuilder(text)
+        val rev = text.substring(n.start, n.end).reversed()
+        sb.replace(n.start, n.end, rev)
+    }
+    return sb?.toString() ?: text
+}
+
 data class WordReferencePage(
     val page: Int,
     val lines: List<WordReferenceLine>,

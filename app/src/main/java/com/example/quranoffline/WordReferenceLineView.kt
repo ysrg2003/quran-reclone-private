@@ -1,5 +1,6 @@
 package com.example.quranoffline
 
+import com.example.quranoffline.data.displayText
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -210,8 +211,9 @@ private fun annotatedWordReferenceLine(
     ayahIndexByKey: Map<String, Int>,
     wordOffsets: List<Int>,
 ): AnnotatedString {
-    val evaluation = state.evaluation ?: return AnnotatedString(line.text)
-    if (line.type != "ayah" || state.hidden) return AnnotatedString(line.text)
+    val shownText = line.displayText()
+    val evaluation = state.evaluation ?: return AnnotatedString(shownText)
+    if (line.type != "ayah" || state.hidden) return AnnotatedString(shownText)
 
     val ranges = mutableListOf<Triple<Int, Int, Color>>()
     var lineCursor = 0
@@ -235,7 +237,7 @@ private fun annotatedWordReferenceLine(
     }
 
     return buildAnnotatedString {
-        append(line.text)
+        append(shownText)
         ranges.forEach { (start, end, color) ->
             addStyle(SpanStyle(background = color.copy(alpha = 0.34f)), start, end)
         }
