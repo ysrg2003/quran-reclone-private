@@ -65,6 +65,8 @@ data class QuranUiState(
     val readerScope: ReaderScope = ReaderScope.AYAH,
     val readerCurrentKey: String? = null,
     val selectedAyahIndices: List<Int> = emptyList(),
+    /** The long-pressed ayah. Extending toward earlier and later ayahs moves each side on its own around it. */
+    val selectionBase: Int = -1,
     val correctionAyahIndex: Int = -1,
     val correctionFirstWordInAyah: Int = -1,
     val selectedSurah: Int = 1,
@@ -483,25 +485,23 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     fun playAyah(surah: Int, ayah: Int) = startReader(ReaderScope.AYAH, surah, ayah)
 
     fun beginAyahSelection(surah: Int, ayah: Int) {
-        val index = state.value.allAyahs.indexOfFirst { it.surah == surah && it.ayah == ayah }
+        val index = AyahLookup.of(state.value.allAyahs).indexOf(surah, ayah)
         if (index < 0) return
-        state.value = state.value.copy(selectedAyahIndices = listOf(index), notice = "تم تحديد الآية $ayah. اضغط على آية أخرى لإكمال نطاق متصل.")
+        state.value = state.value.copy(selectedAyahIndices = listOf(index), selectionBase = index, notice = "تم تحديد الآية $ayah. اضغط على آية أخرى لتوسيع التحديد أو تقليصه من أي جهة.")
     }
 
     fun tapAyahSelection(surah: Int, ayah: Int) {
-        val index = state.value.allAyahs.indexOfFirst { it.surah == surah && it.ayah == ayah }
+        val index = AyahLookup.of(state.value.allAyahs).indexOf(surah, ayah)
         if (index < 0) return
-        val current = state.value.selectedAyahIndices
-        val next = if (current.isEmpty()) {
-            listOf(index)
-        } else {
-            AyahSelection(current.first(), current.last()).tap(index).indices.toList()
-        }
+        val cur = state.value.selectedAyahIndices
+        if (cur.isEmpty()) { beginAyahSelection(surah, ayah); return }
+        val range = SelectionRange.tap(cur.first(), cur.last(), state.value.selectionBase.takeIf { it in cur.first()..cur.last() } ?: cur.first(), index)
+        val next = (range.first..range.second).toList()
         state.value = state.value.copy(selectedAyahIndices = next, notice = "تم تحديد ${next.size} آيات متصلة.")
     }
 
     fun clearAyahSelection() {
-        state.value = state.value.copy(selectedAyahIndices = emptyList(), notice = "أُلغي تحديد الآيات.")
+        state.value = state.value.copy(selectedAyahIndices = emptyList(), selectionBase = -1, notice = "أُلغي تحديد الآيات.")
     }
 
     fun playSelectedAyahs() {
@@ -1810,6 +1810,42 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val a = all.getOrNull(first) ?: return
         startMemorizationFrom(a.surah, a.ayah)
         tasmeeEndIndex = last
+    }
+
+    /** Tasmee over a range chosen like the quick-navigation options, starting at [surah]:[ayah]. Stops after the range; QURAN has no end. */
+    fun prepareTasmeeRange(scope: ReaderScope, surah: Int, ayah: Int) {
+        val st = state.value; val all = st.allAyahs; val md = st.metadata ?: return
+        val lk = AyahLookup.of(all)
+        val start = lk.indexOf(surah, ayah); if (start < 0) return
+        fun m(i: Int) = md.ayah(all[i].surah, all[i].ayah)
+        val ref = m(start)
+        val last = when (scope) {
+            ReaderScope.AYAH -> start
+            ReaderScope.SURAH -> (start until all.size).lastOrNull { all[it].surah == surah } ?: start
+            ReaderScope.JUZ -> (start until all.size).lastOrNull { m(it)?.juz == ref?.juz } ?: start
+            ReaderScope.HIZB -> (start until all.size).lastOrNull { m(it)?.quarter == ref?.quarter } ?: start
+            ReaderScope.PAGES -> (start until all.size).lastOrNull { m(it)?.page == ref?.page } ?: start
+            ReaderScope.QURAN -> -1
+        }
+        startMemorizationFrom(surah, ayah)
+        tasmeeEndIndex = last
+    }
+
+    fun prepareTasmeeCustom(fromSurah: Int, fromAyah: Int, toSurah: Int, toAyah: Int) {
+        val lk = AyahLookup.of(state.value.allAyahs)
+        val a = lk.indexOf(fromSurah, fromAyah); val b = lk.indexOf(toSurah, toAyah)
+        if (a < 0 || b < 0) { state.value = state.value.copy(notice = "آية البداية أو النهاية غير موجودة."); return }
+        val lo = minOf(a, b); val hi = maxOf(a, b)
+        val f = state.value.allAyahs[lo]
+        startMemorizationFrom(f.surah, f.ayah)
+        tasmeeEndIndex = hi
+    }
+
+    /** Where tasmee will start if the user just presses the microphone (same rule as startListening). */
+    fun tasmeeAnchor(): Pair<Int, Int>? {
+        val st = state.value
+        st.checkpoint?.validatedAgainst(st.allAyahs)?.let { return it.surah to it.ayah }
+        return st.ayahs.firstOrNull()?.let { it.surah to it.ayah }
     }
 
     /** Radial menu "listen": the selection only, or the tapped ayah when nothing is selected. */

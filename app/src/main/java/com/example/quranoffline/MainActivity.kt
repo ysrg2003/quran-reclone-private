@@ -1842,6 +1842,7 @@ internal fun MushafPageSurface(
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
     onPlainTap: (() -> Unit)? = null,
+    onClearSelection: () -> Unit = {},
     fullBleed: Boolean = false,
     minHeightDp: Int = 0,
 ) {
@@ -1876,7 +1877,7 @@ internal fun MushafPageSurface(
                     onDragCancel = { horizontalDrag = 0f },
                 )
             }
-            .combinedClickable(onClick = onOpenReaderActions, onLongClick = {})
+            .combinedClickable(onClick = { if (onPlainTap != null) { if (state.selectedAyahIndices.isEmpty()) onPlainTap() } else onOpenReaderActions() }, onLongClick = {})
         ,
         shape = if (fullBleed) RoundedCornerShape(0.dp) else RoundedCornerShape(if (isOpeningPage) 24.dp else 22.dp),
         border = if (fullBleed) null else BorderStroke(1.dp, Color(0xFFD8C7A7)),
@@ -1949,6 +1950,7 @@ internal fun MushafPageSurface(
                         (if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth()).then(if (fullBleed && minHeightDp > 0) Modifier.heightIn(min = (minHeightDp - 12).dp) else Modifier),
                         verticalArrangement = if (fullBleed) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
                     ) {
+                    val circleLine = if (selectedIndices.isEmpty()) -1 else wordReferenceLines.firstOrNull { l -> l.ayahKeys.any { k -> ayahIndexByKey[k]?.let(selectedIndices::contains) == true } }?.number ?: -1
                     wordReferenceLines.forEach { line ->
                         WordReferenceLineView(
                             line = line,
@@ -1971,6 +1973,9 @@ internal fun MushafPageSurface(
                             onTapAyah = onTapAyah,
                             onLongPressAyah = onLongPressAyah,
                             onPlainTap = onPlainTap,
+                            showCircle = line.number == circleLine,
+                            circleDp = state.correctionSettings.selectionCircleDp,
+                            onClearSelection = onClearSelection,
                         )
                     }
                     }
@@ -2150,6 +2155,14 @@ private fun TypographySettingsCard(
                     enabled = scale < CorrectionSettings.MAX_MUSHAF_TEXT_SCALE,
                     modifier = Modifier.weight(1f),
                 ) { Text("تكبير") }
+            }
+            androidx.compose.material3.HorizontalDivider()
+            val cd = settings.selectionCircleDp
+            Text("حجم دائرة التحديد: $cd", fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onUpdate { it.copy(selectionCircleDp = cd - 2) } }, enabled = cd > CorrectionSettings.MIN_SELECTION_CIRCLE_DP, modifier = Modifier.weight(1f)) { Text("أصغر") }
+                OutlinedButton(onClick = { onUpdate { it.copy(selectionCircleDp = CorrectionSettings.DEFAULT_SELECTION_CIRCLE_DP) } }, enabled = cd != CorrectionSettings.DEFAULT_SELECTION_CIRCLE_DP, modifier = Modifier.weight(1f)) { Text("الافتراضي") }
+                OutlinedButton(onClick = { onUpdate { it.copy(selectionCircleDp = cd + 2) } }, enabled = cd < CorrectionSettings.MAX_SELECTION_CIRCLE_DP, modifier = Modifier.weight(1f)) { Text("أكبر") }
             }
         }
     }

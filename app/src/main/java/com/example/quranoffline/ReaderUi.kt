@@ -69,7 +69,7 @@ internal fun ListenToSheet(
 }
 
 @Composable
-private fun CustomListenDialog(state: QuranUiState, surah: Int, ayah: Int, onDismiss: () -> Unit, onGo: (Int, Int, Int, Int, Int) -> Unit) {
+private fun CustomListenDialog(state: QuranUiState, surah: Int, ayah: Int, title: String = "استماع مخصص", goLabel: String = "استمع", withRepeat: Boolean = true, onDismiss: () -> Unit, onGo: (Int, Int, Int, Int, Int) -> Unit) {
     val suras = state.metadata?.suras.orEmpty()
     var s1 by remember { mutableStateOf(surah) }
     var a1 by remember { mutableStateOf(ayah.toString()) }
@@ -80,17 +80,17 @@ private fun CustomListenDialog(state: QuranUiState, surah: Int, ayah: Int, onDis
     val opts = suras.map { "${it.index}. ${it.arabicName}" to it.index }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("استماع مخصص") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PickerField("من", name(s1), opts, { s1 = it })
                 OutlinedTextField(a1, { a1 = it.filter(Char::isDigit).take(3) }, label = { Text("آية البداية") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                 PickerField("إلى", name(s2), opts, { s2 = it })
                 OutlinedTextField(a2, { a2 = it.filter(Char::isDigit).take(3) }, label = { Text("آية النهاية") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
-                PickerField("التكرار", "$rep", (1..5).map { "$it" to it }, { rep = it })
+                if (withRepeat) PickerField("التكرار", "$rep", (1..5).map { "$it" to it }, { rep = it })
             }
         },
-        confirmButton = { TextButton(onClick = { onGo(s1, a1.toIntOrNull() ?: 1, s2, a2.toIntOrNull() ?: 1, rep) }) { Text("استمع") } },
+        confirmButton = { TextButton(onClick = { onGo(s1, a1.toIntOrNull() ?: 1, s2, a2.toIntOrNull() ?: 1, rep) }) { Text(goLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
     )
 }
@@ -146,4 +146,43 @@ internal fun AyahInfoDialog(state: QuranUiState, surah: Int, ayah: Int, onDismis
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("حسناً") } },
     )
+}
+
+/** Tasmee range, same options as quick navigation. Starts where tasmee would start now and stops after the chosen range. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TasmeeRangeSheet(
+    state: QuranUiState,
+    surah: Int,
+    ayah: Int,
+    onDismiss: () -> Unit,
+    onScope: (ReaderScope) -> Unit,
+    onCustom: (Int, Int, Int, Int) -> Unit,
+) {
+    val md = state.metadata?.ayah(surah, ayah)
+    val suraName = state.metadata?.sura(surah)?.arabicName ?: "$surah"
+    val quarterInHizb = md?.let { ((it.quarter - 1) % 4) + 1 } ?: 1
+    val hizb = md?.let { (it.quarter - 1) / 4 + 1 } ?: 1
+    var custom by remember { mutableStateOf(false) }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+            Text("تسميع من سورة $suraName آية $ayah إلى؟", Modifier.padding(horizontal = 24.dp, vertical = 8.dp), color = Color(0xFF66736C))
+            @Composable fun row(label: String, onClick: () -> Unit) {
+                Text(label, Modifier.fillMaxWidth().clickable { onDismiss(); onClick() }.padding(horizontal = 24.dp, vertical = 14.dp), fontSize = 17.sp)
+            }
+            row("آية $ayah فقط") { onScope(ReaderScope.AYAH) }
+            row("نهاية الصفحة ${md?.page ?: state.currentPage}") { onScope(ReaderScope.PAGES) }
+            row("نهاية سورة $suraName") { onScope(ReaderScope.SURAH) }
+            row("نهاية الجزء ${md?.juz ?: 1}") { onScope(ReaderScope.JUZ) }
+            row("نهاية الربع $quarterInHizb الحزب $hizb") { onScope(ReaderScope.HIZB) }
+            row("المصحف كاملاً (بلا حد)") { onScope(ReaderScope.QURAN) }
+            HorizontalDivider()
+            Row(Modifier.fillMaxWidth().clickable { custom = true }.padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Settings, null)
+                Spacer(Modifier.width(16.dp))
+                Text("مخصص (من سورة/آية إلى سورة/آية)", fontSize = 17.sp)
+            }
+        }
+    }
+    if (custom) CustomListenDialog(state, surah, ayah, title = "تسميع مخصص", goLabel = "ابدأ", withRepeat = false, onDismiss = { custom = false }, onGo = { a, b, c, d, _ -> custom = false; onDismiss(); onCustom(a, b, c, d) })
 }

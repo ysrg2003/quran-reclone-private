@@ -7,6 +7,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
@@ -51,15 +54,16 @@ internal fun WordReferenceLineView(
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
     onPlainTap: (() -> Unit)? = null,
+    showCircle: Boolean = false,
+    circleDp: Int = 20,
+    onClearSelection: () -> Unit = {},
 ) {
     val ayahs = androidx.compose.runtime.remember(line, ayahsByKey, pageAyahsByKey) {
         line.ayahKeys.mapNotNull { key -> ayahsByKey[key] ?: pageAyahsByKey[key] }
     }
     val primary = ayahs.firstOrNull()
-    val selected = ayahs.any { ayahIndexByKey[it.selectionKey()]?.let(selectedIndices::contains) == true }
     val active = ayahs.any { state.readerCurrentKey == it.selectionKey() }
     val background = when {
-        selected -> Color(0xFFFFE0A6)
         active -> Color(0xFFEAF4EE)
         else -> Color.Transparent
     }
@@ -119,28 +123,51 @@ internal fun WordReferenceLineView(
             textAlign = TextAlign.Center,
             softWrap = false,
         )
-        else -> Box(
+        else -> {
+            val segments = androidx.compose.runtime.remember(line) { com.example.quranoffline.data.ayahSegments(line) }
+            val layoutHolder = androidx.compose.runtime.remember { arrayOfNulls<androidx.compose.ui.text.TextLayoutResult>(1) }
+            val fitState = androidx.compose.runtime.remember(line, textScale) { androidx.compose.runtime.mutableFloatStateOf(1f) }
+            val tapCb = androidx.compose.runtime.rememberUpdatedState(Triple(onPlainTap, onTapAyah, onOpenAyahActions))
+            val anySelected = selectedIndices.isNotEmpty()
+            val selNow = androidx.compose.runtime.rememberUpdatedState(anySelected)
+            val primaryNow = androidx.compose.runtime.rememberUpdatedState(primary)
+            fun hitAyah(x: Float, y: Float, width: Int): QuranAyah? {
+                val r = layoutHolder[0]
+                val f = fitState.floatValue
+                val tx = width - (width - x) / f // undo the right-anchored horizontal stretch
+                val off = r?.getOffsetForPosition(androidx.compose.ui.geometry.Offset(tx, y.coerceAtLeast(0f)))
+                val key = if (off != null) com.example.quranoffline.data.ayahKeyAtOffset(segments, off) else null
+                return key?.let { ayahsByKey[it] ?: pageAyahsByKey[it] } ?: primaryNow.value
+            }
+            Box(
             Modifier.fillMaxWidth()
                 .background(background)
-                .combinedClickable(
-                    onClick = {
-                        if (onPlainTap != null && state.selectedAyahIndices.isEmpty()) onPlainTap()
-                        else primary?.let { ayah ->
-                            if (state.selectedAyahIndices.isNotEmpty()) onTapAyah(ayah.surah, ayah.ayah)
-                            else onOpenAyahActions(ayah.surah, ayah.ayah)
-                        }
-                    },
-                    onLongClick = { primary?.let { onLongPressAyah(it.surah, it.ayah) } },
-                )
+                .pointerInput(line) {
+                    detectTapGestures(
+                        onTap = { o ->
+                            val (plain, tapAyah, openActions) = tapCb.value
+                            if (plain != null && !selNow.value) plain()
+                            else hitAyah(o.x, o.y, size.width)?.let { a -> if (selNow.value) tapAyah(a.surah, a.ayah) else openActions(a.surah, a.ayah) }
+                        },
+                        onLongPress = { o -> hitAyah(o.x, o.y, size.width)?.let { onLongPressAyah(it.surah, it.ayah) } },
+                    )
+                }
                 .padding(vertical = 2.dp),
         ) {
             // Justify: measure the natural ink width once per line/size and stretch it to the full row width (clamped).
-            val fitState = androidx.compose.runtime.remember(line, textScale) { androidx.compose.runtime.mutableFloatStateOf(1f) }
+            val selectedKeys = androidx.compose.runtime.remember(selectedIndices, segments, ayahIndexByKey) {
+                segments.filter { ayahIndexByKey[it.first]?.let(selectedIndices::contains) == true }
+            }
             Text(
-                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets) {
-                    annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets)
+                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys) {
+                    val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets)
+                    if (selectedKeys.isEmpty()) base else buildAnnotatedString {
+                        append(base)
+                        selectedKeys.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = Color(0xFFFFE0A6)), st, en) }
+                    }
                 },
                 onTextLayout = { r ->
+                    layoutHolder[0] = r
                     if (r.lineCount == 1 && r.size.width > 0) {
                         val ink = r.getLineRight(0) - r.getLineLeft(0)
                         if (ink > 0f) {
@@ -159,6 +186,14 @@ internal fun WordReferenceLineView(
                 lineHeight = (34f * textScale).sp,
                 softWrap = false,
             )
+            if (showCircle) androidx.compose.foundation.layout.Box(
+                Modifier.align(androidx.compose.ui.Alignment.TopEnd).padding(end = 2.dp)
+                    .size(circleDp.dp)
+                    .background(Color(0xE60F5B4D), androidx.compose.foundation.shape.CircleShape)
+                    .clickable { onClearSelection() },
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) { Text("×", color = Color.White, fontSize = (circleDp * 0.7f).sp, fontWeight = FontWeight.Bold) }
+        }
         }
     }
 }

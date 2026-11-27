@@ -48,6 +48,7 @@ internal fun ImmersiveReader(
     var radialAyah by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var radialCenter by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var listenAnchor by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var tasmeeRange by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var infoAyah by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val lastTouch = remember { floatArrayOf(0f, 0f) } // plain array: updating it never recomposes
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -110,10 +111,12 @@ internal fun ImmersiveReader(
                             style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF0B5D4B),
                         )
                     }
+                    val selKeys = remember(state.selectedAyahIndices, state.allAyahs) { state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.let { a -> a.surah to a.ayah } }.toSet() }
                     state.ayahs.forEachIndexed { index, ayah ->
                         AyahBlock(
                             ayah = ayah,
-                            hidden = state.hidden,
+                            // With a selection, tasmee hides only the selected ayahs; the rest stay visible.
+                            hidden = state.hidden && (selKeys.isEmpty() || (ayah.surah to ayah.ayah) in selKeys),
                             evaluation = state.evaluation,
                             openingBasmalaEvaluation = state.openingBasmalaEvaluation,
                             openingBasmalaWordIndex = state.openingBasmalaWordIndex,
@@ -152,6 +155,7 @@ internal fun ImmersiveReader(
                     radialAyah = surah to ayah
                 },
                 onPlainTap = toggle,
+                onClearSelection = viewModel::clearAyahSelection,
                 fullBleed = true,
                 minHeightDp = LocalConfiguration.current.screenHeightDp,
             )
@@ -173,6 +177,13 @@ internal fun ImmersiveReader(
                     Triple(Icons.Default.Mic, "تسميع المحدد فقط") { viewModel.prepareTasmeeForSelection(rs, ra); onStartListening() },
                     Triple(Icons.Default.Info, "معلومات الآية") { infoAyah = rs to ra },
                 ),
+            )
+        }
+        tasmeeRange?.let { (ts, ta) ->
+            TasmeeRangeSheet(
+                state = state, surah = ts, ayah = ta, onDismiss = { tasmeeRange = null },
+                onScope = { sc -> viewModel.prepareTasmeeRange(sc, ts, ta); onStartListening() },
+                onCustom = { s1, a1, s2, a2 -> viewModel.prepareTasmeeCustom(s1, a1, s2, a2); onStartListening() },
             )
         }
         infoAyah?.let { (s0, a0) -> AyahInfoDialog(state, s0, a0, onDismiss = { infoAyah = null }) }
@@ -224,7 +235,12 @@ internal fun ImmersiveReader(
                         }) {
                             Icon(if (state.readerPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (state.readerPlaying) "إيقاف القراءة" else "تشغيل القراءة", tint = Color.White)
                         }
-                        IconButton(onClick = { if (state.listening) viewModel.stopListening() else onStartListening() }) {
+                        IconButton(onClick = {
+                            if (state.listening) viewModel.stopListening()
+                            else if (state.selectedAyahIndices.isNotEmpty()) {
+                                state.allAyahs.getOrNull(state.selectedAyahIndices.first())?.let { viewModel.prepareTasmeeForSelection(it.surah, it.ayah); onStartListening() }
+                            } else tasmeeRange = viewModel.tasmeeAnchor()
+                        }) {
                             Icon(if (state.listening) Icons.Default.Stop else Icons.Default.Mic, if (state.listening) "إيقاف التسميع" else "بدء التسميع", tint = Color.White)
                         }
                         IconButton(onClick = viewModel::previousPage, enabled = state.currentPage > 1) { Icon(Icons.Default.ChevronRight, "الصفحة السابقة", tint = Color.White) }

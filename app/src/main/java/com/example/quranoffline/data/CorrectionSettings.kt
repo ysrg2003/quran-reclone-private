@@ -23,6 +23,8 @@ data class CorrectionSettings(
     val clipPaddingAfterMs: Int = DEFAULT_CLIP_PADDING_AFTER_MS,
     val resumePosition: ResumePosition = DEFAULT_RESUME_POSITION,
     val mushafTextScale: Float = DEFAULT_MUSHAF_TEXT_SCALE,
+    /** Diameter in dp of the small circle shown at the start of a selected block. */
+    val selectionCircleDp: Int = DEFAULT_SELECTION_CIRCLE_DP,
 ) {
     fun normalized(): CorrectionSettings {
         val safePause = PAUSE_OPTIONS_MS.minByOrNull { kotlin.math.abs(it - pauseBetweenPartsMs) }
@@ -40,6 +42,7 @@ data class CorrectionSettings(
             clipPaddingBeforeMs = clipPaddingBeforeMs.coerceIn(MIN_PADDING_MS, MAX_PADDING_MS),
             clipPaddingAfterMs = clipPaddingAfterMs.coerceIn(MIN_PADDING_MS, MAX_PADDING_MS),
             mushafTextScale = mushafTextScale.coerceIn(MIN_MUSHAF_TEXT_SCALE, MAX_MUSHAF_TEXT_SCALE),
+            selectionCircleDp = selectionCircleDp.coerceIn(MIN_SELECTION_CIRCLE_DP, MAX_SELECTION_CIRCLE_DP),
             resumePosition = safeResumePosition,
         )
     }
@@ -60,6 +63,9 @@ data class CorrectionSettings(
         const val DEFAULT_MUSHAF_TEXT_SCALE = 1.0f
         const val MIN_MUSHAF_TEXT_SCALE = 0.8f
         const val MAX_MUSHAF_TEXT_SCALE = 1.5f
+        const val DEFAULT_SELECTION_CIRCLE_DP = 18
+        const val MIN_SELECTION_CIRCLE_DP = 10
+        const val MAX_SELECTION_CIRCLE_DP = 40
 
         val PAUSE_OPTIONS_MS = listOf(0, 250, 500, 1_000)
 
