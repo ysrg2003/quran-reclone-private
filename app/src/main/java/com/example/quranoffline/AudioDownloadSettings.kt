@@ -63,3 +63,44 @@ fun AudioDownloadSettingsCard(suras: List<QuranSuraMetadata>) {
         confirmButton = { TextButton(onClick = { mgr.deleteAll(); confirmAll = false }) { Text("حذف") } },
         dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("إلغاء") } })
 }
+
+/** Settings > Recognition engine. System recognizer is the default; Whisper is an optional offline extra. */
+@Composable
+fun RecognitionEngineSettingsCard() {
+    val ctx = LocalContext.current
+    val mgr = remember { com.example.quranoffline.data.WhisperModelManager.get(ctx) }
+    val st by mgr.state.collectAsState()
+    val rev by mgr.revision.collectAsState()
+    var choice by remember { mutableStateOf(mgr.choice) }
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(st.running) { while (st.running) { kotlinx.coroutines.delay(700); tick++ } }
+    val ready = remember(rev, st) { mgr.store.ready() }
+    val have = remember(rev, st, tick) { mgr.store.usedBytes() }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) mgr.importUri(uri) }
+    val total = com.example.quranoffline.data.WhisperModelStore.SIZE
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("محرك التعرف على التلاوة", fontWeight = FontWeight.Bold, color = Color(0xFF123F35))
+            Text("تعرّف النظام (SpeechRecognizer): الافتراضي، يحتاج إلى الإنترنت أثناء التسميع. Whisper: اختياري، يعمل بدون إنترنت تمامًا بعد تنزيل النموذج، وهو الوحيد الذي يعمل دون اتصال.", color = Color(0xFF66736C))
+            if (!mgr.arm64) Text("Whisper غير متاح على هذا الجهاز (يتطلب معالج arm64).", color = Color(0xFF9A3B3B))
+            else {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("استخدام Whisper (دون إنترنت)", Modifier.weight(1f))
+                    Switch(checked = choice == com.example.quranoffline.data.EngineChoice.WHISPER, enabled = ready, onCheckedChange = {
+                        choice = if (it) com.example.quranoffline.data.EngineChoice.WHISPER else com.example.quranoffline.data.EngineChoice.SYSTEM; mgr.choice = choice })
+                }
+                Text(if (ready) "النموذج جاهز: ${mb(total)}، مُتحقَّق منه بـ sha256." else if (have > 0) "تم تنزيل ${mb(have)} من ${mb(total)}" else "النموذج غير منزّل (${mb(total)}).")
+                if (st.message.isNotBlank()) Text(st.message, color = Color(0xFF66736C))
+                if (st.running && !ready) LinearProgressIndicator(progress = { (have.toFloat() / total).coerceIn(0f, 1f) }, Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (st.running) OutlinedButton(onClick = { mgr.pause() }) { Text("إيقاف مؤقت") }
+                    else if (!ready) OutlinedButton(onClick = { mgr.start() }) { Text(if (have > 0) "متابعة" else "تنزيل النموذج") }
+                    if (ready && !st.running) OutlinedButton(onClick = { mgr.delete(); choice = mgr.choice }) { Text("حذف النموذج") }
+                    if (!ready && !st.running) OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }) { Text("استيراد ملف النموذج") }
+                }
+                Text("إن لم يتوفر النموذج أو فشل Whisper يعود التطبيق تلقائيًا إلى تعرّف النظام مع تنبيه ظاهر. Whisper أبطأ على الهواتف الضعيفة، ولم تُقَس سرعته على هاتف حقيقي بعد.", color = Color(0xFF66736C))
+            }
+            Text("الترخيص: نموذج tarteel-ai/whisper-base-ar-quran بترخيص Apache-2.0 (مصدر بيانات تدريبه غير معلن)، ومحرك whisper.cpp بترخيص MIT. النموذج يُنزَّل من Hugging Face ولا يُضمَّن في التطبيق، ويُحفظ في تخزين التطبيق الخاص.", color = Color(0xFF66736C))
+        }
+    }
+}

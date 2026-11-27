@@ -108,7 +108,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val timingRepository = ReferenceTimingRepository()
     private val referenceAudioPlayer = ReferenceAudioPlayer(application)
     private var pronunciationReference = PronunciationReference.empty()
-    private var onlineSession: OnlineSpeechSession? = null
+    private var onlineSession: SpeechEngine? = null
     private var writingModeActive = false
     private var progressTracker: RecitationProgressTracker? = null
     private var openingBasmalaTracker: OpeningBasmalaProgressTracker? = null
@@ -711,7 +711,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val guardedUpdate: (RecognitionUpdate) -> Unit = { update ->
             if (generation == recognitionGeneration) handleRecognitionUpdate(update)
         }
-        onlineSession = OnlineSpeechSession(getApplication(), guardedUpdate)
+        onlineSession = SpeechEngineFactory.create(getApplication(), guardedUpdate)
         onlineSession?.start()
     }
 

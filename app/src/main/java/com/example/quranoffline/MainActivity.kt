@@ -2049,6 +2049,7 @@ private fun SettingsScreen(
         item { EngineCard() }
         item { Text("إعدادات التنزيل", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF123F35)) }
         item { AudioDownloadSettingsCard(state.metadata?.suras.orEmpty()) }
+        item { RecognitionEngineSettingsCard() }
         item { OnlineAssetCard(state, onModeChange, onDownload, onDeleteDownload) }
         item {
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {

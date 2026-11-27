@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class OnlineSpeechSession(
     context: Context,
     private val onUpdate: (RecognitionUpdate) -> Unit,
-) {
+) : SpeechEngine {
     private val recognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val active = AtomicBoolean(false)
@@ -113,7 +113,7 @@ class OnlineSpeechSession(
         return alternatives.drop(1).firstOrNull { Muqattaat.startsWithFullSequence(it) } ?: top
     }
 
-    fun start() {
+    override fun start() {
         if (!active.compareAndSet(false, true)) return
         committedText = ""
         currentPartialText = ""
@@ -122,7 +122,7 @@ class OnlineSpeechSession(
         startPlatformListening()
     }
 
-    fun stop() {
+    override fun stop() {
         if (!active.getAndSet(false)) return
         restartScheduled = false
         mainHandler.removeCallbacks(restartRunnable)
