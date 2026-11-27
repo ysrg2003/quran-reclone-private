@@ -71,6 +71,7 @@ internal fun WordReferenceLineView(
     val fontSize = (22f * textScale).sp
     val appearance = LocalAppearance.current
     val textColor = appearance.readerText
+    val revealJudged = LocalRevealJudgedWhenHidden.current
 
     when (line.type) {
         "sura" -> Box(
@@ -163,8 +164,8 @@ internal fun WordReferenceLineView(
             val playKey = state.readerCurrentKey
             val playing = androidx.compose.runtime.remember(segments, playKey) { if (playKey == null) emptyList() else segments.filter { it.first == playKey } }
             Text(
-                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys, playing) {
-                    val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets, textColor)
+                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, revealJudged, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys, playing) {
+                    val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets, textColor, revealJudged)
                     if (selectedKeys.isEmpty() && playing.isEmpty()) base else buildAnnotatedString {
                         append(base)
                         selectedKeys.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = appearance.selectedHighlight), st, en) }
@@ -186,7 +187,7 @@ internal fun WordReferenceLineView(
                 },
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
-                color = textColor,
+                color = if (state.hidden && !revealJudged) Color.Transparent else textColor,
                 textAlign = if (centered) TextAlign.Center else TextAlign.Right,
                 lineHeight = (34f * textScale).sp,
                 softWrap = false,
@@ -214,11 +215,14 @@ private fun annotatedWordReferenceLine(
     ayahIndexByKey: Map<String, Int>,
     wordOffsets: List<Int>,
     revealColor: Color = Color(0xFF123F35),
+    revealJudged: Boolean = false,
 ): AnnotatedString {
     val shownText = line.displayText()
     // v24.8: in hide mode the whole line is transparent except the words already said or judged, which show their correct text
     // in the status colour (same rule as the old per-ayah view: a judged word shows the right text, wrong ones in red).
     if (line.type != "ayah") return AnnotatedString(shownText)
+    // Reading tab and full-screen reader keep the plain hide (whole line transparent, no colouring), as before v24.8.
+    if (state.hidden && !revealJudged) return AnnotatedString(shownText)
     val hiddenMode = state.hidden
     val evaluation = state.evaluation
     if (evaluation == null) {
@@ -281,3 +285,6 @@ private fun statusHighlightColor(status: WordStatus?): Color? = when (status) {
 
 /** v23: very small gap between the page text and the four screen edges in the full-screen reader (user, 15:53). 0 gives edge-to-edge text. */
 internal const val READER_EDGE_MARGIN_DP = 12
+
+/** True only inside the Hifz/Tasmee tab: a hidden page reveals the words already said or judged. */
+val LocalRevealJudgedWhenHidden = androidx.compose.runtime.compositionLocalOf { false }

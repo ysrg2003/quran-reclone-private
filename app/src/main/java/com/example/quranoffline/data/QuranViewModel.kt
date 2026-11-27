@@ -1930,21 +1930,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun toArabicDigits(n: Int): String = n.toString().map { '٠' + (it - '0') }.joinToString("")
 
-    /** Text for copy/share: every ayah followed by its number in an ayah-end mark. */
+    /** Text for copy/share (user, v24.9): each ayah is an opening parenthesis, the ayah text, a closing parenthesis, nothing else added. */
     fun ayahShareText(surah: Int, ayah: Int): String? {
         val all = state.value.allAyahs
         val sel = state.value.selectedAyahIndices
         val idx = if (sel.size > 1) sel else listOf(AyahLookup.of(all).indexOf(surah, ayah))
         val items = idx.mapNotNull { all.getOrNull(it) }
         if (items.isEmpty()) return null
-        val md = state.value.metadata
-        fun nm(s: Int) = md?.sura(s)?.arabicName ?: s.toString()
-        val body = items.joinToString(" ") { "﴿${it.text}﴾ ﴿${toArabicDigits(it.ayah)}﴾" }
-        val f = items.first(); val l = items.last()
-        val ref = if (items.size == 1 || f.surah == l.surah && f.ayah == l.ayah) "[سورة ${nm(f.surah)}: ${f.ayah}]"
-            else if (f.surah == l.surah) "[سورة ${nm(f.surah)}: ${f.ayah}-${l.ayah}]"
-            else "[${nm(f.surah)}: ${f.ayah} - ${nm(l.surah)}: ${l.ayah}]"
-        return "$body $ref"
+        return AyahShareFormat.body(items.map { it.text })
     }
 
     /** Radial menu "tasmee": start at the first selected ayah (or the tapped one) and stop after the last selected one. */
