@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -64,16 +65,32 @@ internal fun WordReferenceLineView(
     val textColor = Color(0xFF183D33)
 
     when (line.type) {
-        "sura" -> Text(
-            text = line.text,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            fontFamily = WordReferenceFontFamily,
-            fontSize = (24f * textScale).sp,
-            fontWeight = FontWeight.Normal,
-            color = Color(0xFF76552A),
-            textAlign = TextAlign.Center,
-            softWrap = false,
-        )
+        "sura" -> Box(
+            Modifier.fillMaxWidth().padding(vertical = 4.dp).drawBehind {
+                val teal = Color(0xFF1F7A74); val gold = Color(0xFFC9A55B)
+                val w = size.width; val h = size.height
+                val r = androidx.compose.ui.geometry.CornerRadius(h * 0.22f, h * 0.22f)
+                drawRoundRect(Color(0xFFE6F2EF), cornerRadius = r)
+                drawRoundRect(teal, cornerRadius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+                val inset = 5.dp.toPx()
+                drawRoundRect(gold, topLeft = androidx.compose.ui.geometry.Offset(inset, inset), size = androidx.compose.ui.geometry.Size(w - 2 * inset, h - 2 * inset), cornerRadius = r, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()))
+                val rad = h * 0.26f
+                drawCircle(teal, rad, androidx.compose.ui.geometry.Offset(h * 0.55f, h / 2))
+                drawCircle(gold, rad * 0.55f, androidx.compose.ui.geometry.Offset(h * 0.55f, h / 2))
+                drawCircle(teal, rad, androidx.compose.ui.geometry.Offset(w - h * 0.55f, h / 2))
+                drawCircle(gold, rad * 0.55f, androidx.compose.ui.geometry.Offset(w - h * 0.55f, h / 2))
+            }.padding(vertical = 10.dp),
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) {
+            Text(
+                text = line.text,
+                fontFamily = WordReferenceFontFamily,
+                fontSize = (24f * textScale).sp,
+                color = Color(0xFF123F35),
+                textAlign = TextAlign.Center,
+                softWrap = false,
+            )
+        }
         "bismillah" -> Box(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
             Text(
                 text = line.text,

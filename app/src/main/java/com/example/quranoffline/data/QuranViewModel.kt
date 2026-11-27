@@ -575,7 +575,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "أُوقف تشغيل القراءة.")
     }
 
-    private fun startReaderIndices(selected: List<Int>, label: String) {
+    private fun startReaderIndices(selected: List<Int>, label: String, repeat: Int = 1) {
         if (!state.value.assetsReady) {
             state.value = state.value.copy(notice = "انتظر اكتمال تحميل النص والتوقيتات أولاً.")
             return
@@ -586,7 +586,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             val first = timings.firstOrNull() ?: return@mapNotNull null
             val last = timings.lastOrNull() ?: first
             queueItemForAyah(target, first, last)
-        }
+        }.let { base -> if (repeat > 1) List(repeat.coerceAtMost(5)) { base }.flatten() else base }
         if (items.isEmpty()) {
             state.value = state.value.copy(notice = if (state.value.mode == AssetMode.DOWNLOAD) "نزّل صوت الآيات المحددة أولاً، أو اختر وضع البث المباشر." else "لا توجد مقاطع صوتية صالحة للآيات المحددة.")
             return
@@ -1758,5 +1758,24 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val idx = khatmaOf(kind).lastIndex
         val a = state.value.allAyahs.getOrNull(idx) ?: run { state.value = state.value.copy(notice = "لا يوجد موضع محفوظ في هذه الختمة بعد."); return }
         pageOfAyah(a.surah, a.ayah)?.let { jumpToPage(it) }
+    }
+
+    /** "مخصص": plays an explicit ayah range in mushaf order, repeated 1..5 times. */
+    fun playCustomRange(fromSurah: Int, fromAyah: Int, toSurah: Int, toAyah: Int, repeat: Int) {
+        val all = state.value.allAyahs
+        val lk = AyahLookup.of(all)
+        val a = lk.indexOf(fromSurah, fromAyah)
+        val b = lk.indexOf(toSurah, toAyah)
+        if (a < 0 || b < 0) { state.value = state.value.copy(notice = "آية البداية أو النهاية غير موجودة."); return }
+        val lo = minOf(a, b); val hi = maxOf(a, b)
+        if (hi - lo > 2000) { state.value = state.value.copy(notice = "النطاق كبير جداً؛ اختر أقل من 2000 آية."); return }
+        startReaderIndices((lo..hi).toList(), "النطاق المخصص", repeat.coerceIn(1, 5))
+    }
+
+    /** Text for copy/share of one ayah. */
+    fun ayahShareText(surah: Int, ayah: Int): String? {
+        val target = state.value.allAyahs.getOrNull(AyahLookup.of(state.value.allAyahs).indexOf(surah, ayah)) ?: return null
+        val name = state.value.metadata?.sura(surah)?.arabicName ?: surah.toString()
+        return "﴿${target.text}﴾ [سورة $name: ${target.ayah}]"
     }
 }

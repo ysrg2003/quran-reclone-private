@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,8 +45,13 @@ internal fun ImmersiveReader(
     onExit: () -> Unit,
 ) {
     var barsVisible by rememberSaveable { mutableStateOf(true) }
-    var sheetSurah by rememberSaveable { mutableStateOf(0) }
-    var sheetAyahNo by rememberSaveable { mutableStateOf(0) }
+    var radialAyah by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var radialCenter by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var listenAnchor by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var infoAyah by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val lastTouch = remember { floatArrayOf(0f, 0f) } // plain array: updating it never recomposes
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = LocalContext.current
     BackHandler(onBack = onExit)
     val view = LocalView.current
     val activity = LocalContext.current as? Activity
@@ -58,12 +64,21 @@ internal fun ImmersiveReader(
     }
     val toggle = { barsVisible = !barsVisible }
     val scale = state.correctionSettings.mushafTextScale
-    Box(Modifier.fillMaxSize().background(Color(0xFFF7F8F4))) {
+    Box(
+        Modifier.fillMaxSize().background(Color(0xFFFFFEF8)).pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    e.changes.firstOrNull()?.takeIf { it.pressed }?.let { lastTouch[0] = it.position.x; lastTouch[1] = it.position.y }
+                }
+            }
+        },
+    ) {
         Column(
             Modifier.fillMaxSize()
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { toggle() }
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                .padding(horizontal = 2.dp),
         ) {
             // Tasmee/hide/results use the same word view as the memorization section, so colours, hide-ayahs,
             // only-spoken-words, opening basmala and long-press options follow exactly the same rules.
@@ -131,20 +146,41 @@ internal fun ImmersiveReader(
                 onOpenAyahActions = { _, _ -> },
                 textScale = scale,
                 onTapAyah = viewModel::tapAyahSelection,
-                onLongPressAyah = { surah, ayah -> sheetSurah = surah; sheetAyahNo = ayah },
+                onLongPressAyah = { surah, ayah ->
+                    viewModel.beginAyahSelection(surah, ayah)
+                    radialCenter = androidx.compose.ui.geometry.Offset(lastTouch[0], lastTouch[1])
+                    radialAyah = surah to ayah
+                },
                 onPlainTap = toggle,
+                fullBleed = true,
+                minHeightDp = LocalConfiguration.current.screenHeightDp,
             )
         }
-        sheetAyahNo.takeIf { it > 0 }?.let { no ->
-            state.allAyahs.firstOrNull { it.surah == sheetSurah && it.ayah == no }?.let { target ->
-                ReaderAyahActionsSheet(
-                    state = state, sheetAyah = target, onDismiss = { sheetAyahNo = 0 },
-                    onPlayAyah = viewModel::playAyah, onPlayScopeFromHere = viewModel::playReaderScopeFromHere,
-                    onBookmark = viewModel::saveBookmark, onStop = viewModel::stopReader,
-                    onSelect = viewModel::beginAyahSelection, onSetStart = viewModel::setMemorizationStart,
-                    onMemorizeFromHere = viewModel::startMemorizationFrom,
-                )
-            }
+        radialAyah?.let { (rs, ra) ->
+            RadialAyahMenu(
+                center = radialCenter,
+                onDismiss = { radialAyah = null },
+                actions = listOf(
+                    Triple(Icons.Default.PlayArrow, "استماع من هنا") { listenAnchor = rs to ra },
+                    Triple(Icons.Default.ContentCopy, "نسخ الآية") { viewModel.ayahShareText(rs, ra)?.let { clipboard.setText(androidx.compose.ui.text.AnnotatedString(it)) } },
+                    Triple(Icons.Default.Share, "مشاركة الآية") {
+                        viewModel.ayahShareText(rs, ra)?.let { t ->
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, t)
+                            context.startActivity(android.content.Intent.createChooser(send, null))
+                        }
+                    },
+                    Triple(Icons.Default.Bookmark, "حفظ علامة") { viewModel.saveBookmark(rs, ra) },
+                    Triple(Icons.Default.Mic, "ابدأ التسميع من هنا") { viewModel.startMemorizationFrom(rs, ra); onStartListening() },
+                    Triple(Icons.Default.Info, "معلومات الآية") { infoAyah = rs to ra },
+                ),
+            )
+        }
+        infoAyah?.let { (s0, a0) -> AyahInfoDialog(state, s0, a0, onDismiss = { infoAyah = null }) }
+        listenAnchor?.let { (ls, la) ->
+            ListenToSheet(
+                state = state, surah = ls, ayah = la, onDismiss = { listenAnchor = null },
+                onPlayAyah = viewModel::playAyah, onPlayScope = viewModel::playReaderScopeFromHere, onCustom = viewModel::playCustomRange,
+            )
         }
         if (barsVisible) {
             Surface(
@@ -185,7 +221,13 @@ internal fun ImmersiveReader(
                             TextButton(onClick = viewModel::playSelectedAyahs) { Text("تشغيل المحدد", color = Color.White) }
                             TextButton(onClick = viewModel::clearAyahSelection) { Text("إلغاء التحديد", color = Color.White) }
                         } else {
-                            IconButton(onClick = { if (state.readerPlaying) viewModel.stopReader() else viewModel.playReaderScope(state.readerScope) }) {
+                            IconButton(onClick = {
+                                if (state.readerPlaying) viewModel.stopReader()
+                                else {
+                                    val first = state.selectedAyahIndices.firstOrNull()?.let { state.allAyahs.getOrNull(it) } ?: state.ayahs.firstOrNull()
+                                    first?.let { listenAnchor = it.surah to it.ayah }
+                                }
+                            }) {
                                 Icon(if (state.readerPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (state.readerPlaying) "إيقاف القراءة" else "تشغيل القراءة", tint = Color.White)
                             }
                         }

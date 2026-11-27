@@ -94,6 +94,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -197,6 +198,8 @@ private fun QuranOfflineApp(
     var tab by remember { mutableIntStateOf(0) }
     var immersive by rememberSaveable { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
+    // The reading tab is the full-screen page reader; leaving it returns to the memorization tab.
+    LaunchedEffect(tab) { if (tab == 4) immersive = true }
     var showSettings by remember { mutableStateOf(false) }
     var showGoTo by remember { mutableStateOf(false) }
     var showLegalNotices by rememberSaveable { mutableStateOf(false) }
@@ -223,7 +226,7 @@ private fun QuranOfflineApp(
                         IconButton(onClick = { immersive = true }) {
                             Icon(Icons.Default.Fullscreen, contentDescription = "قراءة بملء الشاشة", tint = Color.White)
                         }
-                        IconButton(onClick = { tab = 4 }) {
+                        IconButton(onClick = { tab = 4; immersive = true }) {
                             Icon(Icons.Default.MenuBook, contentDescription = "القراءة والاستماع", tint = Color.White)
                         }
                         IconButton(onClick = { showSettings = true }) {
@@ -384,7 +387,7 @@ private fun QuranOfflineApp(
             }
         }
         }
-        if (immersive) ImmersiveReader(state = state, viewModel = viewModel, onStartListening = startRecitation, onExit = { immersive = false })
+        if (immersive) ImmersiveReader(state = state, viewModel = viewModel, onStartListening = startRecitation, onExit = { immersive = false; if (tab == 4) tab = 0 })
         if (showSettings) SettingsLayer(
             state = state, onClose = { showSettings = false },
             onModeChange = viewModel::setMode, onDownload = viewModel::downloadCurrentSurah, onDeleteDownload = viewModel::deleteCurrentSurah,
@@ -472,6 +475,12 @@ private fun MushafIndexScreen(
     modifier: Modifier = Modifier,
 ) {
     val metadata = state.metadata
+    var surahQuery by remember { mutableStateOf("") }
+    val shownSuras = remember(metadata, surahQuery) {
+        val all = metadata?.suras.orEmpty()
+        val q = com.example.quranoffline.data.normalizeArabicForMatch(surahQuery).replace("سورة", "").trim()
+        if (q.isEmpty()) all else all.filter { it.index.toString() == q || com.example.quranoffline.data.normalizeArabicForMatch(it.arabicName).replace("ال", "").contains(q.replace("ال", "")) || com.example.quranoffline.data.normalizeArabicForMatch(it.arabicName).contains(q) }
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize().background(Color(0xFFF7FAF8)).padding(horizontal = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -482,7 +491,14 @@ private fun MushafIndexScreen(
                 subtitle = "اختر السورة لفتح موضع الحفظ والتسميع الحالي.",
             )
         }
-        items(metadata?.suras.orEmpty(), key = { it.index }) { surah ->
+        item {
+            OutlinedTextField(
+                value = surahQuery, onValueChange = { surahQuery = it }, singleLine = true,
+                placeholder = { Text("ابحث باسم السورة أو رقمها") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        items(shownSuras, key = { it.index }) { surah ->
             Card(
                 shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1826,6 +1842,8 @@ internal fun MushafPageSurface(
     onTapAyah: (Int, Int) -> Unit,
     onLongPressAyah: (Int, Int) -> Unit,
     onPlainTap: (() -> Unit)? = null,
+    fullBleed: Boolean = false,
+    minHeightDp: Int = 0,
 ) {
     var horizontalDrag by remember { mutableFloatStateOf(0f) }
     // Build the expensive lookup structures once per page surface. Reusing
@@ -1841,7 +1859,7 @@ internal fun MushafPageSurface(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 760.dp)
+            .then(if (fullBleed) Modifier else Modifier.heightIn(min = 760.dp))
             .pointerInput(state.currentPage, state.totalPages) {
                 detectHorizontalDragGestures(
                     onDragStart = { horizontalDrag = 0f },
@@ -1860,18 +1878,18 @@ internal fun MushafPageSurface(
             }
             .combinedClickable(onClick = onOpenReaderActions, onLongClick = {})
         ,
-        shape = RoundedCornerShape(if (isOpeningPage) 24.dp else 22.dp),
-        border = BorderStroke(1.dp, Color(0xFFD8C7A7)),
+        shape = if (fullBleed) RoundedCornerShape(0.dp) else RoundedCornerShape(if (isOpeningPage) 24.dp else 22.dp),
+        border = if (fullBleed) null else BorderStroke(1.dp, Color(0xFFD8C7A7)),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEF8)),
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .then(if (isOpeningPage) Modifier.border(1.dp, Color(0xFFE4D4B8), RoundedCornerShape(18.dp)).padding(6.dp) else Modifier)
-                .padding(18.dp),
+                .then(if (isOpeningPage && !fullBleed) Modifier.border(1.dp, Color(0xFFE4D4B8), RoundedCornerShape(18.dp)).padding(6.dp) else Modifier)
+                .padding(if (fullBleed) 4.dp else 18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            if (!fullBleed) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text("صفحة ${state.currentPage}", color = Color(0xFF76552A), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                 OutlinedButton(onClick = onOpenReaderActions) { Text("الاستماع") }
             }
@@ -1927,7 +1945,10 @@ internal fun MushafPageSurface(
                         }
                     }
                     Box(Modifier.fillMaxWidth().then(if (sideways) Modifier.nestedScroll(edgeSwipe).horizontalScroll(rememberScrollState()) else Modifier)) {
-                    Column(if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        (if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth()).then(if (fullBleed && minHeightDp > 0) Modifier.heightIn(min = (minHeightDp - 12).dp) else Modifier),
+                        verticalArrangement = if (fullBleed) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
+                    ) {
                     wordReferenceLines.forEach { line ->
                         WordReferenceLineView(
                             line = line,
