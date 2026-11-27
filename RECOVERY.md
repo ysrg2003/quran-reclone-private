@@ -109,3 +109,9 @@ Two jobs: `apk` (tests, signed `assembleOnlineRelease`, apksigner verify, upload
 
 ## Status
 Latest release: v20.2 (tag apk-v20.2, same release key e4c456fc...9ff5e). Next: v21 (selection model, tasmee range, auto-advance).
+
+## Visibility boundary
+- The repo was public from 10:41 to 10:45 on Nov 27 for one CI test, then set back to private.
+- Going back to private does not recall clones or forks made in that window. A negative check (0 forks, 0 stars, 0 watchers at 11:55) does not rule out clones.
+- Do not make this history public again. Future CI must run privately, or in an asset-free test repo.
+- Actions artifacts (private now): quran-reclone-release and libwhisper_jni-rebuilt, retention 90 days, expiring 2027-02-25.
