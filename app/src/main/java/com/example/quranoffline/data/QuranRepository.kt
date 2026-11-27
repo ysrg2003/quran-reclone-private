@@ -34,12 +34,28 @@ class QuranRepository(
 ) {
     private val appContext = context.applicationContext
     private val ayahs: List<QuranAyah> by lazy {
-        val raw = appContext.assets
-            .open(assetPath)
-            .bufferedReader(Charsets.UTF_8)
-            .use { it.readText() }
-        withRecognizerForms(parseWordReference(raw))
+        val fromJson = {
+            val raw = appContext.assets
+                .open(assetPath)
+                .bufferedReader(Charsets.UTF_8)
+                .use { it.readText() }
+            withRecognizerForms(parseWordReference(raw))
+        }
+        if (isPreview()) fromJson()
+        else {
+            val data = ParsedCache.load(
+                appContext, "quran", 6236,
+                build = { ParsedCache.QuranData(fromJson(), lastSpacedForms) },
+                write = ParsedCache::writeQuran,
+                read = ParsedCache::readQuran,
+            )
+            // The tracker's spaced-form table is process state, so refill it on every launch.
+            RecognizerSpacedForms.register(data.spacedForms)
+            data.ayahs
+        }
     }
+
+    private var lastSpacedForms: List<String> = emptyList()
 
     /**
      * Adds the standard spelling a speech-to-text service writes for each word.
@@ -57,7 +73,8 @@ class QuranRepository(
                 }
             }
         }.getOrNull() ?: return base
-        RecognizerSpacedForms.register(forms.values.flatten().filter { it.contains(' ') })
+        lastSpacedForms = forms.values.flatten().filter { it.contains(' ') }
+        RecognizerSpacedForms.register(lastSpacedForms)
         return base.map { ayah ->
             val list = forms["${ayah.surah}:${ayah.ayah}"]
             if (list == null || list.size != ayah.words.size) ayah

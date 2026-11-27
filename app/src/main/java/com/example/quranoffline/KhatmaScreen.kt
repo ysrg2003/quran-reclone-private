@@ -33,7 +33,7 @@ fun KhatmaScreen(
     onOpen: (SaveMarkKind) -> Unit,
     modifier: Modifier = Modifier,
     onTargetUnit: (SaveMarkKind, Int) -> Unit = { _, _ -> },
-    onRepeat: (SaveMarkKind, Int) -> Unit = { _, _ -> },
+    onRepeat: (SaveMarkKind, Int, Int) -> Unit = { _, _, _ -> },
 ) {
     Column(modifier.fillMaxSize().background(Color(0xFFF7F8F4)).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("الختمات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -47,7 +47,7 @@ fun KhatmaScreen(
 private fun KhatmaCard(
     title: String, k: KhatmaState, state: QuranUiState,
     onTarget: (SaveMarkKind, Int) -> Unit, onReminder: (SaveMarkKind, Boolean, Int, Int) -> Unit, onOpen: (SaveMarkKind) -> Unit,
-    onTargetUnit: (SaveMarkKind, Int) -> Unit, onRepeat: (SaveMarkKind, Int) -> Unit,
+    onTargetUnit: (SaveMarkKind, Int) -> Unit, onRepeat: (SaveMarkKind, Int, Int) -> Unit,
 ) {
     val last = state.allAyahs.getOrNull(k.lastIndex)
     val suraName = last?.let { a -> state.metadata?.sura(a.surah)?.arabicName }
@@ -96,7 +96,29 @@ private fun KhatmaCard(
             if (k.reminderOn) {
                 PickerField("الساعة", "%02d".format(k.reminderHour), (0..23).map { "%02d".format(it) to it }, { onReminder(k.kind, true, it, k.reminderMinute) })
                 PickerField("الدقيقة", "%02d".format(k.reminderMinute), (0..55 step 5).map { "%02d".format(it) to it }, { onReminder(k.kind, true, k.reminderHour, it) })
-                PickerField("تكرار التذكير إن لم يكتمل الورد", if (k.repeatMinutes == 0) "بدون تكرار" else "كل ${k.repeatMinutes} دقيقة (حتى 3 مرات)", listOf("بدون تكرار" to 0, "كل 10 دقائق" to 10, "كل 30 دقيقة" to 30, "كل ساعة" to 60), { onRepeat(k.kind, it) })
+                var repMin by remember(k.kind, k.repeatMinutes) { mutableStateOf(if (k.repeatMinutes > 0) k.repeatMinutes.toString() else "") }
+                var repCnt by remember(k.kind, k.repeatCount) { mutableStateOf(k.repeatCount.toString()) }
+                Text("تكرار التذكير إن لم يكتمل الورد (اتركه فارغاً بلا تكرار)", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = repMin, singleLine = true, modifier = Modifier.weight(1f),
+                        label = { Text("كل كم دقيقة") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        onValueChange = { v ->
+                            val d = v.filter { it.isDigit() }.take(4); repMin = d
+                            onRepeat(k.kind, d.toIntOrNull() ?: 0, repCnt.toIntOrNull() ?: k.repeatCount)
+                        },
+                    )
+                    OutlinedTextField(
+                        value = repCnt, singleLine = true, modifier = Modifier.weight(1f),
+                        label = { Text("كم مرة (1 إلى 50)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        onValueChange = { v ->
+                            val d = v.filter { it.isDigit() }.take(2); repCnt = d
+                            d.toIntOrNull()?.let { onRepeat(k.kind, repMin.toIntOrNull() ?: 0, it) }
+                        },
+                    )
+                }
                 key(statusTick) { Text(KhatmaReminders.status(ctx, k), style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C)) }
                 OutlinedButton(onClick = {
                     if (Build.VERSION.SDK_INT >= 33 && !KhatmaReminders.notificationsAllowed(ctx)) permission.launch(Manifest.permission.POST_NOTIFICATIONS)

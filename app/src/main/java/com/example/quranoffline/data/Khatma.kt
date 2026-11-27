@@ -19,8 +19,10 @@ data class KhatmaState(
     val startMillis: Long = 0L,
     /** Unit of dailyTarget: 0 ayahs, 1 pages, 2 surahs. */
     val targetUnit: Int = 0,
-    /** Repeat the reminder every N minutes (max 3 times) while today's wird is not done; 0 = off. */
+    /** Repeat the reminder every N minutes (N and the count are the user's choice) while today's wird is not done; 0 = off. */
     val repeatMinutes: Int = 0,
+    /** How many times the reminder repeats (user's choice, 1..50). */
+    val repeatCount: Int = 3,
 ) {
     val coveredCount: Int get() = covered.cardinality()
     val todayCount: Int get() = today.cardinality()
@@ -109,6 +111,7 @@ class LocalKhatmaStore(context: Context) {
             startMillis = prefs.getLong("$k.start", 0L),
             targetUnit = prefs.getInt("$k.unit", 0),
             repeatMinutes = prefs.getInt("$k.rep", 0),
+            repeatCount = prefs.getInt("$k.cnt", 3).coerceIn(1, 50),
         )
     }
 
@@ -127,6 +130,7 @@ class LocalKhatmaStore(context: Context) {
             .putLong("$k.start", s.startMillis)
             .putInt("$k.unit", s.targetUnit)
             .putInt("$k.rep", s.repeatMinutes)
+            .putInt("$k.cnt", s.repeatCount)
             .apply()
     }
 }

@@ -62,3 +62,14 @@ class KhatmaTest {
         assertEquals(true, KhatmaLogic.record(base, listOf(0), "d1", 1L).wirdDone) // no target: any reading counts
     }
 }
+
+class KhatmaRepeatSettingsTest {
+    @org.junit.Test fun defaultsAreOffWithThreeRepeatsAndUserValuesAreFree() {
+        val d = KhatmaState(kind = SaveMarkKind.HIFZ)
+        org.junit.Assert.assertEquals(0, d.repeatMinutes)
+        org.junit.Assert.assertEquals(3, d.repeatCount)
+        val u = d.copy(repeatMinutes = 7, repeatCount = 12)
+        org.junit.Assert.assertEquals(7, u.repeatMinutes)
+        org.junit.Assert.assertEquals(12, u.repeatCount)
+    }
+}

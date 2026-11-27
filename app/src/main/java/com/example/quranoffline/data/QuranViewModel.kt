@@ -1760,8 +1760,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setKhatmaTargetUnit(kind: SaveMarkKind, unit: Int) = putKhatma(khatmaOf(kind).copy(targetUnit = unit.coerceIn(0, 2)))
 
-    fun setKhatmaRepeat(kind: SaveMarkKind, minutes: Int) {
-        val k = khatmaOf(kind).copy(repeatMinutes = minutes.coerceIn(0, 240))
+    fun setKhatmaRepeat(kind: SaveMarkKind, minutes: Int, count: Int) {
+        val k = khatmaOf(kind).copy(repeatMinutes = minutes.coerceIn(0, 1440), repeatCount = count.coerceIn(1, 50))
         putKhatma(k)
         com.example.quranoffline.KhatmaReminders.apply(getApplication(), k)
     }

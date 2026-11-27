@@ -19,12 +19,11 @@ import java.util.Calendar
 
 /**
  * Daily khatma reminders. One exact alarm that may fire in Doze, re-armed after every fire, boot,
- * app update, time change and timezone change. Optional repeats (up to 3) while today's wird is not done.
+ * app update, time change and timezone change. Optional repeats (interval and count chosen by the user) while today's wird is not done.
  * The notification plays one short frame-drum hit (bundled, synthesized for this app).
  */
 object KhatmaReminders {
     private const val CHANNEL = "khatma_reminders_v3"
-    const val MAX_REPEATS = 3
 
     private fun pending(context: Context, kind: SaveMarkKind, repeatNo: Int): PendingIntent =
         PendingIntent.getBroadcast(
@@ -77,7 +76,7 @@ object KhatmaReminders {
     }
 
     fun scheduleRepeat(context: Context, s: KhatmaState, nextRepeatNo: Int) {
-        if (s.repeatMinutes <= 0 || nextRepeatNo > MAX_REPEATS) return
+        if (s.repeatMinutes <= 0 || nextRepeatNo > s.repeatCount.coerceIn(1, 50)) return
         arm(context, System.currentTimeMillis() + s.repeatMinutes * 60_000L, pending(context, s.kind, nextRepeatNo))
     }
 

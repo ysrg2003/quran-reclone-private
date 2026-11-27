@@ -57,8 +57,12 @@ class WordReferenceLayout(
 
     companion object {
         fun loadBundled(context: Context): WordReferenceLayout {
-            val raw = context.assets.open("quran/word_reference_layout.json").bufferedReader().use { it.readText() }
-            return fromJson(raw)
+            return ParsedCache.load(
+                context, "layout", 604,
+                build = { fromJson(context.assets.open("quran/word_reference_layout.json").bufferedReader().use { it.readText() }) },
+                write = ParsedCache::writeLayout,
+                read = ParsedCache::readLayout,
+            )
         }
 
         /** Uses the downloaded quran.com layout when present and valid; otherwise the bundled Word layout. */

@@ -73,3 +73,22 @@ fun ayahSegments(line: WordReferenceLine): List<Triple<String, Int, Int>> {
 
 fun ayahKeyAtOffset(segments: List<Triple<String, Int, Int>>, offset: Int): String? =
     segments.firstOrNull { offset >= it.second && offset < it.third }?.first ?: segments.lastOrNull()?.first
+
+/**
+ * v22: "hide ayahs" hides the WHOLE shown page (every ayah and the opening basmala box). The user reported that with a
+ * selection it hid only the basmala (the selected ayah was the single-word first ayah). The selection only sets the tasmee
+ * range. Set to true to bring back "hide only the selected ayahs when they are on this page".
+ */
+const val HIDE_ONLY_SELECTED = false
+
+/**
+ * Hide-ayahs rule for the tasmee view. With no selection the whole page is hidden. With a selection, only the selected
+ * ayahs are hidden, but only when at least one of them is on the shown page; otherwise (selection on another page) the
+ * whole page is hidden so the button never appears to do nothing.
+ */
+fun ayahHiddenInTasmee(hiddenMode: Boolean, selectedKeys: Set<Pair<Int, Int>>, pageKeys: List<Pair<Int, Int>>, key: Pair<Int, Int>): Boolean {
+    if (!hiddenMode) return false
+    if (!HIDE_ONLY_SELECTED) return true
+    val selectionOnPage = pageKeys.any { it in selectedKeys }
+    return !selectionOnPage || key in selectedKeys
+}

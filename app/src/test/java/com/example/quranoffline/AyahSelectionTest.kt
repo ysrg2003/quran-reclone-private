@@ -74,3 +74,44 @@ class AyahSegmentsTest {
         org.junit.Assert.assertEquals("2:3", com.example.quranoffline.data.ayahKeyAtOffset(s, 40))
     }
 }
+
+class HideAyahsRuleTest {
+    private val page = listOf(2 to 1, 2 to 2, 2 to 3, 2 to 4)
+    private fun hid(mode: Boolean, sel: Set<Pair<Int, Int>>, key: Pair<Int, Int>) = com.example.quranoffline.data.ayahHiddenInTasmee(mode, sel, page, key)
+
+    @org.junit.Test fun offMeansNothingHidden() = page.forEach { org.junit.Assert.assertFalse(hid(false, setOf(2 to 2), it)) }
+    @org.junit.Test fun noSelectionHidesWholePage() = page.forEach { org.junit.Assert.assertTrue(hid(true, emptySet(), it)) }
+    // Al-Baqarah page 2: ayah 1 is the single word alif-lam-mim. Selecting only it used to hide just that ayah (and the basmala box).
+    @org.junit.Test fun selectionOfFirstAyahStillHidesTheWholePage() {
+        page.forEach { org.junit.Assert.assertTrue(hid(true, setOf(2 to 1), it)) }
+    }
+    @org.junit.Test fun selectionAnywhereHidesWholePage() {
+        page.forEach { org.junit.Assert.assertTrue(hid(true, setOf(2 to 40, 2 to 41), it)) }
+        page.forEach { org.junit.Assert.assertTrue(hid(true, setOf(2 to 3, 2 to 4, 2 to 5), it)) }
+    }
+}
+
+class AyahSegmentsPropertyTest {
+    @org.junit.Test fun segmentsAlwaysCoverTheWholeLineWithoutGapsOrOverlap() {
+        val cases = listOf(
+            "x".repeat(76) to listOf(Triple(16, 17, 2)),
+            "x".repeat(51) to listOf(Triple(24, 25, 3), Triple(50, 51, 4)),
+            "x".repeat(60) to listOf(Triple(10, 11, 5), Triple(30, 31, 6), Triple(45, 46, 7)),
+            "x".repeat(30) to emptyList(),
+            "x".repeat(20) to listOf(Triple(19, 20, 9)),
+        )
+        cases.forEach { (text, nums) ->
+            val l = com.example.quranoffline.data.WordReferenceLine(1, "ayah", text, listOf("2:" + (nums.firstOrNull()?.third ?: 9)),
+                nums.map { com.example.quranoffline.data.WordReferenceAyahNumber(it.first, it.second, "x", it.third) })
+            val s = com.example.quranoffline.data.ayahSegments(l)
+            org.junit.Assert.assertEquals(0, s.first().second)
+            org.junit.Assert.assertEquals(text.length, s.last().third)
+            s.zipWithNext().forEach { (a, b) -> org.junit.Assert.assertEquals(a.third, b.second) }
+            (0 until text.length).forEach { off -> org.junit.Assert.assertNotNull(com.example.quranoffline.data.ayahKeyAtOffset(s, off)) }
+        }
+    }
+    @org.junit.Test fun emptyLineAndNonAyahLineGiveNoSegments() {
+        val l = com.example.quranoffline.data.WordReferenceLine(1, "surah_name", "x", emptyList(), emptyList())
+        org.junit.Assert.assertTrue(com.example.quranoffline.data.ayahSegments(l).isEmpty())
+    }
+}

@@ -44,6 +44,9 @@ class PronunciationReference private constructor(
 
     fun isEmpty(): Boolean = ayahsByKey.isEmpty()
 
+    /** Ayahs in their original order (used by the parsed-data cache). */
+    fun allAyahs(): List<PronunciationAyah> = ayahsByKey.values.toList()
+
     fun size(): Int = ayahsByKey.size
 
     companion object {
@@ -59,6 +62,18 @@ class PronunciationReference private constructor(
          * expected spoken forms and the explicit madd/waqf rules.
          */
         fun load(context: Context): PronunciationReference {
+            val list = ParsedCache.load(
+                context, "pronunciation", 6236,
+                build = {
+                    loadFromJson(context).allAyahs()
+                },
+                write = ParsedCache::writePronunciation,
+                read = ParsedCache::readPronunciation,
+            )
+            return fromAyahs(list)
+        }
+
+        private fun loadFromJson(context: Context): PronunciationReference {
             val raw = context.applicationContext.assets
                 .open("quran/pronunciation_reference.json")
                 .bufferedReader(Charsets.UTF_8)

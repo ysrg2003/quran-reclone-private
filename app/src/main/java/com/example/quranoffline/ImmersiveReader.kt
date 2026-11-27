@@ -125,13 +125,12 @@ internal fun ImmersiveReader(
                         )
                     }
                     val selKeys = remember(state.selectedAyahIndices, state.allAyahs) { state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.let { a -> a.surah to a.ayah } }.toSet() }
-                    val selOnPage = state.ayahs.any { (it.surah to it.ayah) in selKeys }
                     state.ayahs.forEachIndexed { index, ayah ->
                       Box(Modifier.onGloballyPositioned { ayahY["${ayah.surah}:${ayah.ayah}"] = it.positionInParent().y.toInt() }) {
                         AyahBlock(
                             ayah = ayah,
                             // With a selection, tasmee hides only the selected ayahs; the rest stay visible.
-                            hidden = state.hidden && (!selOnPage || (ayah.surah to ayah.ayah) in selKeys),
+                            hidden = com.example.quranoffline.data.ayahHiddenInTasmee(state.hidden, selKeys, state.ayahs.map { it.surah to it.ayah }, ayah.surah to ayah.ayah),
                             evaluation = state.evaluation,
                             openingBasmalaEvaluation = state.openingBasmalaEvaluation,
                             openingBasmalaWordIndex = state.openingBasmalaWordIndex,
