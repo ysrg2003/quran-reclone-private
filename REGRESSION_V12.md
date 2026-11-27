@@ -156,3 +156,7 @@ Manual on device (UNTESTED by me, no device available):
 
 ## v24.3 (af92f17, tag apk-v24.3)
 - Device untested. Tab-0 recitation card gets a button that opens TasmeeRangeSheet (already used by the reader's radial menu). Start anchor = tasmeeAnchor() (checkpoint or first ayah of the page); options end of ayah, page, surah, juz, quarter, whole Quran, or custom from/to via the same dialog as the reader. Uses prepareTasmeeRange / prepareTasmeeCustom, which set the start and tasmeeEndIndex; a notice says where the range stops; tasmee starts with the microphone button. No page-range or juz-number entry (juz/page only as "end of current juz/page"; custom covers any surah:ayah span).
+
+## v24.4 (tag apk-v24.4)
+- Device untested. TasmeeRangeSheet gets two rows opening a from/to number dialog: pages (1-604) and juz (1-30). Start and end are typed freely, independent of the current position; reversed values are swapped; out of range shows a notice. Pure helper TasmeeRanges.span (JVM tests) gives first/last ayah; QuranViewModel.prepareTasmeeByRange starts tasmee at the first ayah and sets the end index, announced as in v24.3. The custom surah:ayah dialog was already free.
+- Added TasmeeMismatchBenchmarkTest (skipped without /tmp/quran_words.tsv): with wrong tokens, stable update median 13.9 ms, p90 34 ms, max 473 ms on desktop JVM. Suspect isClearJump scanning all later ayahs on each mismatch. Not changed in v24.4.

@@ -108,7 +108,7 @@ Two jobs: `apk` (tests, signed `assembleOnlineRelease`, apksigner verify, upload
 - If Actions fails to start again, check Settings > Billing and plans for ysrg2003 first.
 
 ## Status
-Latest release: v24.3 (tag apk-v24.3, same release key e4c456fc...9ff5e).
+Latest release: v24.4 (tag apk-v24.4, same release key e4c456fc...9ff5e).
 
 ## Visibility boundary
 - The repo was public from 10:41 to 10:45 on Nov 27 for one CI test, then set back to private.
