@@ -115,3 +115,6 @@ Latest release: v22.1 (tag apk-v22.1, same release key e4c456fc...9ff5e).
 - Going back to private does not recall clones or forks made in that window. A negative check (0 forks, 0 stars, 0 watchers at 11:55) does not rule out clones.
 - Do not make this history public again. Future CI must run privately, or in an asset-free test repo.
 - Actions artifacts (private now): quran-reclone-release and libwhisper_jni-rebuilt, retention 90 days, expiring 2027-02-25.
+
+## User decisions (hide ayahs)
+- 14:03 Nov 27 (Telegram 25439026, 25402046): in the full-screen reader, hide ayahs hides ONLY the selected ayahs (flag HIDE_ONLY_SELECTED). The memorization tab (tab 0) hide button stays as is: it hides the whole page. Do not change either without asking.
