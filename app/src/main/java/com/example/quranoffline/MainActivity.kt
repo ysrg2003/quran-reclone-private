@@ -44,6 +44,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MoreVert
@@ -192,6 +194,8 @@ private fun QuranOfflineApp(
     val resumeRecitation = startRecitation
     var tab by remember { mutableIntStateOf(0) }
     var immersive by rememberSaveable { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
+    var showGoTo by remember { mutableStateOf(false) }
     var showLegalNotices by rememberSaveable { mutableStateOf(false) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -207,6 +211,12 @@ private fun QuranOfflineApp(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { showSearch = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "بحث في القرآن", tint = Color.White)
+                        }
+                        IconButton(onClick = { showGoTo = true }) {
+                            Icon(Icons.Default.Explore, contentDescription = "الانتقال السريع", tint = Color.White)
+                        }
                         IconButton(onClick = { immersive = true }) {
                             Icon(Icons.Default.Fullscreen, contentDescription = "قراءة بملء الشاشة", tint = Color.White)
                         }
@@ -373,6 +383,11 @@ private fun QuranOfflineApp(
         }
         }
         if (immersive) ImmersiveReader(state = state, viewModel = viewModel, onStartListening = startRecitation, onExit = { immersive = false })
+        if (showSearch) QuranSearchOverlay(
+            state = state, viewModel = viewModel, onClose = { showSearch = false },
+            onOpenAyah = { surah, ayah -> viewModel.pageOfAyah(surah, ayah)?.let { viewModel.jumpToPage(it) }; showSearch = false; tab = 4 },
+        )
+        if (showGoTo) GoToDialog(state = state, viewModel = viewModel, onDismiss = { showGoTo = false }, onGo = { page -> viewModel.jumpToPage(page); showGoTo = false; tab = 4 })
         }
     }
 }

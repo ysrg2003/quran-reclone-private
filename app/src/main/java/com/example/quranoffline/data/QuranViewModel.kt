@@ -1671,4 +1671,41 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         }
         showPage(mark.page.takeIf { it > 0 } ?: state.value.currentPage, notice = "فُتحت العلامة المحفوظة.")
     }
+
+    // ---- Search and quick navigation (v19.1) ----
+    private var searchIndexCache: List<List<String>>? = null
+    private var searchIndexFor: Int = -1
+
+    /** Runs on a background dispatcher; the normalised index is built once per loaded Quran. */
+    suspend fun searchAyahs(query: String, surah: Int?): SearchOutcome = withContext(Dispatchers.Default) {
+        val all = state.value.allAyahs
+        if (all.isEmpty()) return@withContext SearchOutcome(emptyList(), 0, false)
+        val index = searchIndexCache?.takeIf { searchIndexFor == all.size } ?: QuranSearch.buildIndex(all).also { searchIndexCache = it; searchIndexFor = all.size }
+        QuranSearch.search(all, index, query, surah)
+    }
+
+    fun pageOfAyah(surah: Int, ayah: Int): Int? = state.value.metadata?.let { QuickNav.pageForAyah(it, surah, ayah) }
+
+    /** Opens the mushaf page that holds this ayah (stops any playback first). */
+    fun jumpToPage(page: Int) {
+        val total = state.value.totalPages
+        if (page !in 1..maxOf(total, 604)) { state.value = state.value.copy(notice = "رقم الصفحة غير صحيح."); return }
+        if (page == state.value.currentPage) return
+        if (state.value.listening || state.value.correctionPlaying) stopListening() else stopReader()
+        showPage(page)
+    }
+
+    fun resolveQuickNav(surah: Int?, ayah: Int?, juz: Int?, hizb: Int?, page: Int?, lastField: String): Int? {
+        val md = state.value.metadata ?: return null
+        return when (lastField) {
+            "page" -> page
+            "juz" -> juz?.let { QuickNav.pageForJuz(md, it) }
+            "hizb" -> hizb?.let { QuickNav.pageForHizb(md, it) }
+            else -> when {
+                surah != null && ayah != null -> QuickNav.pageForAyah(md, surah, ayah)
+                surah != null -> QuickNav.pageForSurah(md, surah)
+                else -> null
+            }
+        }
+    }
 }
