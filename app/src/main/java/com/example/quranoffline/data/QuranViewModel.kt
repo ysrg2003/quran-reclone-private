@@ -109,6 +109,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     private val saveMarkStore = LocalSaveMarkStore(application)
     private val khatmaStore = LocalKhatmaStore(application)
     private var lastHifzIndex = -1
+    /** When >= 0, tasmee stops once the reciter moves past this ayah index (selection-only tasmee). */
+    private var tasmeeEndIndex = -1
     private val goalStore = LocalGoalStore(application)
     private val memorizationProgressStore = LocalMemorizationProgressStore(application)
     private val correctionSettingsStore = LocalCorrectionSettingsStore(application)
@@ -1007,6 +1009,11 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     notice = openingBasmalaNotice ?: "يتم التحقق عبر Android SpeechRecognizer عبر الإنترنت؛ لا يُحفظ صوتك في التطبيق.",
                 )
                 if (update.isFinal || update.segmentCompleted) persistCheckpoint(result.currentAyahIndex, result.currentWordInAyah)
+                if (tasmeeEndIndex >= 0 && result.currentAyahIndex > tasmeeEndIndex && correction == null) {
+                    stopListening()
+                    state.value = state.value.copy(notice = "اكتمل تسميع الآيات المحددة.")
+                    return
+                }
                 if (correction != null && (update.isFinal || update.segmentCompleted) && activeCorrection == null) {
                     activeCorrection = correction
                     correctionWasListening = previousState.listening
@@ -1424,6 +1431,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopListening() {
+        tasmeeEndIndex = -1
         persistCheckpoint(state.value.currentAyahIndex, state.value.currentWordInAyah)
         recognitionGeneration++
         readerGeneration++
@@ -1774,8 +1782,36 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Text for copy/share of one ayah. */
     fun ayahShareText(surah: Int, ayah: Int): String? {
-        val target = state.value.allAyahs.getOrNull(AyahLookup.of(state.value.allAyahs).indexOf(surah, ayah)) ?: return null
-        val name = state.value.metadata?.sura(surah)?.arabicName ?: surah.toString()
-        return "﴿${target.text}﴾ [سورة $name: ${target.ayah}]"
+        val all = state.value.allAyahs
+        val sel = state.value.selectedAyahIndices
+        val idx = if (sel.size > 1) sel else listOf(AyahLookup.of(all).indexOf(surah, ayah))
+        val items = idx.mapNotNull { all.getOrNull(it) }
+        if (items.isEmpty()) return null
+        val md = state.value.metadata
+        fun nm(s: Int) = md?.sura(s)?.arabicName ?: s.toString()
+        val body = items.joinToString(" ") { "﴿${it.text}﴾" }
+        val f = items.first(); val l = items.last()
+        val ref = if (items.size == 1 || f.surah == l.surah && f.ayah == l.ayah) "[سورة ${nm(f.surah)}: ${f.ayah}]"
+            else if (f.surah == l.surah) "[سورة ${nm(f.surah)}: ${f.ayah}-${l.ayah}]"
+            else "[${nm(f.surah)}: ${f.ayah} - ${nm(l.surah)}: ${l.ayah}]"
+        return "$body $ref"
+    }
+
+    /** Radial menu "tasmee": start at the first selected ayah (or the tapped one) and stop after the last selected one. */
+    fun prepareTasmeeForSelection(surah: Int, ayah: Int) {
+        val all = state.value.allAyahs
+        val sel = state.value.selectedAyahIndices
+        val lk = AyahLookup.of(all)
+        val tapped = lk.indexOf(surah, ayah)
+        val first = if (sel.isNotEmpty()) sel.first() else tapped
+        val last = if (sel.isNotEmpty()) sel.last() else tapped
+        val a = all.getOrNull(first) ?: return
+        startMemorizationFrom(a.surah, a.ayah)
+        tasmeeEndIndex = last
+    }
+
+    /** Radial menu "listen": the selection only, or the tapped ayah when nothing is selected. */
+    fun playSelectionOrAyah(surah: Int, ayah: Int) {
+        if (state.value.selectedAyahIndices.isNotEmpty()) playSelectedAyahs() else playAyah(surah, ayah)
     }
 }

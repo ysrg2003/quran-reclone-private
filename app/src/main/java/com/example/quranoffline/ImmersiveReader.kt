@@ -161,16 +161,16 @@ internal fun ImmersiveReader(
                 center = radialCenter,
                 onDismiss = { radialAyah = null },
                 actions = listOf(
-                    Triple(Icons.Default.PlayArrow, "استماع من هنا") { listenAnchor = rs to ra },
-                    Triple(Icons.Default.ContentCopy, "نسخ الآية") { viewModel.ayahShareText(rs, ra)?.let { clipboard.setText(androidx.compose.ui.text.AnnotatedString(it)) } },
-                    Triple(Icons.Default.Share, "مشاركة الآية") {
+                    Triple(Icons.Default.PlayArrow, "استماع المحدد فقط") { viewModel.playSelectionOrAyah(rs, ra) },
+                    Triple(Icons.Default.ContentCopy, "نسخ المحدد") { viewModel.ayahShareText(rs, ra)?.let { clipboard.setText(androidx.compose.ui.text.AnnotatedString(it)) } },
+                    Triple(Icons.Default.Share, "مشاركة المحدد") {
                         viewModel.ayahShareText(rs, ra)?.let { t ->
                             val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, t)
                             context.startActivity(android.content.Intent.createChooser(send, null))
                         }
                     },
                     Triple(Icons.Default.Bookmark, "حفظ علامة") { viewModel.saveBookmark(rs, ra) },
-                    Triple(Icons.Default.Mic, "ابدأ التسميع من هنا") { viewModel.startMemorizationFrom(rs, ra); onStartListening() },
+                    Triple(Icons.Default.Mic, "تسميع المحدد فقط") { viewModel.prepareTasmeeForSelection(rs, ra); onStartListening() },
                     Triple(Icons.Default.Info, "معلومات الآية") { infoAyah = rs to ra },
                 ),
             )
