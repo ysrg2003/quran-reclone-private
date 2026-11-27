@@ -1197,7 +1197,8 @@ internal fun AyahBlock(
     onPlainTap: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    val onlySpoken = com.example.quranoffline.data.WordDisplayRules.onlySpoken(androidx.compose.ui.platform.LocalContext.current)
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    val onlySpoken = remember(appCtx) { com.example.quranoffline.data.WordDisplayRules.onlySpoken(appCtx) }
     val openingBasmala = if (ayah.ayah == 1) com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(ayah.surah) else null
     Column(
         verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -1240,7 +1241,7 @@ internal fun AyahBlock(
                             }
                             Surface(color = background, shape = RoundedCornerShape(8.dp)) {
                                 Text(
-                                    text = QuranTextPresentation.annotated(shownText),
+                                    text = QuranTextPresentation.annotatedCached(shownText),
                                     color = if (hidden && !revealed && !isCurrent) Color(0xFF76552A) else Color(0xFF76552A),
                                     style = MaterialTheme.typography.titleMedium,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -1273,7 +1274,7 @@ internal fun AyahBlock(
                     }
                     Surface(color = background, shape = RoundedCornerShape(8.dp)) {
                         Text(
-                            text = QuranTextPresentation.annotated(shownText),
+                            text = QuranTextPresentation.annotatedCached(shownText),
                             color = if (hidden && !revealed && !isCurrent) Color(0xFF202A25) else Color(0xFF183D33),
                             style = MaterialTheme.typography.headlineSmall,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),

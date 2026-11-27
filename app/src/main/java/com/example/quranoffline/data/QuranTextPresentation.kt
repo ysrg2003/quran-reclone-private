@@ -61,6 +61,15 @@ object QuranTextPresentation {
         return text.drop(index + 1).firstOrNull { it !in '\u064B'..'\u065F' } == 'ا'
     }
 
+    private val annotatedCache = java.util.concurrent.ConcurrentHashMap<String, AnnotatedString>()
+
+    /** v23.3: pure function of the text, called for every word on every recomposition; memoized (bounded). */
+    fun annotatedCached(text: String): AnnotatedString {
+        annotatedCache[text]?.let { return it }
+        if (annotatedCache.size > 8192) annotatedCache.clear()
+        return annotated(text).also { annotatedCache[text] = it }
+    }
+
     /** Returns the exact input text with rendering-only spans; no code point is removed or replaced. */
     fun annotated(text: String): AnnotatedString {
         val result = AnnotatedString.Builder()

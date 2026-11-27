@@ -86,9 +86,16 @@ class WordReferenceLayout(
         /** Uses the downloaded quran.com layout when present and valid; otherwise the bundled Word layout. */
         fun load(context: Context): WordReferenceLayout {
             QuranComLayoutStore.readCached(context)?.let { raw ->
-                runCatching { fromJson(raw) }.getOrNull()?.takeIf { it.pageCount == 604 && it.pages.size == 604 }?.let { return it }
+                runCatching { fromJson(raw) }.getOrNull()?.takeIf { it.pageCount == 604 && it.pages.size == 604 }?.let { return withModelPages(it, loadBundled(context)) }
             }
             return loadBundled(context)
+        }
+
+        /** v23.3: pages 1 and 2 (Al-Fatiha, first page of Al-Baqarah) follow the user's picture models (user 26138634/39); the bundled data carries that arrangement, so the downloaded layout keeps it too. */
+        internal fun withModelPages(downloaded: WordReferenceLayout, bundled: WordReferenceLayout): WordReferenceLayout {
+            val model = bundled.pages.filter { it.page <= 2 }
+            if (model.size != 2) return downloaded
+            return WordReferenceLayout(downloaded.schemaVersion, downloaded.source, downloaded.fontFamily, downloaded.pages.map { pg -> model.firstOrNull { it.page == pg.page } ?: pg }, downloaded.declaredPageCount)
         }
 
         fun loadPreview(context: Context): WordReferenceLayout {

@@ -262,4 +262,4 @@ private fun statusHighlightColor(status: WordStatus?): Color? = when (status) {
 }
 
 /** v23: very small gap between the page text and the four screen edges in the full-screen reader (user, 15:53). 0 gives edge-to-edge text. */
-internal const val READER_EDGE_MARGIN_DP = 8
+internal const val READER_EDGE_MARGIN_DP = 12

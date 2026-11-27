@@ -34,4 +34,27 @@ class AyahMarkerDigitsTest {
         assertEquals(6236, count)
         assertTrue(count > 0)
     }
+
+    @Test fun leadingMarkerLineAssignsTextToTheNextAyah() {
+        // Al-Fatiha page model line 4: "2 <ayah 3 words> 3 <ayah 4 words>" with the marker of ayah 2 first on the line.
+        val text = "\u0662 AAA BBB \u0663 CCC DDD"
+        val nums = listOf(WordReferenceAyahNumber(0, 1, "\u0662", 2), WordReferenceAyahNumber(9, 10, "\u0663", 3))
+        val line = WordReferenceLine(4, "ayah", text, listOf("1:2", "1:3", "1:4"), nums)
+        val seg = ayahSegments(line)
+        assertEquals(listOf("1:2", "1:3", "1:4"), seg.map { it.first })
+        assertEquals("1:3", ayahKeyAtOffset(seg, text.indexOf("BBB")))
+        assertEquals("1:4", ayahKeyAtOffset(seg, text.indexOf("DDD")))
+        assertEquals("1:2", ayahKeyAtOffset(seg, 0))
+    }
+
+    @Test fun modelPagesOverrideDownloadedPagesOneAndTwoOnly() {
+        fun page(n: Int, tag: String) = WordReferencePage(n, listOf(WordReferenceLine(1, "ayah", tag, emptyList(), emptyList())))
+        val down = WordReferenceLayout(3, "quran.com", "f", (1..604).map { page(it, "d$it") }, 604)
+        val bundled = WordReferenceLayout(3, "word", "f", (1..604).map { page(it, "b$it") }, 604)
+        val merged = WordReferenceLayout.withModelPages(down, bundled)
+        assertEquals("b1", merged.linesForPage(1).single().text)
+        assertEquals("b2", merged.linesForPage(2).single().text)
+        assertEquals("d3", merged.linesForPage(3).single().text)
+        assertEquals(604, merged.pages.size)
+    }
 }

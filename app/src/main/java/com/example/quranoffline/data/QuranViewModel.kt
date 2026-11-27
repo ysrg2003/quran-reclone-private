@@ -994,11 +994,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 val observedSpokenWord = rawSpeechWordForDisplay(update)
                 val resolvedAyah = previousState.allAyahs.getOrNull(result.currentAyahIndex)
                 val resolvedPage = resolvedAyah?.let { previousState.metadata?.ayah(it.surah, it.ayah)?.page } ?: previousState.currentPage
-                val resolvedVisibleAyahs = previousState.metadata?.let { page(previousState.allAyahs, it, resolvedPage) } ?: previousState.ayahs
+                // v23.3: the page rarely changes between recognizer updates; rebuilding it scanned all 6236 ayahs on the main thread
+                // and handed the UI a new list every time, so the whole page recomposed. Keep the same list when the page is the same.
+                val samePage = resolvedPage == previousState.currentPage && previousState.ayahs.isNotEmpty()
+                val resolvedVisibleAyahs = if (samePage) previousState.ayahs else (previousState.metadata?.let { page(previousState.allAyahs, it, resolvedPage) } ?: previousState.ayahs)
                 state.value = previousState.copy(
                     ayahs = resolvedVisibleAyahs,
                     currentPage = resolvedPage,
-                    pageWordOffset = globalWordOffset(previousState.allAyahs, resolvedVisibleAyahs.firstOrNull()),
+                    pageWordOffset = if (samePage) previousState.pageWordOffset else globalWordOffset(previousState.allAyahs, resolvedVisibleAyahs.firstOrNull()),
                     rawTranscript = rawSpeechTextForDisplay(update),
                     transcript = canonicalizeRecognizedTranscript(recognizerTranscript, result.evaluation.words),
                     evaluation = result.evaluation,
