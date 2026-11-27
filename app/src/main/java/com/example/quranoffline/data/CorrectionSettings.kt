@@ -23,7 +23,7 @@ data class CorrectionSettings(
     val clipPaddingAfterMs: Int = DEFAULT_CLIP_PADDING_AFTER_MS,
     val resumePosition: ResumePosition = DEFAULT_RESUME_POSITION,
     val mushafTextScale: Float = DEFAULT_MUSHAF_TEXT_SCALE,
-    /** Diameter in dp of the small circle shown at the start of a selected block. */
+    /** v23: diameter in dp of each button of the actions circle (the circle with copy, play, mic...). Stored under a new key. */
     val selectionCircleDp: Int = DEFAULT_SELECTION_CIRCLE_DP,
 ) {
     fun normalized(): CorrectionSettings {
@@ -63,9 +63,9 @@ data class CorrectionSettings(
         const val DEFAULT_MUSHAF_TEXT_SCALE = 1.0f
         const val MIN_MUSHAF_TEXT_SCALE = 0.8f
         const val MAX_MUSHAF_TEXT_SCALE = 1.5f
-        const val DEFAULT_SELECTION_CIRCLE_DP = 18
-        const val MIN_SELECTION_CIRCLE_DP = 10
-        const val MAX_SELECTION_CIRCLE_DP = 40
+        const val DEFAULT_SELECTION_CIRCLE_DP = 34
+        const val MIN_SELECTION_CIRCLE_DP = 22
+        const val MAX_SELECTION_CIRCLE_DP = 64
 
         val PAUSE_OPTIONS_MS = listOf(0, 250, 500, 1_000)
 

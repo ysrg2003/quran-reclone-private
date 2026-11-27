@@ -1,5 +1,7 @@
 package com.example.quranoffline
 
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -125,6 +127,56 @@ internal fun RadialAyahMenu(
             bubble(cx + rPx * cos(ang).toFloat(), cy + rPx * sin(ang).toFloat(), icon, desc, orange) { onDismiss(); act() }
         }
         bubble(cx, cy, Icons.Default.Close, "إغلاق", Color(0xFFD94A1E)) { onDismiss() }
+    }
+}
+
+/**
+ * v23 actions circle: stays on screen while a selection exists. It does not intercept touches outside its buttons, so the
+ * user can keep tapping ayahs to extend or shrink the selection. Tapping the middle button closes it and clears the
+ * selection (onCloseAll). Dragging the middle button moves the whole circle.
+ */
+@Composable
+internal fun ActionsCircle(
+    center: Offset,
+    btnDp: Int,
+    onMove: (Offset) -> Unit,
+    onCloseAll: () -> Unit,
+    actions: List<Triple<ImageVector, String, () -> Unit>>,
+) {
+    val cfg = LocalConfiguration.current
+    val density = LocalDensity.current
+    val btn = btnDp.dp
+    val rPx = with(density) { (btnDp * 1.45f).dp.toPx() }
+    val margin = rPx + with(density) { (btn / 2).toPx() } + 4f
+    val w = with(density) { cfg.screenWidthDp.dp.toPx() }
+    val h = with(density) { cfg.screenHeightDp.dp.toPx() }
+    val cx = center.x.coerceIn(margin, (w - margin).coerceAtLeast(margin))
+    val cy = center.y.coerceIn(margin, (h - margin).coerceAtLeast(margin))
+    val orange = Color(0xFFE8703A)
+    val half = with(density) { (btn / 2).roundToPx() }
+    val iconSize = (btnDp * 0.55f).dp
+    Box(Modifier.fillMaxSize()) {
+        actions.forEachIndexed { i, (icon, desc, act) ->
+            val ang = Math.toRadians(-90.0 + i * 360.0 / actions.size)
+            val x = cx + rPx * cos(ang).toFloat()
+            val y = cy + rPx * sin(ang).toFloat()
+            Box(
+                Modifier.offset { IntOffset(x.roundToInt() - half, y.roundToInt() - half) }.size(btn).background(orange, CircleShape)
+                    .clickable(onClickLabel = desc) { act() },
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, desc, tint = Color.White, modifier = Modifier.size(iconSize)) }
+        }
+        val centerNow = androidx.compose.runtime.rememberUpdatedState(Offset(cx, cy))
+        Box(
+            Modifier.offset { IntOffset(cx.roundToInt() - half, cy.roundToInt() - half) }.size(btn).background(Color(0xFFD94A1E), CircleShape)
+                .pointerInput(Unit) {
+                    detectDragGestures { change, drag ->
+                        change.consume(); onMove(centerNow.value + drag)
+                    }
+                }
+                .clickable(onClickLabel = "إغلاق الدائرة وإلغاء التحديد") { onCloseAll() },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Default.Close, "إغلاق", tint = Color.White, modifier = Modifier.size(iconSize)) }
     }
 }
 

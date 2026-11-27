@@ -26,7 +26,8 @@ object WordDisplayRules {
     fun shown(hidden: Boolean, onlySpoken: Boolean, status: WordStatus?, revealed: Boolean, isCurrent: Boolean): Shown = when {
         !hidden -> Shown.CORRECT_WORD
         revealed -> Shown.CORRECT_WORD
-        onlySpoken && status != null -> Shown.CORRECT_WORD
+        // A word not said yet carries the status UNCERTAIN (yellow, no observed word). It must stay hidden, otherwise the whole text appears after the first word.
+        onlySpoken && status != null && status != WordStatus.UNCERTAIN -> Shown.CORRECT_WORD
         isCurrent -> Shown.CURRENT_SPOKEN
         onlySpoken -> Shown.HIDDEN
         else -> Shown.DOT

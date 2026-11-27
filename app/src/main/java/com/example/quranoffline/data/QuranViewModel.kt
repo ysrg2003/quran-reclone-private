@@ -440,7 +440,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             downloadedAyahs = assetManager.downloadedAyahCount(pageSurah, pageSurahAyahs.size),
             currentPage = actualPage,
             pageWordOffset = globalWordOffset(state.value.allAyahs, visible.firstOrNull()),
-            hidden = false,
+            hidden = state.value.listening && state.value.hidden, // keep hidden text while tasmee follows the page
             rawTranscript = "",
             transcript = "",
             evaluation = null,
@@ -480,7 +480,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         state.value = state.value.copy(downloadedAyahs = 0, notice = "حُذفت ملفات صوت السورة $surah من التخزين المحلي.")
     }
 
-    fun toggleHidden() { state.value = state.value.copy(hidden = !state.value.hidden) }
+    /** True once the user turned the text back on during tasmee: later tasmee sessions then start with visible text. */
+    private var keepTextVisibleInTasmee = false
+
+    fun toggleHidden() {
+        val next = !state.value.hidden
+        if (state.value.listening) keepTextVisibleInTasmee = !next
+        state.value = state.value.copy(hidden = next)
+    }
 
     fun playAyah(surah: Int, ayah: Int) = startReader(ReaderScope.AYAH, surah, ayah)
 
@@ -727,6 +734,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             currentPage = startPage,
             pageWordOffset = globalWordOffset(state.value.allAyahs, startVisibleAyahs.firstOrNull()),
             listening = true,
+            hidden = !keepTextVisibleInTasmee, // v23: text hides when tasmee starts; words appear one by one as they are said
             rawTranscript = "",
             transcript = "",
             evaluation = null,

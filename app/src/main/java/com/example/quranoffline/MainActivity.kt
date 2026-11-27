@@ -1907,7 +1907,7 @@ internal fun MushafPageSurface(
             Modifier
                 .fillMaxWidth()
                 .then(if (isOpeningPage && !fullBleed) Modifier.border(1.dp, Color(0xFFE4D4B8), RoundedCornerShape(18.dp)).padding(6.dp) else Modifier)
-                .padding(if (fullBleed) 0.dp else 18.dp),
+                .padding(if (fullBleed) READER_EDGE_MARGIN_DP.dp else 18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!fullBleed) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -1967,7 +1967,7 @@ internal fun MushafPageSurface(
                     }
                     Box(Modifier.fillMaxWidth().then(if (sideways) Modifier.nestedScroll(edgeSwipe).horizontalScroll(rememberScrollState()) else Modifier)) {
                     Column(
-                        (if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth()).then(if (fullBleed && minHeightDp > 0) Modifier.heightIn(min = minHeightDp.dp) else Modifier),
+                        (if (sideways) Modifier.width(IntrinsicSize.Max) else Modifier.fillMaxWidth()).then(if (fullBleed && minHeightDp > 0) Modifier.heightIn(min = (minHeightDp - 2 * READER_EDGE_MARGIN_DP).coerceAtLeast(0).dp) else Modifier),
                         verticalArrangement = if (fullBleed) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
                     ) {
                     val circleLine = if (selectedIndices.isEmpty()) -1 else wordReferenceLines.firstOrNull { l -> com.example.quranoffline.data.ayahSegments(l).any { sg -> ayahIndexByKey[sg.first]?.let(selectedIndices::contains) == true } }?.number ?: -1
@@ -2178,7 +2178,7 @@ private fun TypographySettingsCard(
             }
             androidx.compose.material3.HorizontalDivider()
             val cd = settings.selectionCircleDp
-            Text("حجم دائرة التحديد: $cd", fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
+            Text("حجم دائرة الإجراءات: $cd", fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { onUpdate { it.copy(selectionCircleDp = cd - 2) } }, enabled = cd > CorrectionSettings.MIN_SELECTION_CIRCLE_DP, modifier = Modifier.weight(1f)) { Text("أصغر") }
                 OutlinedButton(onClick = { onUpdate { it.copy(selectionCircleDp = CorrectionSettings.DEFAULT_SELECTION_CIRCLE_DP) } }, enabled = cd != CorrectionSettings.DEFAULT_SELECTION_CIRCLE_DP, modifier = Modifier.weight(1f)) { Text("الافتراضي") }

@@ -66,6 +66,10 @@ private fun KhatmaCard(
             Text("${k.coveredCount} من ${KhatmaLogic.TOTAL} آية (${"%.1f".format(percent)}%)")
             Text(if (last != null) "وصلت إلى: سورة ${suraName ?: last.surah} • آية ${last.ayah}" else "لم تبدأ هذه الختمة بعد.")
             fun dateAfter(days: Int): String = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("ar")).format(java.util.Date(System.currentTimeMillis() + days * 86_400_000L))
+            if (k.targetAyahs > 0) {
+                val fullDays = Math.ceil(KhatmaLogic.TOTAL.toDouble() / k.targetAyahs).toInt()
+                Text("ختمة القرآن كاملاً (${KhatmaLogic.TOTAL} آية) بوردك اليومي: $fullDays يوماً، تنتهي في ${dateAfter(fullDays)} إن التزمت", fontWeight = FontWeight.SemiBold)
+            } else Text("حدّد الورد اليومي ليظهر عدد أيام ختمة القرآن كاملاً.", color = Color(0xFF66736C))
             if (k.coveredCount > 0) {
                 Text("المتبقي: ${est.remaining} آية")
                 est.daysByPace?.let { Text("بوتيرتك الحالية (${"%.1f".format(est.pacePerDay)} آية/يوم) تنتهي بعد $it يوماً، في ${dateAfter(it)}") }

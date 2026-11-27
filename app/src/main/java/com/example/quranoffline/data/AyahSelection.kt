@@ -82,8 +82,10 @@ fun ayahKeyAtOffset(segments: List<Triple<String, Int, Int>>, offset: Int): Stri
 const val HIDE_ONLY_SELECTED = true
 
 /** Hide-ayahs rule for the full-screen reader (see [HIDE_ONLY_SELECTED]). pageKeys is kept for the whole-page mode. */
-fun ayahHiddenInTasmee(hiddenMode: Boolean, selectedKeys: Set<Pair<Int, Int>>, pageKeys: List<Pair<Int, Int>>, key: Pair<Int, Int>): Boolean {
+fun ayahHiddenInTasmee(hiddenMode: Boolean, selectedKeys: Set<Pair<Int, Int>>, pageKeys: List<Pair<Int, Int>>, key: Pair<Int, Int>, tasmeeActive: Boolean = false): Boolean {
     if (!hiddenMode) return false
+    // v23: while tasmee runs, everything shown is hidden (the view shows the selected ayahs, or the page). Words appear one by one as they are said.
+    if (tasmeeActive) return true
     if (!HIDE_ONLY_SELECTED) return true
     return key in selectedKeys
 }

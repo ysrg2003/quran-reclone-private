@@ -35,3 +35,17 @@ class WordDisplayRulesTest {
         assertEquals(R.Shown.CORRECT_WORD, R.shown(true, true, WordStatus.MATCHED, true, false))
     }
 }
+
+class WordRevealOneByOneTest {
+    @Test fun wordsNotSaidYetStayHiddenEvenWhenTheyCarryTheUncertainStatus() {
+        // v16 bug: every unsaid word has status UNCERTAIN, so the whole text appeared after the first word.
+        assertEquals(R.Shown.HIDDEN, R.shown(true, true, WordStatus.UNCERTAIN, false, false))
+        assertEquals(R.Shown.CURRENT_SPOKEN, R.shown(true, true, WordStatus.UNCERTAIN, false, true))
+        assertEquals(R.Shown.CORRECT_WORD, R.shown(true, true, WordStatus.MATCHED, true, false))
+        assertEquals(R.Shown.CORRECT_WORD, R.shown(true, true, WordStatus.EXTRA_OR_UNEXPECTED, true, false))
+        assertEquals(R.Shown.CORRECT_WORD, R.shown(true, true, WordStatus.MISSING, false, false))
+    }
+    @Test fun dotsModeStillShowsDotsForUnsaidWords() {
+        assertEquals(R.Shown.DOT, R.shown(true, false, WordStatus.UNCERTAIN, false, false))
+    }
+}

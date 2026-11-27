@@ -187,13 +187,6 @@ internal fun WordReferenceLineView(
                 lineHeight = (34f * textScale).sp,
                 softWrap = false,
             )
-            if (showCircle) androidx.compose.foundation.layout.Box(
-                Modifier.align(androidx.compose.ui.Alignment.TopEnd).padding(end = 2.dp)
-                    .size(circleDp.dp)
-                    .background(Color(0xE60F5B4D), androidx.compose.foundation.shape.CircleShape)
-                    .clickable { onClearSelection() },
-                contentAlignment = androidx.compose.ui.Alignment.Center,
-            ) { Text("×", color = Color.White, fontSize = (circleDp * 0.7f).sp, fontWeight = FontWeight.Bold) }
         }
         }
     }
@@ -265,3 +258,6 @@ private fun statusHighlightColor(status: WordStatus?): Color? = when (status) {
     WordStatus.MISSING, WordStatus.EXTRA_OR_UNEXPECTED -> Color(0xFFEF767A)
     WordStatus.UNCERTAIN, null -> null
 }
+
+/** v23: very small gap between the page text and the four screen edges in the full-screen reader (user, 15:53). 0 gives edge-to-edge text. */
+internal const val READER_EDGE_MARGIN_DP = 4

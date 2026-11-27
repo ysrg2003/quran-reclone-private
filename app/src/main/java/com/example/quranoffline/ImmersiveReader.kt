@@ -48,7 +48,6 @@ internal fun ImmersiveReader(
     onExit: () -> Unit,
 ) {
     var barsVisible by rememberSaveable { mutableStateOf(true) }
-    var radialAyah by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var radialCenter by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var listenAnchor by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var tasmeeRange by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -125,12 +124,16 @@ internal fun ImmersiveReader(
                         )
                     }
                     val selKeys = remember(state.selectedAyahIndices, state.allAyahs) { state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.let { a -> a.surah to a.ayah } }.toSet() }
+                    val tasmeeActive = state.listening || state.evaluation != null
+                    // v23: with a selection the tasmee view shows only the selected ayahs (a copy of the tasmee tab for them).
+                    val onlySelected = tasmeeActive && selKeys.isNotEmpty() && state.ayahs.any { (it.surah to it.ayah) in selKeys }
                     state.ayahs.forEachIndexed { index, ayah ->
+                      if (onlySelected && (ayah.surah to ayah.ayah) !in selKeys) return@forEachIndexed
                       Box(Modifier.onGloballyPositioned { ayahY["${ayah.surah}:${ayah.ayah}"] = it.positionInParent().y.toInt() }) {
                         AyahBlock(
                             ayah = ayah,
                             // With a selection, tasmee hides only the selected ayahs; the rest stay visible.
-                            hidden = com.example.quranoffline.data.ayahHiddenInTasmee(state.hidden, selKeys, state.ayahs.map { it.surah to it.ayah }, ayah.surah to ayah.ayah),
+                            hidden = com.example.quranoffline.data.ayahHiddenInTasmee(state.hidden, selKeys, state.ayahs.map { it.surah to it.ayah }, ayah.surah to ayah.ayah, tasmeeActive),
                             evaluation = state.evaluation,
                             openingBasmalaEvaluation = state.openingBasmalaEvaluation,
                             openingBasmalaWordIndex = state.openingBasmalaWordIndex,
@@ -167,7 +170,6 @@ internal fun ImmersiveReader(
                 onLongPressAyah = { surah, ayah ->
                     viewModel.beginAyahSelection(surah, ayah)
                     radialCenter = androidx.compose.ui.geometry.Offset(lastTouch[0], lastTouch[1])
-                    radialAyah = surah to ayah
                 },
                 onPlainTap = toggle,
                 onClearSelection = viewModel::clearAyahSelection,
@@ -175,10 +177,16 @@ internal fun ImmersiveReader(
                 minHeightDp = (view.height / LocalDensity.current.density).toInt().coerceAtLeast(LocalConfiguration.current.screenHeightDp),
             )
         }
-        radialAyah?.let { (rs, ra) ->
-            RadialAyahMenu(
-                center = radialCenter,
-                onDismiss = { radialAyah = null },
+        val firstSel = state.selectedAyahIndices.firstOrNull()?.let { state.allAyahs.getOrNull(it) }
+        if (firstSel != null) {
+            val rs = firstSel.surah; val ra = firstSel.ayah
+            val shown = if (radialCenter == androidx.compose.ui.geometry.Offset.Zero) androidx.compose.ui.geometry.Offset(view.width * 0.85f, view.height * 0.5f) else radialCenter
+            // Actions use the whole selection (first to last selected ayah). The circle stays until its middle button is tapped.
+            ActionsCircle(
+                center = shown,
+                btnDp = state.correctionSettings.selectionCircleDp,
+                onMove = { radialCenter = it },
+                onCloseAll = viewModel::clearAyahSelection,
                 actions = listOf(
                     Triple(Icons.Default.PlayArrow, "استماع المحدد فقط") { viewModel.playSelectionOrAyah(rs, ra) },
                     Triple(Icons.Default.ContentCopy, "نسخ المحدد") { viewModel.ayahShareText(rs, ra)?.let { clipboard.setText(androidx.compose.ui.text.AnnotatedString(it)) } },
@@ -189,7 +197,7 @@ internal fun ImmersiveReader(
                         }
                     },
                     Triple(Icons.Default.Bookmark, "حفظ علامة") { viewModel.saveBookmark(rs, ra) },
-                    Triple(Icons.Default.Mic, "تسميع المحدد فقط") { viewModel.prepareTasmeeForSelection(rs, ra); onStartListening() },
+                    Triple(Icons.Default.Mic, "تسميع المحدد فقط") { if (state.listening) viewModel.stopListening() else { viewModel.prepareTasmeeForSelection(rs, ra); onStartListening() } },
                     Triple(Icons.Default.Info, "معلومات الآية") { infoAyah = rs to ra },
                 ),
             )
@@ -221,7 +229,7 @@ internal fun ImmersiveReader(
                             Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Color.White,
                         )
                         IconButton(onClick = {
-                            if (!state.hidden && state.selectedAyahIndices.isEmpty()) {
+                            if (!state.hidden && state.selectedAyahIndices.isEmpty() && !state.listening && state.evaluation == null) {
                                 android.widget.Toast.makeText(context, "حدّد آية أو أكثر أولاً (اضغط مطولاً على آية) ثم اضغط إخفاء", android.widget.Toast.LENGTH_LONG).show()
                             } else viewModel.toggleHidden()
                         }) {

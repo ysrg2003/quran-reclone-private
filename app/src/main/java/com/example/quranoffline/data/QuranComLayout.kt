@@ -49,7 +49,9 @@ object QuranComLayoutBuilder {
                     byLine.getOrPut(real[i].line) { mutableListOf() }.add(Seg(key, from, to, false))
                     i = j + 1
                 }
-                val endLine = v.words.firstOrNull { it.isEnd }?.line ?: real.lastOrNull()?.line
+                // v23: quran.com reports the end marker of about 9% of ayahs (566) on the NEXT line, which put the number at the
+                // start of the next line, in front of the following ayah. The marker belongs right after the last word.
+                val endLine = real.lastOrNull()?.line ?: v.words.firstOrNull { it.isEnd }?.line
                 if (endLine != null) {
                     val list = byLine.getOrPut(endLine) { mutableListOf() }
                     val last = list.lastOrNull()
@@ -166,8 +168,20 @@ object QuranComLayoutBuilder {
 
 /** Optional quran.com layout, downloaded on the user's request into private app storage. */
 object QuranComLayoutStore {
-    private const val FILE_NAME = "quran_com_layout_v1.json"
-    private fun file(context: Context) = File(context.applicationContext.filesDir, FILE_NAME)
+    private const val FILE_NAME = "quran_com_layout_v2.json"
+    private const val LEGACY_FILE_NAME = "quran_com_layout_v1.json"
+    @Volatile private var legacyChecked = false
+    /** v1 files carry misplaced ayah numbers: drop them once, so the correct bundled layout shows until v2 is downloaded. */
+    private fun dropLegacy(context: Context) {
+        if (legacyChecked) return
+        legacyChecked = true
+        val old = File(context.applicationContext.filesDir, LEGACY_FILE_NAME)
+        if (old.exists()) {
+            old.delete()
+            context.applicationContext.getSharedPreferences("quran_com_layout", Context.MODE_PRIVATE).edit().putLong("lastAttemptMs", 0L).apply()
+        }
+    }
+    private fun file(context: Context): File { dropLegacy(context); return File(context.applicationContext.filesDir, FILE_NAME) }
 
     /** Bumped after an install or a removal so the app can swap layouts without a restart. */
     val revision = kotlinx.coroutines.flow.MutableStateFlow(0)

@@ -57,4 +57,17 @@ class QuranComLayoutBuilderTest {
         assertEquals(12, r.last().second)
         assertEquals(r[0].second, r[1].first)
     }
+
+    // quran.com puts the end marker of ~9% of ayahs (e.g. 2:30 on page 6) on the NEXT line. The number must stay after the last word.
+    @Test fun endMarkerReportedOnNextLineStaysAfterTheLastWord() {
+        val ayahs = mapOf("2:30" to ayah(2, 30, 3), "2:31" to ayah(2, 31, 2))
+        val v30 = QcVerse(2, 30, listOf(QcWord(3, false), QcWord(3, false), QcWord(3, false), QcWord(4, true)))
+        val v31 = QcVerse(2, 31, listOf(QcWord(4, false), QcWord(4, false), QcWord(4, true)))
+        val layout = QuranComLayoutBuilder.build(listOf(QcPage(6, listOf(v30, v31))), ayahs, emptyMap(), null)
+        val lines = layout.linesForPage(6)
+        assertEquals("w2.30.0 w2.30.1 w2.30.2 \u0663\u0660", lines[0].text)
+        assertEquals(30, lines[0].ayahNumbers.single().number)
+        assertEquals("w2.31.0 w2.31.1 \u0663\u0661", lines[1].text)
+        assertTrue(lines[1].text.startsWith("w2.31"))
+    }
 }

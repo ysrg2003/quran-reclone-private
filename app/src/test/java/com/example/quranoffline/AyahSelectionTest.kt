@@ -90,6 +90,10 @@ class HideAyahsRuleTest {
         org.junit.Assert.assertEquals(listOf(false, false, true, true), hidden(true, setOf(2 to 3, 2 to 4)))
         org.junit.Assert.assertEquals(listOf(false, true, false, false), hidden(true, setOf(2 to 2)))
     }
+    @org.junit.Test fun whileTasmeeRunsEverythingShownIsHidden() {
+        page.forEach { org.junit.Assert.assertTrue(com.example.quranoffline.data.ayahHiddenInTasmee(true, emptySet(), page, it, true)) }
+        page.forEach { org.junit.Assert.assertFalse(com.example.quranoffline.data.ayahHiddenInTasmee(false, emptySet(), page, it, true)) }
+    }
     @org.junit.Test fun selectionOnAnotherPageHidesNothingHere() = org.junit.Assert.assertEquals(listOf(false, false, false, false), hidden(true, setOf(2 to 40, 2 to 41)))
     @org.junit.Test fun selectionPartlyOnPageHidesOnlyItsVisiblePart() = org.junit.Assert.assertEquals(listOf(false, false, true, true), hidden(true, setOf(2 to 3, 2 to 4, 2 to 5)))
 }

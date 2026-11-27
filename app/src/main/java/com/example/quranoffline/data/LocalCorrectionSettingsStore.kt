@@ -30,7 +30,7 @@ class LocalCorrectionSettingsStore(context: Context) {
             ResumePosition.valueOf(preferences.getString("resumePosition", CorrectionSettings.DEFAULTS.resumePosition.name).orEmpty())
         }.getOrDefault(CorrectionSettings.DEFAULTS.resumePosition),
         mushafTextScale = preferences.getFloat("mushafTextScale", CorrectionSettings.DEFAULTS.mushafTextScale),
-        selectionCircleDp = preferences.getInt("selectionCircleDp", CorrectionSettings.DEFAULTS.selectionCircleDp),
+        selectionCircleDp = preferences.getInt("actionCircleDp", CorrectionSettings.DEFAULTS.selectionCircleDp),
     ).normalized()
 
     fun save(settings: CorrectionSettings) {
@@ -51,7 +51,7 @@ class LocalCorrectionSettingsStore(context: Context) {
             .putInt("clipPaddingAfterMs", normalized.clipPaddingAfterMs)
             .putString("resumePosition", normalized.resumePosition.name)
             .putFloat("mushafTextScale", normalized.mushafTextScale)
-            .putInt("selectionCircleDp", normalized.selectionCircleDp)
+            .putInt("actionCircleDp", normalized.selectionCircleDp)
             .apply()
     }
 
