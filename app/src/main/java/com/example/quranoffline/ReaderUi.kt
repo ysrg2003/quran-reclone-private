@@ -200,6 +200,9 @@ internal fun AyahInfoDialog(state: QuranUiState, surah: Int, ayah: Int, onDismis
     )
 }
 
+/** v24.3: set by the tab-0 recitation card to open the tasmee range sheet (hosted in QuranOfflineApp). */
+internal val tasmeeRangeRequest = androidx.compose.runtime.mutableStateOf(false)
+
 /** Tasmee range, same options as quick navigation. Starts where tasmee would start now and stops after the chosen range. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

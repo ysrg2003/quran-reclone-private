@@ -1925,6 +1925,16 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         }
         startMemorizationFrom(surah, ayah)
         tasmeeEndIndex = last
+        announceTasmeeEnd(last)
+    }
+
+    /** Tells the user where the chosen tasmee range stops (v24.3). */
+    private fun announceTasmeeEnd(lastIndex: Int) {
+        val st = state.value
+        val a = st.allAyahs.getOrNull(lastIndex)
+        val text = if (a == null) "نطاق التسميع: حتى نهاية المصحف. اضغط الميكروفون للبدء."
+        else "نطاق التسميع ينتهي عند ${st.metadata?.sura(a.surah)?.arabicName ?: a.surah}، الآية ${a.ayah}. اضغط الميكروفون للبدء."
+        state.value = st.copy(notice = text)
     }
 
     fun prepareTasmeeCustom(fromSurah: Int, fromAyah: Int, toSurah: Int, toAyah: Int) {
@@ -1935,6 +1945,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val f = state.value.allAyahs[lo]
         startMemorizationFrom(f.surah, f.ayah)
         tasmeeEndIndex = hi
+        announceTasmeeEnd(hi)
     }
 
     /** Where tasmee will start if the user just presses the microphone (same rule as startListening). */
