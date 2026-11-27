@@ -126,3 +126,7 @@ Manual on device (UNTESTED by me, no device available):
 ## v23.1 (e987e1f, tag apk-v23.1)
 - 220 tests pass (JVM), 4 skipped. Same release key. Device untested.
 - Numbering digits: stored marker text is correct for all 6236 (bundled layout, checked by test; quran.com builder uses arabicDigits). On the phone the font drew 12 as 21 and 10 as a dot outside the circle, which matches shaping of the reversed string (reproduced with the real font offline). WordReferenceLine.displayText() reverses the digits of each 2+ digit marker in the string given to Text only; length and offsets unchanged, so selection, hit-testing and highlights are unaffected. Single digits and palindromes unchanged. Not seen on a phone.
+
+## v23.2 (b24ca19, tag apk-v23.2)
+- 220 tests pass (JVM), 4 skipped. Same release key. Device untested.
+- Reader margin: READER_EDGE_MARGIN_DP=8. Vertical padding 8dp; horizontal padding 6dp plus the 2dp column padding in ImmersiveReader = 8dp total on left and right. Top and bottom bars unchanged (user: second screenshot only showed the page number).
