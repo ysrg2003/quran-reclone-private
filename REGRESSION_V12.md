@@ -122,3 +122,7 @@ Manual on device (UNTESTED by me, no device available):
 - Khatma: line for the whole Quran (6236 ayahs) at the daily wird, from day zero.
 - Reader: READER_EDGE_MARGIN_DP=4 around the page (plus 2dp column padding).
 - Numbering: quran.com API puts the end marker of 566 of 6236 ayahs on the line after the last word; QuranComLayoutBuilder now puts the number after the last word. Downloaded layout file renamed to _v2, old _v1 file deleted on first use and the download retried; the bundled layout (all 6236 markers verified in order) shows meanwhile.
+
+## v23.1 (e987e1f, tag apk-v23.1)
+- 220 tests pass (JVM), 4 skipped. Same release key. Device untested.
+- Numbering digits: stored marker text is correct for all 6236 (bundled layout, checked by test; quran.com builder uses arabicDigits). On the phone the font drew 12 as 21 and 10 as a dot outside the circle, which matches shaping of the reversed string (reproduced with the real font offline). WordReferenceLine.displayText() reverses the digits of each 2+ digit marker in the string given to Text only; length and offsets unchanged, so selection, hit-testing and highlights are unaffected. Single digits and palindromes unchanged. Not seen on a phone.
