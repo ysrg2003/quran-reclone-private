@@ -20,6 +20,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.quranoffline.data.KhatmaLogic
 import com.example.quranoffline.data.KhatmaState
+import com.example.quranoffline.data.KhatmaRecord
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.quranoffline.data.QuranUiState
 import com.example.quranoffline.data.SaveMarkKind
 import androidx.compose.ui.platform.LocalContext
@@ -28,25 +30,93 @@ import android.widget.Toast
 @Composable
 fun KhatmaScreen(
     state: QuranUiState,
-    onTarget: (SaveMarkKind, Int) -> Unit,
-    onReminder: (SaveMarkKind, Boolean, Int, Int) -> Unit,
-    onOpen: (SaveMarkKind) -> Unit,
+    onUpdate: (String, (KhatmaState) -> KhatmaState) -> Unit,
+    onRename: (String, String) -> Unit,
+    onAdd: (String, SaveMarkKind, Boolean) -> String,
+    onActivate: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onOpenIndex: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    onTargetUnit: (SaveMarkKind, Int) -> Unit = { _, _ -> },
-    onRepeat: (SaveMarkKind, Int, Int) -> Unit = { _, _, _ -> },
 ) {
+    // null = list, "new" = add page, otherwise the id of the khatma being edited.
+    var page by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf<KhatmaRecord?>(null) }
+    val records = state.khatmaRecords
+    val editing = records.firstOrNull { it.id == page }
+    if (page != null && page != "new" && editing == null) page = null
     Column(modifier.fillMaxSize().background(Color(0xFFF7F8F4)).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("الختمات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        KhatmaCard("ختمة التسميع والحفظ", state.khatmaHifz, state, onTarget, onReminder, onOpen, onTargetUnit, onRepeat)
-        KhatmaCard("ختمة القراءة والاستماع", state.khatmaRead, state, onTarget, onReminder, onOpen, onTargetUnit, onRepeat)
-        Text("تُحسب الآية في ختمة التسميع بعد الانتقال منها، وفي ختمة القراءة عند سماعها بصوت القارئ أو عند تقليب الصفحة للأمام.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+        when {
+            page == "new" -> {
+                var name by remember { mutableStateOf("") }
+                var kind by remember { mutableIntStateOf(0) }
+                var active by remember { mutableStateOf(true) }
+                Text("ختمة جديدة", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                OutlinedTextField(value = name, onValueChange = { name = it.take(40) }, label = { Text("اسم الختمة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                PickerField("النوع", if (kind == 0) "تسميع وحفظ" else "قراءة واستماع", listOf("تسميع وحفظ" to 0, "قراءة واستماع" to 1), { kind = it })
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text("اجعلها الختمة النشطة لهذا النوع (يُسجَّل فيها التقدم)", modifier = Modifier.weight(1f))
+                    Switch(checked = active, onCheckedChange = { active = it })
+                }
+                Button(onClick = { page = onAdd(name, if (kind == 0) SaveMarkKind.HIFZ else SaveMarkKind.READ, active) }, modifier = Modifier.fillMaxWidth()) { Text("إنشاء وفتح الإعدادات") }
+                OutlinedButton(onClick = { page = null }, modifier = Modifier.fillMaxWidth()) { Text("إلغاء") }
+            }
+            editing != null -> {
+                val isActive = state.khatmaActive[editing.kind] == editing.id
+                var name by remember(editing.id) { mutableStateOf(editing.name) }
+                Text("تعديل الختمة", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                OutlinedTextField(value = name, onValueChange = { name = it.take(40); onRename(editing.id, it.take(40)) }, label = { Text("اسم الختمة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (!isActive) {
+                    Text("هذه الختمة غير نشطة: لا يُسجَّل فيها التقدم ولا تعمل تذكيراتها حتى تجعلها نشطة.", color = Color(0xFF8A5A00))
+                    Button(onClick = { onActivate(editing.id) }, modifier = Modifier.fillMaxWidth()) { Text("اجعلها الختمة النشطة") }
+                }
+                KhatmaCard(
+                    editing.name, editing.state, state, isActive,
+                    { _, v -> onUpdate(editing.id) { it.copy(dailyTarget = v.coerceIn(0, 6236)) } },
+                    { _, on, h, m -> onUpdate(editing.id) { it.copy(reminderOn = on, reminderHour = h.coerceIn(0, 23), reminderMinute = m.coerceIn(0, 59)) } },
+                    { onOpenIndex(editing.state.lastIndex) },
+                    { _, u -> onUpdate(editing.id) { it.copy(targetUnit = u.coerceIn(0, 2)) } },
+                    { _, mins, c -> onUpdate(editing.id) { it.copy(repeatMinutes = mins.coerceIn(0, 1440), repeatCount = c.coerceIn(1, 50)) } },
+                )
+                OutlinedButton(onClick = { page = null }, modifier = Modifier.fillMaxWidth()) { Text("رجوع إلى الختمات") }
+            }
+            else -> {
+                Text("الختمات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Button(onClick = { page = "new" }, modifier = Modifier.fillMaxWidth()) { Text("إضافة ختمة") }
+                records.forEach { r ->
+                    val isActive = state.khatmaActive[r.kind] == r.id
+                    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(r.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                            Text((if (r.kind == SaveMarkKind.HIFZ) "تسميع وحفظ" else "قراءة واستماع") + if (isActive) " • نشطة" else "", color = if (isActive) Color(0xFF1B6B3A) else Color(0xFF66736C))
+                            LinearProgressIndicator(progress = { r.state.coveredCount.toFloat() / KhatmaLogic.TOTAL }, modifier = Modifier.fillMaxWidth())
+                            Text("${r.state.coveredCount} من ${KhatmaLogic.TOTAL} آية • الختمات المكتملة: ${r.state.completed}")
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { page = r.id }) { Text("تعديل") }
+                                if (!isActive) OutlinedButton(onClick = { onActivate(r.id) }) { Text("تفعيل") }
+                                OutlinedButton(onClick = { confirmDelete = r }) { Text("حذف") }
+                            }
+                        }
+                    }
+                }
+                Text("تُحسب الآية في ختمة التسميع بعد الانتقال منها، وفي ختمة القراءة عند سماعها بصوت القارئ أو عند تقليب الصفحة للأمام. يُسجَّل التقدم في الختمة النشطة من كل نوع.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
+            }
+        }
+    }
+    confirmDelete?.let { r ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("حذف الختمة") },
+            text = { Text("سيُحذف «${r.name}» وكل تقدمها نهائياً. هل أنت متأكد؟") },
+            confirmButton = { TextButton(onClick = { onDelete(r.id); confirmDelete = null }) { Text("حذف") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("إلغاء") } },
+        )
     }
 }
 
 @Composable
 private fun KhatmaCard(
-    title: String, k: KhatmaState, state: QuranUiState,
-    onTarget: (SaveMarkKind, Int) -> Unit, onReminder: (SaveMarkKind, Boolean, Int, Int) -> Unit, onOpen: (SaveMarkKind) -> Unit,
+    title: String, k: KhatmaState, state: QuranUiState, isActive: Boolean,
+    onTarget: (SaveMarkKind, Int) -> Unit, onReminder: (SaveMarkKind, Boolean, Int, Int) -> Unit, onOpen: () -> Unit,
     onTargetUnit: (SaveMarkKind, Int) -> Unit, onRepeat: (SaveMarkKind, Int, Int) -> Unit,
 ) {
     val last = state.allAyahs.getOrNull(k.lastIndex)
@@ -56,7 +126,7 @@ private fun KhatmaCard(
     val ctx = LocalContext.current
     var statusTick by remember { mutableIntStateOf(0) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { statusTick++ }
-    LaunchedEffect(k.reminderOn, k.reminderHour, k.reminderMinute) { if (k.reminderOn) KhatmaReminders.apply(ctx, k) }
+    LaunchedEffect(k.reminderOn, k.reminderHour, k.reminderMinute) { if (k.reminderOn && isActive) KhatmaReminders.apply(ctx, k) }
     val est = remember(k.coveredCount, k.startMillis, k.dailyTarget) { KhatmaLogic.estimate(k, System.currentTimeMillis()) }
     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -75,7 +145,7 @@ private fun KhatmaCard(
                 est.daysByPace?.let { Text("بوتيرتك الحالية (${"%.1f".format(est.pacePerDay)} آية/يوم) تنتهي بعد $it يوماً، في ${dateAfter(it)}") }
                 est.daysByTarget?.let { Text("بالورد اليومي (${k.dailyTarget} ${listOf("آية", "صفحة", "سورة")[k.targetUnit.coerceIn(0, 2)]}${if (k.targetUnit > 0) "، تقريبياً" else ""}) تنتهي بعد $it يوماً، في ${dateAfter(it)}") }
             }
-            OutlinedButton(onClick = { onOpen(k.kind) }, enabled = last != null, modifier = Modifier.fillMaxWidth()) { Text("افتح موضعي في الختمة") }
+            OutlinedButton(onClick = { onOpen() }, enabled = last != null, modifier = Modifier.fillMaxWidth()) { Text("افتح موضعي في الختمة") }
             HorizontalDivider()
             Text("الورد اليومي: اليوم ${k.todayCount} آية" + if (k.targetAyahs > 0) " من ${k.targetAyahs} آية" else "")
             if (k.targetAyahs > 0) {

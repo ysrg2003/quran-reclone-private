@@ -387,11 +387,12 @@ private fun QuranOfflineApp(
             )
             6 -> KhatmaScreen(
                 state = state,
-                onTarget = viewModel::setKhatmaTarget,
-                onReminder = viewModel::setKhatmaReminder,
-                onTargetUnit = viewModel::setKhatmaTargetUnit,
-                onRepeat = viewModel::setKhatmaRepeat,
-                onOpen = { kind -> viewModel.openKhatmaPosition(kind); tab = 4 },
+                onUpdate = viewModel::updateKhatma,
+                onRename = viewModel::renameKhatma,
+                onAdd = viewModel::addKhatma,
+                onActivate = viewModel::activateKhatma,
+                onDelete = viewModel::deleteKhatma,
+                onOpenIndex = { idx -> viewModel.openKhatmaIndex(idx); tab = 4 },
                 modifier = Modifier.padding(padding),
             )
             }

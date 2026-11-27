@@ -90,7 +90,7 @@ object KhatmaLogic {
     }
 }
 
-class LocalKhatmaStore(context: Context) {
+class LegacyKhatmaStore(context: Context) {
     private val prefs = context.getSharedPreferences("khatmat", Context.MODE_PRIVATE)
 
     fun load(kind: SaveMarkKind): KhatmaState {
@@ -133,4 +133,16 @@ class LocalKhatmaStore(context: Context) {
             .putInt("$k.cnt", s.repeatCount)
             .apply()
     }
+}
+
+/** Same API as before; reads and writes the ACTIVE record of each kind in the khatmat list (v24.7). */
+class LocalKhatmaStore(context: Context) {
+    private val list = LocalKhatmaListStore(context)
+
+    fun load(kind: SaveMarkKind): KhatmaState {
+        val s = list.active(kind)?.state ?: KhatmaState(kind)
+        return if (s.dayKey == KhatmaLogic.dayKey(System.currentTimeMillis())) s else s.copy(today = BitSet(KhatmaLogic.TOTAL))
+    }
+
+    fun save(s: KhatmaState) { list.saveState(s) }
 }

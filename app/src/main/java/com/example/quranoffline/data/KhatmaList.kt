@@ -156,7 +156,7 @@ class LocalKhatmaListStore(context: Context) {
 
     private fun migrateIfNeeded() {
         if (prefs.getBoolean("migrated", false)) return
-        val old = LocalKhatmaStore(app)
+        val old = LegacyKhatmaStore(app)
         val states = SaveMarkKind.values().map { old.load(it) }
         val records = KhatmaListLogic.migrate(states) { index -> "legacy-$index" }
         val editor = prefs.edit().putString("records", KhatmaListLogic.encodeList(records))
