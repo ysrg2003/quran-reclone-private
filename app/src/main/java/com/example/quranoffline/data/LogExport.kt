@@ -13,6 +13,21 @@ data class ExportTable(val title: String, val headers: List<String>, val rows: L
 object LogExport {
     private fun stamp(ms: Long) = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(ms))
 
+    fun marksTable(marks: List<SaveMark>, surahName: (Int) -> String) = ExportTable(
+        "علامات (${marks.size})",
+        listOf("النوع", "السورة", "الآية", "الصفحة", "رقم الكلمة", "بدأت", "آخر تحديث"),
+        marks.sortedByDescending { it.updatedAt }.map {
+            listOf(if (it.kind == SaveMarkKind.HIFZ) "حفظ وتسميع" else "قراءة واستماع", surahName(it.surah), it.ayah, it.page, it.wordIndex + 1, stamp(it.startedAt), stamp(it.updatedAt))
+        },
+    )
+
+    /** The three Log sections as the Log screen shows them, each title carrying its row count. */
+    fun logTables(sessions: List<SessionSummary>, marks: List<SaveMark>, errors: List<CorrectedRecitationError>, surahName: (Int) -> String): List<ExportTable> = listOf(
+        marksTable(marks, surahName),
+        sessionsTable(sessions, surahName).let { it.copy(title = "الجلسات (${it.rows.size})") },
+        errorsTable(errors, surahName).let { it.copy(title = "الأخطاء (${it.rows.size})") },
+    )
+
     fun sessionsTable(sessions: List<SessionSummary>, surahName: (Int) -> String) = ExportTable(
         "الجلسات",
         listOf("التاريخ", "السورة", "من آية", "إلى آية", "كلمات مطابقة", "إجمالي الكلمات", "غير مؤكد", "الصفحة", "النوع"),

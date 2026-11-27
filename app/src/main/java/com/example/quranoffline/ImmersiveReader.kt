@@ -223,7 +223,7 @@ internal fun ImmersiveReader(
         }
         if (barsVisible) {
             Surface(
-                color = Color(0xF20F5B4D), contentColor = Color.White,
+                color = LocalAppearance.current.primary.copy(alpha = 0.95f), contentColor = Color.White,
                 modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding(),
             ) {
                 Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -253,7 +253,7 @@ internal fun ImmersiveReader(
                 }
             }
             Surface(
-                color = Color(0xF20F5B4D), contentColor = Color.White,
+                color = LocalAppearance.current.primary.copy(alpha = 0.95f), contentColor = Color.White,
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding(),
             ) {
                 Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {

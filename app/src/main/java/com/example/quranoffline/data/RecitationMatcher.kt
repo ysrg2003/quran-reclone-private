@@ -6,21 +6,47 @@ private val arabicMarks = Regex("[\\u0610-\\u061a\\u064b-\\u065f\\u06d6-\\u06ed]
 private val smallAlif = 'ٰ'
 private val silentAlifMarker = '۟'
 
+// v24.2: these comparison functions are pure and were rebuilding Regex objects and re-normalizing the same Quran words on every
+// recognizer update (measured on the JVM: ~96 ms per stable update, mostly here). Results are memoized per input string.
+private val WS_RE = Regex("\\s+")
+private val SILENT_LETTER_RE = Regex("\\p{L}$silentAlifMarker")
+private val SILENT_WAW_RE = Regex("وْ(?=ل)")
+private val SILENT_ALIF_END_RE = Regex("اْ$")
+private class Memo<V>(private val limit: Int = 60000) {
+    private val map = java.util.concurrent.ConcurrentHashMap<String, V>()
+    fun get(key: String, compute: () -> V): V {
+        map[key]?.let { return it }
+        val v = compute()
+        if (map.size > limit) map.clear()
+        map[key] = v
+        return v
+    }
+}
+private val removeSilentMemo = Memo<String>()
+private val normMatchMemo = Memo<String>()
+private val normSmallAlifMemo = Memo<String>()
+private val foldMemo = Memo<String>()
+private val writtenFormsMemo = Memo<Set<String>>()
+
 /**
  * Removes the base letter that immediately carries the small round zero.
  * It is deliberately not an "all final alifs are silent" rule: in
  * أُو۟لَٰٓئِكَ only the marked waw is removed and the later written alif stays.
  */
-private fun removeSilentMarkedLetters(value: String): String =
+private fun removeSilentMarkedLetters(value: String): String = removeSilentMemo.get(value) { removeSilentMarkedLettersRaw(value) }
+
+private fun removeSilentMarkedLettersRaw(value: String): String =
     Normalizer.normalize(value, Normalizer.Form.NFC)
         // Word uses the small high dotless head of khah (U+06E1) for sukun;
         // the legacy audio source may use the round-zero marker (U+06DF).
-        .replace(Regex("\\p{L}$silentAlifMarker"), "")
-        .replace(Regex("وْ(?=ل)"), "")
-        .replace(Regex("اْ$"), "")
+        .replace(SILENT_LETTER_RE, "")
+        .replace(SILENT_WAW_RE, "")
+        .replace(SILENT_ALIF_END_RE, "")
         .replace(silentAlifMarker.toString(), "")
 
-fun normalizeArabicForMatch(value: String): String {
+fun normalizeArabicForMatch(value: String): String = normMatchMemo.get(value) { normalizeArabicForMatchRaw(value) }
+
+private fun normalizeArabicForMatchRaw(value: String): String {
     return removeSilentMarkedLetters(value)
         // Uthmani rasm writes the pronounced alif in words such as
         // ٱلصَّلَوٰةَ and ٱلزَّكَوٰةَ as a superscript alif over waw.
@@ -31,11 +57,13 @@ fun normalizeArabicForMatch(value: String): String {
         .replace(smallAlif.toString(), "")
         .replace('ٱ', 'ا')
         .replace('آ', 'ا')
-        .replace(Regex("\\s+"), " ")
+        .replace(WS_RE, " ")
         .trim()
 }
 
-private fun normalizeArabicWithSmallAlif(value: String): String {
+private fun normalizeArabicWithSmallAlif(value: String): String = normSmallAlifMemo.get(value) { normalizeArabicWithSmallAlifRaw(value) }
+
+private fun normalizeArabicWithSmallAlifRaw(value: String): String {
     return removeSilentMarkedLetters(value)
         .replace("و$smallAlif", "ا")
         .replace("ى$smallAlif", "ى")
@@ -48,7 +76,7 @@ private fun normalizeArabicWithSmallAlif(value: String): String {
         .replace('ؤ', 'و')
         .replace('ئ', 'ي')
         .replace("ء", "")
-        .replace(Regex("\\s+"), " ")
+        .replace(WS_RE, " ")
         .trim()
 }
 
@@ -98,7 +126,9 @@ fun quranWordMatchesAllowCanonicalSpelling(word: QuranWord, observed: String): B
     return canonical.isNotBlank() && canonical == actual
 }
 
-private fun foldSpelling(value: String): String = value
+private fun foldSpelling(value: String): String = foldMemo.get(value) { foldSpellingRaw(value) }
+
+private fun foldSpellingRaw(value: String): String = value
     .replace('ٱ', 'ا')
     .replace('آ', 'ا')
     .replace('أ', 'ا')
@@ -107,7 +137,7 @@ private fun foldSpelling(value: String): String = value
     .replace('ئ', 'ي')
     .replace('ى', 'ي') // alif maqsura and ya are the same sound; recognizers write either
     .replace("ء", "")
-    .replace(Regex("\\s+"), " ")
+    .replace(WS_RE, " ")
     .trim()
 
 /**
@@ -116,7 +146,9 @@ private fun foldSpelling(value: String): String = value
  * that Uthmani script marks as silent, such as كفروا), with the dagger alif
  * written as alif (الصلاة). Comparison only; displayed Quran text is unchanged.
  */
-fun writtenSpellingForms(wordText: String): Set<String> {
+fun writtenSpellingForms(wordText: String): Set<String> = writtenFormsMemo.get(wordText) { writtenSpellingFormsRaw(wordText) }
+
+private fun writtenSpellingFormsRaw(wordText: String): Set<String> {
     val nfc = Normalizer.normalize(wordText, Normalizer.Form.NFC)
     val dropped = foldSpelling(nfc.replace(smallAlif.toString(), "").replace(arabicMarks, ""))
     val written = foldSpelling(nfc.replace(smallAlif, 'ا').replace(arabicMarks, ""))
@@ -217,7 +249,7 @@ data class RecitationEvaluation(
  * evaluation/error log; this function never performs a global ة/ه rewrite.
  */
 fun canonicalizeRecognizedTranscript(raw: String, evaluation: List<WordEvaluation>): String {
-    val tokens = raw.trim().split(Regex("\\s+")).filter(String::isNotBlank).toMutableList()
+    val tokens = raw.trim().split(WS_RE).filter(String::isNotBlank).toMutableList()
     if (tokens.isEmpty()) return ""
     var searchFrom = 0
     evaluation.forEach { word ->

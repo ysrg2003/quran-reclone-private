@@ -17,3 +17,13 @@ class AppearanceTest {
     @Test fun settingsTabNeverInRow() { assertTrue(5 !in AppearanceSpec.DEFAULT_TAB_ORDER) }
     @Test fun presetIdsUnique() { assertEquals(APPEARANCE_PRESETS.size, APPEARANCE_PRESETS.map { it.id }.toSet().size) }
 }
+
+class DefaultColourTest {
+    @Test fun defaultAccentIsTheCalmGreen() {
+        assertEquals(0xFF276456L, APPEARANCE_PRESETS[0].accent)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF276456), AppearanceSpec().resolve().primary)
+    }
+    @Test fun freeAccentOverridesPreset() {
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF112233), AppearanceSpec(accent = 0xFF112233L).resolve().primary)
+    }
+}

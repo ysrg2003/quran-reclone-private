@@ -54,7 +54,7 @@ data class AppearanceSpec(
 class AppearancePreset(val id: String, val title: String, val accent: Long, val paper: Long, val text: Long)
 
 val APPEARANCE_PRESETS = listOf(
-    AppearancePreset("green", "أخضر (الافتراضي)", 0xFF0F5B4D, 0xFFFFFEF8, 0xFF183D33),
+    AppearancePreset("green", "أخضر هادئ (الافتراضي)", 0xFF276456, 0xFFFFFEF8, 0xFF183D33),
     AppearancePreset("blue", "أزرق", 0xFF1F4E8C, 0xFFF8FBFF, 0xFF16263D),
     AppearancePreset("brown", "بني", 0xFF7A4A21, 0xFFF3E7CF, 0xFF3B2A1A),
     AppearancePreset("purple", "بنفسجي", 0xFF5B3A8C, 0xFFFFFBFF, 0xFF2A1B3F),
@@ -66,6 +66,8 @@ val APPEARANCE_PRESETS = listOf(
 class Appearance(
     val primary: Color,
     val chip: Color,
+    /** Darker shade of the accent for the two green boxes of the tasmee tab and the reader card. Default (v24.2 calmer green 0xFF276456) gives about 0xFF1F5045. */
+    val deep: Color,
     val tabUnselected: Color,
     val paper: Color,
     val readerText: Color,
@@ -89,6 +91,7 @@ fun AppearanceSpec.resolve(): Appearance {
     return Appearance(
         primary = primary,
         chip = mix(primary, Color.White, 0.12f),
+        deep = mix(primary, Color.Black, 0.2f),
         tabUnselected = mix(primary, Color.White, 0.75f),
         paper = paper,
         readerText = textColor,

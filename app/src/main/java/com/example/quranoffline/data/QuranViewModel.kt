@@ -800,8 +800,32 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startRecognitionSession() {
         val generation = ++recognitionGeneration
+        // v24.2: partial results arrive many times a second and each one rebuilt UI state. Coalesce them to about 8 per second;
+        // a final or completed segment is always handled immediately and replaces any waiting partial.
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        var lastPartialAt = 0L
+        var pending: RecognitionUpdate.Text? = null
+        val flush = Runnable {
+            val p = pending ?: return@Runnable
+            pending = null
+            if (generation == recognitionGeneration) { lastPartialAt = android.os.SystemClock.uptimeMillis(); handleRecognitionUpdate(p) }
+        }
         val guardedUpdate: (RecognitionUpdate) -> Unit = { update ->
-            if (generation == recognitionGeneration) handleRecognitionUpdate(update)
+            if (generation == recognitionGeneration) {
+                if (update is RecognitionUpdate.Text && !update.isFinal && !update.segmentCompleted) {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (now - lastPartialAt >= 120L && pending == null) { lastPartialAt = now; handleRecognitionUpdate(update) }
+                    else {
+                        if (pending != null) TasmeePerf.droppedPartial()
+                        pending = update
+                        handler.postDelayed(flush, 120L)
+                    }
+                } else {
+                    handler.removeCallbacks(flush)
+                    pending = null
+                    handleRecognitionUpdate(update)
+                }
+            }
         }
         onlineSession = SpeechEngineFactory.create(getApplication(), guardedUpdate)
         onlineSession?.start()
@@ -869,6 +893,13 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleRecognitionUpdate(update: RecognitionUpdate) {
+        val t0 = System.nanoTime()
+        try { handleRecognitionUpdateInner(update) } finally {
+            if (update is RecognitionUpdate.Text) TasmeePerf.record(update.isFinal || update.segmentCompleted, System.nanoTime() - t0)
+        }
+    }
+
+    private fun handleRecognitionUpdateInner(update: RecognitionUpdate) {
         if (state.value.correctionPlaying && update !is RecognitionUpdate.Started) return
         when (update) {
             RecognitionUpdate.Started -> Unit
@@ -1646,13 +1677,12 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
     fun exportReport(format: String, onReady: (java.io.File, String) -> Unit) {
         val md = state.value.metadata
         val name: (Int) -> String = { n -> md?.sura(n)?.arabicName ?: "سورة $n" }
+        val snapshot = state.value
         viewModelScope.launch {
             try {
                 val file = withContext(Dispatchers.IO) {
-                    val tables = listOf(
-                        LogExport.sessionsTable(store.list(), name),
-                        LogExport.errorsTable(correctedErrorStore.list(), name),
-                    )
+                    // Same lists the Log screen shows (live UI state), not a second read of the stores.
+                    val tables = LogExport.logTables(snapshot.sessions, snapshot.saveMarks, snapshot.correctedErrors, name) + TasmeePerf.table()
                     val dir = java.io.File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
                     dir.listFiles()?.forEach { it.delete() }
                     val f = java.io.File(dir, "quran-log-" + java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date()) + "." + format)

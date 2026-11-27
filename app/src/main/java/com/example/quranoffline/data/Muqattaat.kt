@@ -113,7 +113,9 @@ object Muqattaat {
     fun pronunciationFor(word: QuranWord): MuqattaatPronunciation? = pronunciationFor(word.text, word.matchText)
 
     fun pronunciationFor(visualToken: String, matchToken: String = visualToken): MuqattaatPronunciation? =
-        pronunciationByVisualToken[visualToken.replace(Regex("[\\u06D6-\\u06DC\\s]"), "")]
+        pronunciationByVisualToken[visualToken.replace(VISUAL_STRIP_RE, "")]
+
+    private val VISUAL_STRIP_RE = Regex("[\\u06D6-\\u06DC\\s]")
 
     /** Full letter-name phrases handed to the recognizer as biasing hints. */
     fun biasingPhrases(): List<String> = pronunciations.values.map { it.units.joinToString(" ") { u -> u.fullName } }
