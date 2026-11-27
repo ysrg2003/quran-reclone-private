@@ -58,16 +58,17 @@ class QuranComLayoutBuilderTest {
         assertEquals(r[0].second, r[1].first)
     }
 
-    // quran.com puts the end marker of ~9% of ayahs (e.g. 2:30 on page 6) on the NEXT line. The number must stay after the last word.
-    @Test fun endMarkerReportedOnNextLineStaysAfterTheLastWord() {
+    // v24.1: quran.com puts the end marker of ~9% of ayahs (e.g. 2:30 on page 6) on the NEXT line, as in the printed mushaf; it starts that line.
+    @Test fun endMarkerReportedOnNextLineStartsThatLine() {
         val ayahs = mapOf("2:30" to ayah(2, 30, 3), "2:31" to ayah(2, 31, 2))
         val v30 = QcVerse(2, 30, listOf(QcWord(3, false), QcWord(3, false), QcWord(3, false), QcWord(4, true)))
         val v31 = QcVerse(2, 31, listOf(QcWord(4, false), QcWord(4, false), QcWord(4, true)))
         val layout = QuranComLayoutBuilder.build(listOf(QcPage(6, listOf(v30, v31))), ayahs, emptyMap(), null)
         val lines = layout.linesForPage(6)
-        assertEquals("w2.30.0 w2.30.1 w2.30.2 \u0663\u0660", lines[0].text)
-        assertEquals(30, lines[0].ayahNumbers.single().number)
-        assertEquals("w2.31.0 w2.31.1 \u0663\u0661", lines[1].text)
-        assertTrue(lines[1].text.startsWith("w2.31"))
+        assertEquals("w2.30.0 w2.30.1 w2.30.2", lines[0].text)
+        assertEquals(0, lines[0].ayahNumbers.size)
+        assertEquals("\u0663\u0660 w2.31.0 w2.31.1 \u0663\u0661", lines[1].text)
+        assertEquals(listOf(30, 31), lines[1].ayahNumbers.map { it.number })
+        assertEquals(0, lines[1].ayahNumbers.first().start)
     }
 }

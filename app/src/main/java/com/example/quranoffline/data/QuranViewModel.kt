@@ -6,6 +6,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.quranoffline.ReportPdf
 import com.example.quranoffline.BuildConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -1639,6 +1640,41 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val defaults = correctionSettingsStore.reset()
         progressTracker?.updateSettings(defaults)
         state.value = state.value.copy(correctionSettings = defaults, notice = "أعيدت إعدادات التصحيح إلى الوضع الافتراضي الحالي.")
+    }
+
+    /** Builds a sessions + errors report (xlsx, docx or pdf) in cache/exports off the main thread, then hands the file to onReady for the share sheet. */
+    fun exportReport(format: String, onReady: (java.io.File, String) -> Unit) {
+        val md = state.value.metadata
+        val name: (Int) -> String = { n -> md?.sura(n)?.arabicName ?: "سورة $n" }
+        viewModelScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    val tables = listOf(
+                        LogExport.sessionsTable(store.list(), name),
+                        LogExport.errorsTable(correctedErrorStore.list(), name),
+                    )
+                    val dir = java.io.File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
+                    dir.listFiles()?.forEach { it.delete() }
+                    val f = java.io.File(dir, "quran-log-" + java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date()) + "." + format)
+                    f.outputStream().buffered().use { out ->
+                        when (format) {
+                            "xlsx" -> LogExport.writeXlsx(tables, out)
+                            "docx" -> LogExport.writeDocx("سجل الحفظ والتسميع", tables, out)
+                            else -> ReportPdf.write("سجل الحفظ والتسميع", tables, out)
+                        }
+                    }
+                    f
+                }
+                val mime = when (format) {
+                    "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    else -> "application/pdf"
+                }
+                onReady(file, mime)
+            } catch (error: Throwable) {
+                state.value = state.value.copy(notice = "تعذر تصدير التقرير: ${error.message ?: "خطأ غير معروف"}")
+            }
+        }
     }
 
     fun exportBackup(uri: android.net.Uri) {

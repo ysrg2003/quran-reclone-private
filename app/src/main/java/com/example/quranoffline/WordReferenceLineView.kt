@@ -58,6 +58,8 @@ internal fun WordReferenceLineView(
     showCircle: Boolean = false,
     circleDp: Int = 20,
     onClearSelection: () -> Unit = {},
+    /** v24.1: pages 1 and 2 only (user 26214871): centred text, no stretch to full width. */
+    centered: Boolean = false,
 ) {
     val ayahs = androidx.compose.runtime.remember(line, ayahsByKey, pageAyahsByKey) {
         line.ayahKeys.mapNotNull { key -> ayahsByKey[key] ?: pageAyahsByKey[key] }
@@ -171,7 +173,7 @@ internal fun WordReferenceLineView(
                 },
                 onTextLayout = { r ->
                     layoutHolder[0] = r
-                    if (r.lineCount == 1 && r.size.width > 0) {
+                    if (!centered && r.lineCount == 1 && r.size.width > 0) {
                         val ink = r.getLineRight(0) - r.getLineLeft(0)
                         if (ink > 0f) {
                             val f = (r.size.width / ink).coerceIn(0.9f, 1.3f)
@@ -180,12 +182,12 @@ internal fun WordReferenceLineView(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().graphicsLayer {
-                    scaleX = fitState.floatValue; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0.5f)
+                    scaleX = if (centered) 1f else fitState.floatValue; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0.5f)
                 },
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
                 color = if (state.hidden) Color.Transparent else textColor,
-                textAlign = TextAlign.Right,
+                textAlign = if (centered) TextAlign.Center else TextAlign.Right,
                 lineHeight = (34f * textScale).sp,
                 softWrap = false,
             )

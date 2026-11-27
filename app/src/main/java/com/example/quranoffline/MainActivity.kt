@@ -157,6 +157,13 @@ class MainActivity : ComponentActivity() {
                         microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
                     },
                     onExportBackup = { createBackup.launch("quran-online-backup.json") },
+                    onExportReport = { fmt ->
+                        quranViewModel.exportReport(fmt) { file, mime ->
+                            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.exports", file)
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType(mime).putExtra(android.content.Intent.EXTRA_STREAM, uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            startActivity(android.content.Intent.createChooser(send, null))
+                        }
+                    },
                 )
             }
             }
@@ -186,6 +193,7 @@ private fun QuranOfflineApp(
     viewModel: QuranViewModel,
     onRequestMicrophone: () -> Unit,
     onExportBackup: () -> Unit,
+    onExportReport: (String) -> Unit = {},
 ) {
     val state = viewModel.uiState.value
     val context = LocalContext.current
@@ -343,6 +351,7 @@ private fun QuranOfflineApp(
                 onClear = viewModel::clearSessions,
                 onClearErrors = viewModel::clearCorrectedErrors,
                 onExport = onExportBackup,
+                onExportReport = onExportReport,
                 onOpenSession = { id -> viewModel.openSession(id); tab = 4 },
                 onOpenMark = { id -> viewModel.openSaveMark(id); tab = 4 },
                 onErrorLogToggle = viewModel::setErrorLogEnabled,
@@ -1514,6 +1523,7 @@ private fun HistoryScreen(
     onClear: () -> Unit,
     onClearErrors: () -> Unit,
     onExport: () -> Unit,
+    onExportReport: (String) -> Unit = {},
     onOpenSession: (String) -> Unit,
     onOpenMark: (String) -> Unit = {},
     onErrorLogToggle: (Boolean) -> Unit = {},
@@ -1525,7 +1535,17 @@ private fun HistoryScreen(
                 Text("سجل الجلسات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("مخزن على هذا الجهاز فقط", color = Color(0xFF66736C))
             }
-            OutlinedButton(onClick = onExport) { Text("تصدير") }
+            OutlinedButton(onClick = onExport) { Text("نسخة احتياطية") }
+            Spacer(Modifier.width(6.dp))
+            var reportMenu by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(onClick = { reportMenu = true }) { Text("تقرير") }
+                DropdownMenu(expanded = reportMenu, onDismissRequest = { reportMenu = false }) {
+                    listOf("xlsx" to "Excel (.xlsx)", "docx" to "Word (.docx)", "pdf" to "PDF (.pdf)").forEach { (f, t) ->
+                        DropdownMenuItem(text = { Text(t) }, onClick = { reportMenu = false; onExportReport(f) })
+                    }
+                }
+            }
             Spacer(Modifier.width(6.dp))
             if (state.sessions.isNotEmpty()) {
                 IconButton(onClick = onClear) { Icon(Icons.Default.Refresh, contentDescription = "حذف السجل") }
@@ -1999,6 +2019,7 @@ internal fun MushafPageSurface(
                     val circleLine = if (selectedIndices.isEmpty()) -1 else wordReferenceLines.firstOrNull { l -> com.example.quranoffline.data.ayahSegments(l).any { sg -> ayahIndexByKey[sg.first]?.let(selectedIndices::contains) == true } }?.number ?: -1
                     wordReferenceLines.forEach { line ->
                         WordReferenceLineView(
+                            centered = isOpeningPage,
                             line = line,
                             state = state,
                             pageAyahs = pageAyahs,
