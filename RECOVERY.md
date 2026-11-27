@@ -47,6 +47,43 @@ export RECLONE_KS_PASS=<contents of reclone-release.jks.password.txt>
 
 Alias is `reclone`. Expected cert sha256: `e4c456fc66939c6325619cd5013bd599fbf0da679c9a73fbdc18f769fec9ff5e`. If the cert differs, stop: you are signing with the wrong key and the phone will refuse the update.
 
+## Creating a new signing key (only if the release key is lost)
+
+Use this only if `reclone-release.jks` cannot be recovered from Drive. A new key means Android refuses to install the new APK over the installed app (signature mismatch). The user must uninstall the app first, which deletes its local data (marks, khatmat, progress, downloaded audio).
+
+```
+export JAVA_HOME=<toolchain>/jdk21
+PW=$(python3 -c "import secrets;print(secrets.token_urlsafe(18))")
+echo "$PW" > store.pass && chmod 600 store.pass
+$JAVA_HOME/bin/keytool -genkeypair -keystore reclone-release.jks -storepass "$PW" -keypass "$PW" \
+  -alias reclone -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Quran Reclone Private"
+$JAVA_HOME/bin/keytool -list -keystore reclone-release.jks -storepass "$PW"   # shows the SHA-256 fingerprint
+```
+
+Then:
+1. Keep the alias `reclone` (the build expects it) and point `RECLONE_KS` / `RECLONE_KS_PASS` at the new files.
+2. Back up `reclone-release.jks` and the password to the private Drive folder right away, before the first build. Never put either in git.
+3. Build, run `apksigner verify --print-certs` and write the new cert sha256 into `VERSION_INDEX.md` and this file.
+4. Tell the user to uninstall the old app before installing.
+The current key (created 2026-11-27) has cert sha256 `e4c456fc66939c6325619cd5013bd599fbf0da679c9a73fbdc18f769fec9ff5e`.
+
+## Clean-build proof (2026-11-27)
+
+A fresh `git clone` of this repo into an empty directory was built with the steps above. Result: 193 tests, 0 failures, 4 skipped. The release APK has the same size (17,297,662 bytes) as the archived v20.1 APK, an identical file list, byte-identical contents for every file outside META-INF (the signature folder), and the same signing cert. So everything the app needs is in this repo (source, assets, fonts, `libwhisper_jni.so`, `AudioPackSizes.kt`).
+
+## Needed only for audits, NOT in the repo (not part of the app)
+
+The 4 skipped tests (`RecognizerSpellingCorpusTest`, `ImlaeiCorpusAuditTest`, `TrackerCorpusAuditTest`, `AsrTranscriptAuditTest`) run only when these environment variables point to data files, and skip otherwise:
+- `WORDS_TSV` (words.tsv), `PAIRS_TSV` (pairs_full.tsv, imlaei_pairs.tsv), `ASR_TSV` (recognizer transcripts of Alafasy audio).
+- They were generated files on the old build box and were lost in the wipe. They are not backed up. They can be regenerated from the assets in `app/src/main/assets/quran` with the scripts in `scripts/` (word and pair tables) and by running a speech recognizer over reference audio (ASR table). I have not regenerated them. They are large and derived, so they are not stored in git.
+- The only effect: these four audit tests do not run until the data is rebuilt. The 189 other tests run.
+
+## Binary pieces and how each is obtained
+
+- `app/src/main/jniLibs/arm64-v8a/libwhisper_jni.so` (3 MB, whisper.cpp, MIT): committed in git. It was recovered from the v20 APK, so its C++ build recipe is not in this repo. To rebuild it you need the NDK and whisper.cpp source; not done.
+- `AudioPackSizes.kt`: in git; re-measure with HEAD requests if the audio mirror changes (see table above).
+- Quran text, layout and timing assets, fonts: in git under `app/src/main/assets`. Quran Foundation content is never redistributed from this repo; users download packs into private storage in the app.
+
 ## After every build (standing rule)
 
 1. Copy the APK to the archive with a new name, never overwrite old ones.
