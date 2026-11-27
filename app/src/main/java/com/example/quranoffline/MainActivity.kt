@@ -322,6 +322,14 @@ private fun QuranOfflineApp(
                 onSelectSurah = viewModel::selectSurah,
                 onPreviousPage = viewModel::previousPage,
                 onNextPage = viewModel::nextPage,
+                onReadSurahFromHere = viewModel::playSurahFromHere,
+                onPageChanged = viewModel::goToPage,
+                onBookmark = viewModel::saveBookmark,
+                onTapAyah = viewModel::tapAyahSelection,
+                onLongPressAyah = viewModel::beginAyahSelection,
+                onStop = viewModel::stopReader,
+                onPlayScopeFromHere = viewModel::playReaderScopeFromHere,
+                onClearSelection = viewModel::clearAyahSelection,
                 modifier = Modifier.padding(padding),
             )
             1 -> MushafIndexScreen(
@@ -651,8 +659,20 @@ private fun MemorizationScreen(
     onSelectSurah: (Int) -> Unit,
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
+    onReadSurahFromHere: (Int, Int) -> Unit = { _, _ -> },
+    onPageChanged: (Int) -> Unit = {},
+    onBookmark: (Int, Int) -> Unit = { _, _ -> },
+    onTapAyah: (Int, Int) -> Unit = { _, _ -> },
+    onLongPressAyah: (Int, Int) -> Unit = { _, _ -> },
+    onStop: () -> Unit = {},
+    onPlayScopeFromHere: (com.example.quranoffline.data.ReaderScope, Int, Int) -> Unit = { _, _, _ -> },
+    onClearSelection: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    var showAyahActions by rememberSaveable { mutableStateOf(false) }
+    var actionSurah by rememberSaveable { mutableIntStateOf(0) }
+    var actionAyah by rememberSaveable { mutableIntStateOf(0) }
+    val sheetAyah = state.allAyahs.firstOrNull { it.surah == actionSurah && it.ayah == actionAyah } ?: state.ayahs.firstOrNull()
     val wordOffsets = remember(state.ayahs) {
         IntArray(state.ayahs.size).also { offsets ->
             var offset = 0
@@ -667,11 +687,9 @@ private fun MemorizationScreen(
     // optional current-word card, hide button (1).
     val showWordCard = state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()
     val lead = (if (focusRecitation) 1 else 0) + 5 + (if (!focusRecitation) 1 else 0) + (if (showWordCard) 1 else 0) + 1
-    LaunchedEffect(state.currentAyahIndex, state.currentPage, state.listening) {
-        if (!state.listening) return@LaunchedEffect
-        val cur = state.allAyahs.getOrNull(state.currentAyahIndex) ?: return@LaunchedEffect
-        val i = state.ayahs.indexOfFirst { it.surah == cur.surah && it.ayah == cur.ayah }
-        if (i >= 0) listState.animateScrollToItem(lead + i)
+    // v24.8: the page is one mushaf surface item, so bring it into view when recitation starts or the page changes.
+    LaunchedEffect(state.currentPage, state.listening) {
+        if (state.listening) listState.animateScrollToItem(lead)
     }
     LazyColumn(
         state = listState,
@@ -759,38 +777,30 @@ private fun MemorizationScreen(
                 }
             }
         }
-        itemsIndexed(
-            items = state.ayahs,
-            key = { _, ayah -> "${ayah.surah}:${ayah.ayah}" },
-        ) { index, ayah ->
-            val wordOffset = state.pageWordOffset + wordOffsets.getOrElse(index) { 0 }
-            val ayahMetadata = state.metadata?.ayah(ayah.surah, ayah.ayah)
-            val previousMetadata = if (index > 0) {
-                state.ayahs.getOrNull(index - 1)?.let { previous -> state.metadata?.ayah(previous.surah, previous.ayah) }
-            } else null
-            if (ayahMetadata != null && (previousMetadata == null || isMushafBoundary(previousMetadata, ayahMetadata))) {
-                MushafBoundaryRow(ayahMetadata)
-            }
-            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = LocalAppearance.current.paper)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                    AyahBlock(
-                        ayah = ayah,
-                        hidden = state.hidden,
-                        evaluation = state.evaluation,
-                        openingBasmalaEvaluation = state.openingBasmalaEvaluation,
-                        openingBasmalaWordIndex = state.openingBasmalaWordIndex,
-                        wordOffset = wordOffset,
-                        listening = state.listening,
-                        currentSpokenWord = state.currentSpokenWord,
-                        currentSpokenWordIndex = state.currentSpokenWordIndex,
-                        onSetStart = onSetStart,
-                        onMemorizeFromHere = onMemorizeFromHere,
-                        onPlayAyah = onPlayAyah,
-                        onPlayBasmala = onPlayBasmala,
-                        onReadFromHere = onReadFromHere,
-                    )
-                }
-            }
+        // v24.8: the same mushaf page surface as the Reading tab (page lines, ayah order, markers, font),
+        // with hide, word colouring and the current-word highlight handled inside the surface.
+        item {
+            MushafPageSurface(
+                pageAyahs = state.ayahs,
+                state = state,
+                onSetStart = onSetStart,
+                onMemorizeFromHere = onMemorizeFromHere,
+                onStartAfterOpening = onStartAfterOpening,
+                onPlayAyah = onPlayAyah,
+                onPlayBasmala = onPlayBasmala,
+                onReadFromHere = onReadFromHere,
+                onReadSurahFromHere = onReadSurahFromHere,
+                onPageChanged = onPageChanged,
+                onBookmark = onBookmark,
+                onOpenReaderActions = {
+                    state.ayahs.firstOrNull()?.let { first -> actionSurah = first.surah; actionAyah = first.ayah; showAyahActions = true }
+                },
+                onOpenAyahActions = { surah, ayah -> actionSurah = surah; actionAyah = ayah; showAyahActions = true },
+                textScale = state.correctionSettings.mushafTextScale,
+                onTapAyah = onTapAyah,
+                onLongPressAyah = { surah, ayah -> actionSurah = surah; actionAyah = ayah; showAyahActions = true },
+                onClearSelection = onClearSelection,
+            )
         }
         // Hidden in v21.1 (the Khatmat tab covers the daily wird). Code and saved goal data are kept; set to true to bring it back.
         if (SHOW_TODAY_GOAL_BOX) item { GoalCard(state.goal, onSetGoal) }
@@ -844,6 +854,13 @@ private fun MemorizationScreen(
             }
         }
         item { Spacer(Modifier.height(18.dp)) }
+    }
+    if (showAyahActions && sheetAyah != null) {
+        ReaderAyahActionsSheet(
+            state = state, sheetAyah = sheetAyah, onDismiss = { showAyahActions = false },
+            onPlayAyah = onPlayAyah, onPlayScopeFromHere = onPlayScopeFromHere, onBookmark = onBookmark, onStop = onStop,
+            onSelect = onLongPressAyah, onSetStart = onSetStart, onMemorizeFromHere = onMemorizeFromHere,
+        )
     }
 }
 

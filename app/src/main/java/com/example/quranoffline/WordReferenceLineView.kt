@@ -164,7 +164,7 @@ internal fun WordReferenceLineView(
             val playing = androidx.compose.runtime.remember(segments, playKey) { if (playKey == null) emptyList() else segments.filter { it.first == playKey } }
             Text(
                 text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys, playing) {
-                    val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets)
+                    val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets, textColor)
                     if (selectedKeys.isEmpty() && playing.isEmpty()) base else buildAnnotatedString {
                         append(base)
                         selectedKeys.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = appearance.selectedHighlight), st, en) }
@@ -186,7 +186,7 @@ internal fun WordReferenceLineView(
                 },
                 fontFamily = WordReferenceFontFamily,
                 fontSize = fontSize,
-                color = if (state.hidden) Color.Transparent else textColor,
+                color = textColor,
                 textAlign = if (centered) TextAlign.Center else TextAlign.Right,
                 lineHeight = (34f * textScale).sp,
                 softWrap = false,
@@ -213,12 +213,20 @@ private fun annotatedWordReferenceLine(
     ayahsByKey: Map<String, QuranAyah>,
     ayahIndexByKey: Map<String, Int>,
     wordOffsets: List<Int>,
+    revealColor: Color = Color(0xFF123F35),
 ): AnnotatedString {
     val shownText = line.displayText()
-    val evaluation = state.evaluation ?: return AnnotatedString(shownText)
-    if (line.type != "ayah" || state.hidden) return AnnotatedString(shownText)
+    // v24.8: in hide mode the whole line is transparent except the words already said or judged, which show their correct text
+    // in the status colour (same rule as the old per-ayah view: a judged word shows the right text, wrong ones in red).
+    if (line.type != "ayah") return AnnotatedString(shownText)
+    val hiddenMode = state.hidden
+    val evaluation = state.evaluation
+    if (evaluation == null) {
+        return if (hiddenMode) buildAnnotatedString { append(shownText); addStyle(SpanStyle(color = Color.Transparent), 0, shownText.length) } else AnnotatedString(shownText)
+    }
 
     val ranges = mutableListOf<Triple<Int, Int, Color>>()
+    val revealed = mutableListOf<Pair<Int, Int>>()
     var lineCursor = 0
     line.ayahKeys.forEach { key ->
         val ayah = ayahsByKey[key] ?: return@forEach
@@ -231,9 +239,12 @@ private fun annotatedWordReferenceLine(
             if (start < 0) return@forEachIndexed
             val end = start + word.text.length
             val globalIndex = wordOffsets.getOrNull(ayahIndex)?.plus(localIndex) ?: return@forEachIndexed
-            val status = evaluation.words.getOrNull(globalIndex)?.status
+            val wordEval = evaluation.words.getOrNull(globalIndex)
+            val status = wordEval?.status
             val color = statusHighlightColor(status)
             if (color != null) ranges += Triple(start, end, color)
+            // revealed in hide mode: judged (not merely pending) or an observed word
+            if (hiddenMode && ((status != null && status != WordStatus.UNCERTAIN) || wordEval?.observed != null)) revealed += start to end
             searchFrom = end
             if (range != null) lineCursor = end
         }
@@ -241,6 +252,10 @@ private fun annotatedWordReferenceLine(
 
     return buildAnnotatedString {
         append(shownText)
+        if (hiddenMode) {
+            addStyle(SpanStyle(color = Color.Transparent), 0, shownText.length)
+            revealed.forEach { (a, b) -> addStyle(SpanStyle(color = revealColor), a, b) }
+        }
         ranges.forEach { (start, end, color) ->
             addStyle(SpanStyle(background = color.copy(alpha = 0.34f)), start, end)
         }
