@@ -123,6 +123,8 @@ private fun KhatmaCard(
                         },
                     )
                 }
+                var duff by remember { mutableStateOf(KhatmaReminders.duffHits(ctx)) }
+                PickerField("عدد ضربات الدف في صوت التذكير", "$duff", (1..4).map { "$it" to it }, { duff = it; KhatmaReminders.setDuffHits(ctx, it) })
                 key(statusTick) { Text(KhatmaReminders.status(ctx, k), style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C)) }
                 OutlinedButton(onClick = {
                     if (Build.VERSION.SDK_INT >= 33 && !KhatmaReminders.notificationsAllowed(ctx)) permission.launch(Manifest.permission.POST_NOTIFICATIONS)

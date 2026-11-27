@@ -46,7 +46,10 @@ data class AppearanceSpec(
 ) {
     companion object {
         /** Tab ids shown in the tab row. Id 5 (settings) lives behind the gear only. */
-        val DEFAULT_TAB_ORDER = listOf(0, 1, 2, 3, 4, 6)
+        /** v24.5: Juz (2) first. */
+        val DEFAULT_TAB_ORDER = listOf(2, 0, 1, 3, 4, 6)
+        /** Default up to v24.4. A saved order equal to this was never reordered by the user, so it moves to the new default. */
+        val LEGACY_DEFAULT_TAB_ORDER = listOf(0, 1, 2, 3, 4, 6)
         val TAB_TITLES = mapOf(0 to "الحفظ والتسميع", 1 to "السور", 2 to "الأجزاء", 3 to "السجل", 4 to "القراءة", 6 to "الختمات")
     }
 }
@@ -69,6 +72,12 @@ class Appearance(
     /** Darker shade of the accent for the two green boxes of the tasmee tab and the reader card. Default (v24.2 calmer green 0xFF276456) gives about 0xFF1F5045. */
     val deep: Color,
     val tabUnselected: Color,
+    /** Light tint of the accent: selected chips, containers, tonal buttons (replaces the default lavender). */
+    val container: Color,
+    /** Very light tint: field backgrounds and variant surfaces. */
+    val containerLow: Color,
+    /** Mid tone for outlines and disabled borders, readable on white. */
+    val outline: Color,
     val paper: Color,
     val readerText: Color,
     val darkPaper: Boolean,
@@ -93,6 +102,9 @@ fun AppearanceSpec.resolve(): Appearance {
         chip = mix(primary, Color.White, 0.12f),
         deep = mix(primary, Color.Black, 0.2f),
         tabUnselected = mix(primary, Color.White, 0.75f),
+        container = mix(primary, Color.White, 0.82f),
+        containerLow = mix(primary, Color.White, 0.94f),
+        outline = mix(primary, Color(0xFF66736C), 0.55f),
         paper = paper,
         readerText = textColor,
         darkPaper = dark,
@@ -113,7 +125,8 @@ object AppearanceStore {
         val p = prefs(c)
         fun opt(k: String): Long? = if (p.contains(k)) p.getLong(k, 0L) else null
         val order = normalizeOrder(p.getString("tab_order", null)?.split(',')?.mapNotNull { it.trim().toIntOrNull() }.orEmpty())
-        return AppearanceSpec(p.getString("preset", "green") ?: "green", opt("accent"), opt("paper"), opt("text"), order)
+        val migrated = if (order == AppearanceSpec.LEGACY_DEFAULT_TAB_ORDER) AppearanceSpec.DEFAULT_TAB_ORDER else order
+        return AppearanceSpec(p.getString("preset", "green") ?: "green", opt("accent"), opt("paper"), opt("text"), migrated)
     }
 
     fun save(c: Context, s: AppearanceSpec) {
@@ -204,4 +217,53 @@ fun TabOrderSettingsCard() {
             OutlinedButton(onClick = { edit(spec.copy(tabOrder = AppearanceSpec.DEFAULT_TAB_ORDER)) }, modifier = Modifier.fillMaxWidth()) { Text("إعادة الترتيب الافتراضي") }
         }
     }
+}
+
+/** Colour scheme for the whole app: every Material role derives from the accent, so no component falls back to the default lavender. */
+fun Appearance.colorScheme() = androidx.compose.material3.lightColorScheme(
+    primary = primary, onPrimary = Color.White,
+    primaryContainer = container, onPrimaryContainer = deep,
+    secondary = primary, onSecondary = Color.White,
+    secondaryContainer = container, onSecondaryContainer = deep,
+    tertiary = Color(0xFF8A5A14), onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFF6E3BE), onTertiaryContainer = Color(0xFF4A3000),
+    background = Color(0xFFF7FAF8), onBackground = Color(0xFF17231F),
+    surface = Color.White, onSurface = Color(0xFF17231F),
+    surfaceVariant = containerLow, onSurfaceVariant = Color(0xFF3F4F48),
+    surfaceTint = primary,
+    outline = outline, outlineVariant = container,
+    inverseSurface = deep, inverseOnSurface = Color.White, inversePrimary = container,
+    surfaceContainerLowest = Color.White, surfaceContainerLow = containerLow, surfaceContainer = containerLow,
+    surfaceContainerHigh = container, surfaceContainerHighest = container,
+)
+
+/** Component colours for the dark accent cards (tab 0, reader card): readable selected, unselected, disabled and hint states. */
+object OnDeep {
+    private val Tan = Color(0xFFF2C879)
+    private val Ink = Color(0xFF183D33)
+    @Composable fun chipColors() = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+        containerColor = Color.Transparent, labelColor = Color.White, iconColor = Color.White,
+        selectedContainerColor = Tan, selectedLabelColor = Ink, selectedLeadingIconColor = Ink,
+        disabledContainerColor = Color.Transparent, disabledLabelColor = Color.White.copy(alpha = 0.55f),
+    )
+    @Composable fun chipBorder(selected: Boolean, enabled: Boolean = true) = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+        enabled = enabled, selected = selected,
+        borderColor = Color.White.copy(alpha = 0.8f), selectedBorderColor = Color.Transparent,
+        disabledBorderColor = Color.White.copy(alpha = 0.35f),
+    )
+    @Composable fun fieldColors() = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White, unfocusedTextColor = Color.White, disabledTextColor = Color.White.copy(alpha = 0.6f),
+        focusedBorderColor = Tan, unfocusedBorderColor = Color.White.copy(alpha = 0.75f), disabledBorderColor = Color.White.copy(alpha = 0.35f),
+        focusedLabelColor = Tan, unfocusedLabelColor = Color(0xFFD6EEE5), disabledLabelColor = Color.White.copy(alpha = 0.6f),
+        focusedPlaceholderColor = Color.White.copy(alpha = 0.7f), unfocusedPlaceholderColor = Color.White.copy(alpha = 0.7f), disabledPlaceholderColor = Color.White.copy(alpha = 0.5f),
+        cursorColor = Color.White,
+    )
+    @Composable fun buttonColors() = androidx.compose.material3.ButtonDefaults.buttonColors(
+        containerColor = Tan, contentColor = Ink,
+        disabledContainerColor = Color.White.copy(alpha = 0.2f), disabledContentColor = Color.White.copy(alpha = 0.8f),
+    )
+    @Composable fun outlinedColors() = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+        contentColor = Color.White, disabledContentColor = Color.White.copy(alpha = 0.6f),
+    )
+    fun outlinedBorder(enabled: Boolean = true) = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = if (enabled) 0.78f else 0.35f))
 }

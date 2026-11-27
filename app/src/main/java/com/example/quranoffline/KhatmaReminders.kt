@@ -23,7 +23,19 @@ import java.util.Calendar
  * The notification plays one short frame-drum hit (bundled, synthesized for this app).
  */
 object KhatmaReminders {
-    private const val CHANNEL = "khatma_reminders_v3"
+    private const val CHANNEL_PREFIX = "khatma_reminders_duff_"
+    private val LEGACY_CHANNELS = listOf("khatma_reminders_v3")
+
+    /** Number of duff hits in the reminder sound (1..4, default 2). One sound file and one channel per count: a channel's sound cannot change after creation. */
+    fun duffHits(context: Context): Int =
+        context.getSharedPreferences("quran_reminder_sound", Context.MODE_PRIVATE).getInt("duff_hits", 2).coerceIn(1, 4)
+
+    fun setDuffHits(context: Context, hits: Int) {
+        context.getSharedPreferences("quran_reminder_sound", Context.MODE_PRIVATE).edit().putInt("duff_hits", hits.coerceIn(1, 4)).apply()
+    }
+
+    private fun soundRes(hits: Int) = when (hits) { 1 -> R.raw.khatma_duff_1; 3 -> R.raw.khatma_duff_3; 4 -> R.raw.khatma_duff_4; else -> R.raw.khatma_duff_2 }
+    private fun channelId(hits: Int) = CHANNEL_PREFIX + hits
 
     private fun pending(context: Context, kind: SaveMarkKind, repeatNo: Int): PendingIntent =
         PendingIntent.getBroadcast(
@@ -80,19 +92,23 @@ object KhatmaReminders {
         arm(context, System.currentTimeMillis() + s.repeatMinutes * 60_000L, pending(context, s.kind, nextRepeatNo))
     }
 
-    private fun ensureChannel(context: Context) {
+    private fun ensureChannel(context: Context): String {
+        val hits = duffHits(context)
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val sound = Uri.parse("android.resource://${context.packageName}/${R.raw.khatma_duff}")
-        val ch = NotificationChannel(CHANNEL, "تذكير الختمة", NotificationManager.IMPORTANCE_HIGH).apply {
+        val sound = Uri.parse("android.resource://${context.packageName}/${soundRes(hits)}")
+        val ch = NotificationChannel(channelId(hits), "تذكير الختمة (دف $hits)", NotificationManager.IMPORTANCE_HIGH).apply {
             setSound(sound, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
             enableVibration(true)
         }
         nm.createNotificationChannel(ch)
+        // Only the channel for the chosen hit count stays; the old v3 channel and the other counts are removed.
+        (LEGACY_CHANNELS + (1..4).filter { it != hits }.map(::channelId)).forEach { id -> if (nm.getNotificationChannel(id) != null) nm.deleteNotificationChannel(id) }
+        return channelId(hits)
     }
 
     /** Returns false when the notification could not be shown (permission denied or channel blocked). */
     fun notify(context: Context, s: KhatmaState, test: Boolean = false): Boolean {
-        ensureChannel(context)
+        val channel = ensureChannel(context)
         val what = if (s.kind == SaveMarkKind.HIFZ) "الحفظ والتسميع" else "القراءة والاستماع"
         val text = when {
             test -> "هذا إشعار تجريبي لتذكير $what"
@@ -100,11 +116,11 @@ object KhatmaReminders {
             else -> "حان وقت ورد $what"
         }
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val n = NotificationCompat.Builder(context, CHANNEL)
+        val n = NotificationCompat.Builder(context, channel)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("تذكير الختمة").setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setSound(Uri.parse("android.resource://${context.packageName}/${R.raw.khatma_duff}"))
+            .setSound(Uri.parse("android.resource://${context.packageName}/${soundRes(duffHits(context))}"))
             .setContentIntent(open).setAutoCancel(true).build()
         if (!notificationsAllowed(context)) return false
         return runCatching { NotificationManagerCompat.from(context).notify(7200 + s.kind.ordinal, n) }.isSuccess

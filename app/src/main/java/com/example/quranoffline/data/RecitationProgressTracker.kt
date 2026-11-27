@@ -487,16 +487,38 @@ class RecitationProgressTracker(
         return maxOf(maximum, issueCount)
     }
 
+    /**
+     * Ayahs grouped by everything that decides whether their FIRST word matches an observed token (the word and its
+     * pronunciation reference). Built once; lets isClearJump test each distinct first word once instead of scanning all
+     * later ayahs on every mismatching token (v24.5).
+     */
+    private val firstWordGroups: List<IntArray> by lazy {
+        val byKey = LinkedHashMap<Any?, MutableList<Int>>()
+        ayahs.forEachIndexed { i, a ->
+            val w = a.words.firstOrNull() ?: return@forEachIndexed
+            val ref = pronunciationReference?.word(a.surah, a.ayah, 0)
+            val refKey = ref?.let { listOf(it.spoken, it.spokenTokens, it.maddPositions, it.recognizedForms, it.waqfForms) }
+            byKey.getOrPut(w to refKey) { mutableListOf() }.add(i)
+        }
+        byKey.values.map { it.toIntArray() }
+    }
+
     private fun isClearJump(segment: List<String>, segmentIndex: Int): Boolean {
         if (segmentIndex + jumpConfirmationWords > segment.size) return false
         if (currentAyahIndex + 1 !in ayahs.indices) return false
         val phrase = segment.subList(segmentIndex, segmentIndex + jumpConfirmationWords)
-        return (currentAyahIndex + 1 until ayahs.size).any { candidateAyahIndex ->
-            val start = ayahs[candidateAyahIndex].words.take(jumpConfirmationWords)
-            start.size >= jumpConfirmationWords && start.indices.all {
-                matchesWord(candidateAyahIndex, it, phrase[it])
+        val after = currentAyahIndex + 1
+        for (group in firstWordGroups) {
+            if (group[group.size - 1] < after) continue
+            // Members share the first word and its reference, so one test decides the first word for the whole group.
+            if (!matchesWord(group[0], 0, phrase[0])) continue
+            for (candidate in group) {
+                if (candidate < after) continue
+                val start = ayahs[candidate].words.take(jumpConfirmationWords)
+                if (start.size >= jumpConfirmationWords && start.indices.all { matchesWord(candidate, it, phrase[it]) }) return true
             }
         }
+        return false
     }
 
     private fun acceptedGlobalWordIndex(token: String, fallback: Int): Int {

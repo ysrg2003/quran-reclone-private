@@ -174,15 +174,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun QuranOfflineTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = androidx.compose.material3.lightColorScheme(
-            primary = LocalAppearance.current.primary,
-            onPrimary = Color.White,
-            secondary = Color(0xFF9A3412),
-            tertiary = Color(0xFF8A5A14),
-            background = Color(0xFFF7FAF8),
-            surface = Color.White,
-            onSurface = Color(0xFF17231F),
-        ),
+        colorScheme = LocalAppearance.current.colorScheme(),
         content = content,
     )
 }
@@ -210,7 +202,9 @@ private fun QuranOfflineApp(
         }
     }
     val resumeRecitation = startRecitation
-    var tab by remember { mutableIntStateOf(0) }
+    // Opens on the first tab of the user's order (Juz by default); the reader tab (4) opens a full-screen reader, so it is skipped.
+    val firstTab = LocalAppearanceSpec.current.tabOrder.firstOrNull { it != 4 } ?: 0
+    var tab by remember { mutableIntStateOf(firstTab) }
     var immersive by rememberSaveable { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     // The reading tab is the full-screen page reader; leaving it returns to the memorization tab.
@@ -713,7 +707,7 @@ private fun MemorizationScreen(
                     Box {
                         Button(
                             onClick = { surahMenuExpanded = true },
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFF2C879), contentColor = Color.White),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFF2C879), contentColor = Color(0xFF183D33)),
                         ) {
                             Text("اختيار السورة", fontWeight = FontWeight.SemiBold)
                         }
@@ -1373,7 +1367,8 @@ private fun RecitationCard(
                 onClick = { tasmeeRangeRequest.value = true },
                 enabled = !state.listening && !state.correctionPlaying,
                 modifier = Modifier.fillMaxWidth(),
-                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                colors = OnDeep.outlinedColors(),
+                border = OnDeep.outlinedBorder(!state.listening && !state.correctionPlaying),
             ) { Text("اختيار نطاق التسميع (من ... إلى)") }
             Text("طريقة التسميع", color = Color(0xFFFFE0A3), fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1381,12 +1376,14 @@ private fun RecitationCard(
                     selected = state.inputMode == RecitationInputMode.VOICE,
                     onClick = { onInputModeChange(RecitationInputMode.VOICE) },
                     label = { Text("بالصوت") },
+                    colors = OnDeep.chipColors(), border = OnDeep.chipBorder(state.inputMode == RecitationInputMode.VOICE),
                     modifier = Modifier.weight(1f),
                 )
                 FilterChip(
                     selected = state.inputMode == RecitationInputMode.TYPING,
                     onClick = { onInputModeChange(RecitationInputMode.TYPING) },
                     label = { Text("بالكتابة") },
+                    colors = OnDeep.chipColors(), border = OnDeep.chipBorder(state.inputMode == RecitationInputMode.TYPING),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -1401,11 +1398,13 @@ private fun RecitationCard(
                     singleLine = false,
                     minLines = 2,
                     maxLines = 5,
+                    colors = OnDeep.fieldColors(),
                 )
                 Button(
                     onClick = onSubmitTyped,
                     enabled = state.typedInput.isNotBlank() && !state.correctionPlaying,
                     modifier = Modifier.fillMaxWidth(),
+                    colors = OnDeep.buttonColors(),
                 ) { Text("إرسال النص للتحقق") }
                 Text(
                     "يُستخدم نفس ترتيب الكلمات والحواجز والتصحيح؛ لا يمكن للنص المكتوب تخطي كلمة أو فتح آية لاحقة.",
@@ -1731,18 +1730,18 @@ private fun ReaderScreen(
                     Text("سورة ${state.metadata?.sura(state.selectedSurah)?.arabicName ?: state.selectedSurah} • الصفحة ${state.currentPage} من ${state.totalPages}", color = Color(0xFFD6EEE5))
                     Text("السحب إلى الشمال يعرض الصفحة السابقة، والسحب إلى اليمين يعرض الصفحة التالية. ترتيب المصحف من الفاتحة إلى الناس من اليمين إلى اليسار.", color = Color(0xFFD6EEE5), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Right)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = onPreviousPage, enabled = state.currentPage > 1, modifier = Modifier.weight(1f)) { Text("السابق") }
-                        Button(onClick = onNextPage, enabled = state.currentPage < state.totalPages, modifier = Modifier.weight(1f)) { Text("التالي") }
+                        OutlinedButton(onClick = onPreviousPage, enabled = state.currentPage > 1, modifier = Modifier.weight(1f), colors = OnDeep.outlinedColors(), border = OnDeep.outlinedBorder(state.currentPage > 1)) { Text("السابق") }
+                        Button(onClick = onNextPage, enabled = state.currentPage < state.totalPages, modifier = Modifier.weight(1f), colors = OnDeep.buttonColors()) { Text("التالي") }
                     }
                     Text("النطاق الصوتي: ${readerScopeLabel(state.readerScope)}${state.readerCurrentKey?.let { " • الموضع $it" } ?: ""}", color = Color(0xFFFFE0A3), fontWeight = FontWeight.SemiBold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         com.example.quranoffline.data.ReaderScope.values().forEach { scope ->
-                            FilterChip(selected = state.readerScope == scope, onClick = { onScope(scope) }, label = { Text(readerScopeLabel(scope)) })
+                            FilterChip(selected = state.readerScope == scope, onClick = { onScope(scope) }, label = { Text(readerScopeLabel(scope)) }, colors = OnDeep.chipColors(), border = OnDeep.chipBorder(state.readerScope == scope))
                         }
                     }
                     ReciterPicker(dark = true)
                     if (state.readerPlaying) {
-                        OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth(), colors = OnDeep.outlinedColors(), border = OnDeep.outlinedBorder()) {
                             Icon(Icons.Default.Stop, contentDescription = null, tint = Color.White)
                             Spacer(Modifier.width(8.dp))
                             Text("إيقاف القراءة", color = Color.White)
