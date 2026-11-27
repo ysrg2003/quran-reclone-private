@@ -184,3 +184,10 @@ Manual on device (UNTESTED by me, no device available):
 - Storage: new prefs "khatmat_v2"; the v24.6 "khatmat" prefs are migrated once and left in place for rollback.
 - Tests: JVM suite passes (KhatmaListLogicTest). Not tested on a phone.
 - Build: signed locally, cert e4c456fc...9ff5e. GitHub Actions run 46056749740 succeeded on main while the repo was public.
+
+## v24.8 (Hifz/Tasmee tab uses the Reading-tab mushaf page)
+- Tab 0 draws the same mushaf page surface as the Reading tab (Word-reference lines, KFGQPC font, ayah order and markers, page swipe, ayah actions sheet) instead of per-ayah cards.
+- Hide: whole page, as before. Words already said or judged are revealed with their correct text and status colour; the current spoken word shows in the "current word" card above the page (the page layout cannot swap text in place).
+- Kept: Juz first, copy brackets, whole-ayah counter (default 3, off option), any legitimate reading accepted (matcher untouched), progress and khatma tracking (view-independent).
+- Checks added (HifzMushafLayoutRegressionTest): reveal rule in hide mode, whole-page hide, page swipe, whole-ayah off/default. Full JVM suite passes. Not tested on a phone.
+- Not changed: the full-screen reader's tasmee view still uses its own per-ayah blocks.

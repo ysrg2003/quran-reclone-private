@@ -33,6 +33,10 @@ object WordDisplayRules {
         else -> Shown.DOT
     }
 
+    /** v24.8: the mushaf page surface keeps its fixed line layout, so a word is either drawn or transparent. Same rule as the old per-ayah view with "only spoken" on. */
+    fun pageWordVisible(hidden: Boolean, status: WordStatus?, revealed: Boolean): Boolean =
+        shown(hidden, true, status, revealed, false) == Shown.CORRECT_WORD
+
     fun onlySpoken(context: Context): Boolean =
         context.applicationContext.getSharedPreferences("quran_display", Context.MODE_PRIVATE).getBoolean("only_spoken_when_hidden", true)
     fun setOnlySpoken(context: Context, v: Boolean) {
