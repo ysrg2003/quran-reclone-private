@@ -130,3 +130,9 @@ Manual on device (UNTESTED by me, no device available):
 ## v23.2 (b24ca19, tag apk-v23.2)
 - 220 tests pass (JVM), 4 skipped. Same release key. Device untested.
 - Reader margin: READER_EDGE_MARGIN_DP=8. Vertical padding 8dp; horizontal padding 6dp plus the 2dp column padding in ImmersiveReader = 8dp total on left and right. Top and bottom bars unchanged (user: second screenshot only showed the page number).
+
+## v23.3 (bcf11c7, tag apk-v23.3)
+- 222 tests pass (JVM), 4 skipped. Same release key. Device untested; smoothness is by code reading, not profiled on a phone.
+- Tasmee lag (code reading): every recognizer update ran page() (filter over 6236 ayahs) on the main thread and gave the UI a new ayah list, and the live word went to every AyahBlock, so the whole page (about 150 Surface+Text word nodes, each building an AnnotatedString) recomposed several times per second. Now: same list when the page is unchanged, live word only to the block that holds it (and surah openings for the basmala), word AnnotatedStrings memoized, onlySpoken pref read once per block, page key list hoisted. Tasmee logic and colours untouched.
+- Margin: READER_EDGE_MARGIN_DP=12 (vertical 12dp, horizontal 10dp + 2dp column padding = 12dp).
+- Pages 1 and 2: bundled layout and preview layout re-lined as the user's pictures (Fatiha 7 text lines with the ayah marker wrapping to the start of the next line; Baqarah first page 7 lines after the basmala). WordReferenceLayout.withModelPages keeps them when the quran.com layout is used. Ornamental frames and surah banners from the pictures were not copied.
