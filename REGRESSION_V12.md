@@ -91,3 +91,8 @@ Manual on device (UNTESTED by me, no device available):
 - Reminders: setExactAndAllowWhileIdle (+ USE_EXACT_ALARM / SCHEDULE_EXACT_ALARM<=32), channel created before use (HIGH), re-armed after each fire, boot, app update, time and timezone change, and whenever the Khatmat screen opens. Test-notification button and status line.
 - Khatma: finish estimate by real pace and by daily target.
 - Copy/share: each ayah followed by its number. Selection bottom bar removed (Back cancels selection until the circle exists in v21).
+
+## v21 (84d6948, tag apk-v21)
+- 199 tests pass (SelectionRange, ayahSegments tests added), 4 skipped. Same release key. Device untested: touch hit-testing, circle position, justified stretch and the range sheet were never seen on a screen.
+- Tap selects the ayah under the finger via text-offset segments split at ayah-end markers. Base (long-pressed) ayah stays; tap before it moves the start side, after it moves the end side, on it collapses.
+- Tasmee hides only selected ayahs when a selection exists. Mic with selection starts at its first ayah and stops after the last; mic without selection opens a range sheet (from current position).
