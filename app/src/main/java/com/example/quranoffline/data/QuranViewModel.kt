@@ -376,6 +376,14 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Opens a surah at a given ayah: ayah 1 uses the normal surah selection, others land on that ayah's mushaf page. */
+    fun openSurahAt(surah: Int, ayah: Int) {
+        if (ayah <= 1) { selectSurah(surah); return }
+        val md = state.value.metadata ?: return
+        val page = state.value.wordReferenceLayout?.pageForAyah(surah, ayah) ?: md.ayah(surah, ayah)?.page ?: return
+        jumpToPage(page)
+    }
+
     fun selectSurah(surah: Int) {
         if (!state.value.assetsReady) {
             state.value = state.value.copy(notice = "الصفحة الأولى جاهزة للعرض؛ انتظر اكتمال تجهيز المصحف قبل اختيار سورة أخرى.")

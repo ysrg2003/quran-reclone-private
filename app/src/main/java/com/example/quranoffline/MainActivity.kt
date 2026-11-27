@@ -96,6 +96,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -145,7 +146,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.decorView.layoutDirection = android.view.View.LAYOUT_DIRECTION_RTL
         setContent {
-            androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            val appearanceSpec = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(AppearanceStore.load(applicationContext)) }
+            val appearance = androidx.compose.runtime.remember(appearanceSpec.value) { appearanceSpec.value.resolve() }
+            val editAppearance = androidx.compose.runtime.remember<(AppearanceSpec) -> Unit> { { n -> appearanceSpec.value = n; AppearanceStore.save(applicationContext, n) } }
+            androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, LocalAppearance provides appearance, LocalAppearanceSpec provides appearanceSpec.value, LocalAppearanceEdit provides editAppearance) {
             QuranOfflineTheme {
                 QuranOfflineApp(
                     viewModel = quranViewModel,
@@ -164,7 +168,7 @@ class MainActivity : ComponentActivity() {
 private fun QuranOfflineTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = androidx.compose.material3.lightColorScheme(
-            primary = Color(0xFF0F5B4D),
+            primary = LocalAppearance.current.primary,
             onPrimary = Color.White,
             secondary = Color(0xFF9A3412),
             tertiary = Color(0xFF8A5A14),
@@ -236,7 +240,7 @@ private fun QuranOfflineApp(
                             Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = Color.White)
                         }
                         Surface(
-                            color = Color(0xFF16705E),
+                            color = LocalAppearance.current.chip,
                             shape = RoundedCornerShape(50),
                             modifier = Modifier.padding(end = 12.dp),
                         ) {
@@ -251,18 +255,19 @@ private fun QuranOfflineApp(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF0F5B4D),
+                        containerColor = LocalAppearance.current.primary,
                         titleContentColor = Color.White,
                         actionIconContentColor = Color.White,
                     ),
                 )
+                val tabOrder = LocalAppearanceSpec.current.tabOrder
                 ScrollableTabRow(
-                    selectedTabIndex = if (tab > 5) tab - 1 else tab,
-                    containerColor = Color(0xFF0F5B4D),
+                    selectedTabIndex = tabOrder.indexOf(tab).coerceAtLeast(0),
+                    containerColor = LocalAppearance.current.primary,
                     contentColor = Color.White,
                     edgePadding = 8.dp,
                     indicator = { positions ->
-                        val shown = if (tab > 5) tab - 1 else tab
+                        val shown = tabOrder.indexOf(tab).coerceAtLeast(0)
                         if (shown < positions.size) {
                             TabRowDefaults.SecondaryIndicator(
                                 modifier = Modifier.tabIndicatorOffset(positions[shown]),
@@ -272,14 +277,14 @@ private fun QuranOfflineApp(
                         }
                     },
                 ) {
-                    listOf("الحفظ والتسميع", "السور", "الأجزاء", "السجل", "القراءة", "الإعدادات", "الختمات").forEachIndexed { index, title ->
-                        if (index == 5) return@forEachIndexed // settings live behind the gear icon only
+                    tabOrder.forEach { index ->
+                        val title = AppearanceSpec.TAB_TITLES[index].orEmpty()
                         Tab(
                             selected = tab == index,
                             onClick = { tab = index },
                             text = { Text(title, fontSize = 14.sp, fontWeight = if (tab == index) FontWeight.Bold else FontWeight.Normal) },
                             selectedContentColor = Color.White,
-                            unselectedContentColor = Color(0xFFC7E4D9),
+                            unselectedContentColor = LocalAppearance.current.tabUnselected,
                         )
                     }
                 }
@@ -327,8 +332,8 @@ private fun QuranOfflineApp(
             )
             2 -> JuzIndexScreen(
                 state = state,
-                onSelectSurah = { surah ->
-                    viewModel.selectSurah(surah)
+                onSelectSurah = { surah, ayah ->
+                    viewModel.openSurahAt(surah, ayah)
                     tab = 4
                 },
                 modifier = Modifier.padding(padding),
@@ -465,7 +470,7 @@ private fun LoadingScreen(notice: String, modifier: Modifier = Modifier) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                CircularProgressIndicator(color = Color(0xFF0F5B4D))
+                CircularProgressIndicator(color = LocalAppearance.current.primary)
                 Text("جاري تجهيز ورد", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF17231F))
                 Text(notice.ifBlank { "جاري تحميل النص والتوقيتات…" }, textAlign = TextAlign.Center, color = Color(0xFF52635B))
             }
@@ -521,7 +526,7 @@ private fun MushafIndexScreen(
                     }
                     Button(
                         onClick = { onSelectSurah(surah.index) },
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5B4D)),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = LocalAppearance.current.primary),
                     ) {
                         Text("فتح")
                     }
@@ -534,7 +539,7 @@ private fun MushafIndexScreen(
 @Composable
 private fun JuzIndexScreen(
     state: com.example.quranoffline.data.QuranUiState,
-    onSelectSurah: (Int) -> Unit,
+    onSelectSurah: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val metadata = state.metadata
@@ -551,23 +556,43 @@ private fun JuzIndexScreen(
         items(metadata?.juzs.orEmpty(), key = { it.index }) { juz ->
             val surah = metadata?.sura(juz.surah)
             val ayah = metadata?.ayah(juz.surah, juz.ayah)
+            var expanded by rememberSaveable(juz.index) { mutableStateOf(false) }
+            val entries = remember(metadata, juz.index, expanded) {
+                if (expanded && metadata != null) com.example.quranoffline.data.JuzSurahs.forJuz(metadata, juz.index) else emptyList()
+            }
             Card(
                 shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("${juz.index}", color = Color(0xFF52635B), style = MaterialTheme.typography.titleMedium)
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                        Text("الجزء ${juz.index}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Text("${surah?.arabicName ?: "السورة ${juz.surah}"} • الآية ${juz.ayah} • صفحة ${ayah?.page ?: "—"}", color = Color(0xFF52635B), style = MaterialTheme.typography.bodySmall)
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("${juz.index}", color = Color(0xFF52635B), style = MaterialTheme.typography.titleMedium)
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                            Text("الجزء ${juz.index}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                            Text("${surah?.arabicName ?: "السورة ${juz.surah}"} • الآية ${juz.ayah} • صفحة ${ayah?.page ?: "—"}", color = Color(0xFF52635B), style = MaterialTheme.typography.bodySmall)
+                        }
+                        OutlinedButton(onClick = { onSelectSurah(juz.surah, juz.ayah) }) { Text("فتح") }
+                        Text(if (expanded) "▲" else "▼", color = Color(0xFF52635B))
                     }
-                    OutlinedButton(onClick = { onSelectSurah(juz.surah) }) {
-                        Text("فتح")
+                    if (expanded) {
+                        entries.forEach { e ->
+                            val name = metadata?.sura(e.surah)?.arabicName ?: "السورة ${e.surah}"
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable { onSelectSurah(e.surah, e.startAyah) }
+                                    .background(Color(0xFFF1F6F3)).padding(horizontal = 24.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Text("${e.surah}", color = Color(0xFF52635B))
+                                Text("سورة $name", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                                if (e.partial) Text("جزء منها: ${e.startAyah}–${e.endAyah}", color = Color(0xFF9A3412), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                     }
                 }
             }
@@ -733,7 +758,7 @@ private fun MemorizationScreen(
             if (ayahMetadata != null && (previousMetadata == null || isMushafBoundary(previousMetadata, ayahMetadata))) {
                 MushafBoundaryRow(ayahMetadata)
             }
-            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = LocalAppearance.current.paper)) {
                 Column(Modifier.fillMaxWidth().padding(18.dp)) {
                     AyahBlock(
                         ayah = ayah,
@@ -1275,7 +1300,7 @@ internal fun AyahBlock(
                     Surface(color = background, shape = RoundedCornerShape(8.dp)) {
                         Text(
                             text = QuranTextPresentation.annotatedCached(shownText),
-                            color = if (hidden && !revealed && !isCurrent) Color(0xFF202A25) else Color(0xFF183D33),
+                            color = if (status != null || isCurrent) Color(0xFF183D33) else LocalAppearance.current.readerText,
                             style = MaterialTheme.typography.headlineSmall,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                         )
@@ -1902,7 +1927,7 @@ internal fun MushafPageSurface(
         ,
         shape = if (fullBleed) RoundedCornerShape(0.dp) else RoundedCornerShape(if (isOpeningPage) 24.dp else 22.dp),
         border = if (fullBleed) null else BorderStroke(1.dp, Color(0xFFD8C7A7)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEF8)),
+        colors = CardDefaults.cardColors(containerColor = LocalAppearance.current.paper),
     ) {
         Column(
             Modifier
@@ -2032,8 +2057,8 @@ private fun PageAyahInline(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val backgroundColor = when {
-        selected -> Color(0xFFFFE0A6)
-        active -> Color(0xFFE7F3EE)
+        selected -> LocalAppearance.current.selectedHighlight
+        active -> LocalAppearance.current.playingHighlight.copy(alpha = if (LocalAppearance.current.darkPaper) 0.6f else 0.35f)
         else -> Color.Transparent
     }
     val lineText = buildString {
@@ -2049,7 +2074,7 @@ private fun PageAyahInline(
     ) {
         Text(
             QuranTextPresentation.annotated(lineText),
-            color = Color(0xFF183D33),
+            color = LocalAppearance.current.readerText,
             fontSize = fontSize,
             lineHeight = (fontSize.value * 1.45f).sp,
             softWrap = true,
@@ -2102,8 +2127,8 @@ private fun PageAyahLine(
             Modifier.fillMaxWidth()
                 .background(
                     when {
-                        selected -> Color(0xFFFFE0A6)
-                        active -> Color(0xFFE7F3EE)
+                        selected -> LocalAppearance.current.selectedHighlight
+                        active -> LocalAppearance.current.playingHighlight.copy(alpha = if (LocalAppearance.current.darkPaper) 0.6f else 0.35f)
                         else -> Color.Transparent
                     },
                     RoundedCornerShape(12.dp),
@@ -2125,7 +2150,7 @@ private fun PageAyahLine(
                 ayah.words.forEach { word ->
                     Text(
                         QuranTextPresentation.annotated(word.text),
-                        color = Color(0xFF183D33),
+                        color = LocalAppearance.current.readerText,
                         style = MaterialTheme.typography.headlineSmall,
                         fontSize = (MaterialTheme.typography.headlineSmall.fontSize.value * textScale).sp,
                         lineHeight = (36f * textScale).sp,
@@ -2169,7 +2194,7 @@ private fun TypographySettingsCard(
                     onClick = { onUpdate { it.copy(mushafTextScale = CorrectionSettings.DEFAULT_MUSHAF_TEXT_SCALE) } },
                     enabled = scale != CorrectionSettings.DEFAULT_MUSHAF_TEXT_SCALE,
                     modifier = Modifier.weight(1f),
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5B4D), contentColor = Color.White),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = LocalAppearance.current.primary, contentColor = Color.White),
                 ) { Text("الافتراضي") }
                 OutlinedButton(
                     onClick = { onUpdate { it.copy(mushafTextScale = scale + 0.1f) } },
@@ -2207,7 +2232,11 @@ private fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         when (section) {
-            0 -> item { TypographySettingsCard(state.correctionSettings, onUpdateCorrectionSettings) }
+            0 -> {
+                item { TypographySettingsCard(state.correctionSettings, onUpdateCorrectionSettings) }
+                item { AppearanceSettingsCard() }
+                item { TabOrderSettingsCard() }
+            }
             1 -> {
                 item { CorrectionSettingsCard(state.correctionSettings, onUpdateCorrectionSettings, onResetCorrectionSettings) }
                 item { HiddenViewSettingsCard() }
@@ -2271,7 +2300,7 @@ private fun SettingsLayer(
     var section by remember { mutableStateOf<Int?>(null) }
     androidx.activity.compose.BackHandler { if (section != null) section = null else onClose() }
     Column(Modifier.fillMaxSize().background(Color(0xFFF7F8F4))) {
-        Surface(color = Color(0xFF0F5B4D)) {
+        Surface(color = LocalAppearance.current.primary) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { if (section != null) section = null else onClose() }) {
                     Icon(androidx.compose.material.icons.Icons.Default.ArrowBack, "رجوع", tint = Color.White)

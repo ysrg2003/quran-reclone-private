@@ -67,7 +67,8 @@ internal fun WordReferenceLineView(
         else -> Color.Transparent
     }
     val fontSize = (22f * textScale).sp
-    val textColor = Color(0xFF183D33)
+    val appearance = LocalAppearance.current
+    val textColor = appearance.readerText
 
     when (line.type) {
         "sura" -> Box(
@@ -100,7 +101,7 @@ internal fun WordReferenceLineView(
             Text(
                 text = line.text,
                 modifier = Modifier.fillMaxWidth()
-                    .background(Color(0xFFFFF7E8))
+                    .background(if (appearance.darkPaper) Color(0xFF22332D) else Color(0xFFFFF7E8))
                     .combinedClickable(
                         onClick = { pageAyahs.firstOrNull()?.let { onPlayBasmala(it.surah) } },
                         onLongClick = { pageAyahs.firstOrNull()?.let { onPlayBasmala(it.surah) } },
@@ -164,8 +165,8 @@ internal fun WordReferenceLineView(
                     val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets)
                     if (selectedKeys.isEmpty() && playing.isEmpty()) base else buildAnnotatedString {
                         append(base)
-                        selectedKeys.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = Color(0xFFFFE0A6)), st, en) }
-                        playing.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = Color(0xFFBFE3CF)), st, en) }
+                        selectedKeys.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = appearance.selectedHighlight), st, en) }
+                        playing.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = appearance.playingHighlight), st, en) }
                     }
                 },
                 onTextLayout = { r ->

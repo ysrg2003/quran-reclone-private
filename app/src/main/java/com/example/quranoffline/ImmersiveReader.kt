@@ -78,7 +78,7 @@ internal fun ImmersiveReader(
     }
     val scale = state.correctionSettings.mushafTextScale
     Box(
-        Modifier.fillMaxSize().background(Color(0xFFFFFEF8)).pointerInput(Unit) {
+        Modifier.fillMaxSize().background(LocalAppearance.current.paper).pointerInput(Unit) {
             awaitPointerEventScope {
                 while (true) {
                     val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
@@ -120,7 +120,7 @@ internal fun ImmersiveReader(
                         Text(
                             state.currentSpokenWord.orEmpty(),
                             modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF0B5D4B),
+                            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = LocalAppearance.current.readerText,
                         )
                     }
                     val selKeys = remember(state.selectedAyahIndices, state.allAyahs) { state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.let { a -> a.surah to a.ayah } }.toSet() }

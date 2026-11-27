@@ -56,7 +56,7 @@ fun QuranSearchOverlay(state: QuranUiState, viewModel: QuranViewModel, onClose: 
         outcome = viewModel.searchAyahs(query, scopeSurah)
     }
     Column(Modifier.fillMaxSize().background(Color(0xFFF2F3EE))) {
-        Surface(color = Color(0xFF0F5B4D)) {
+        Surface(color = LocalAppearance.current.primary) {
             Column(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "رجوع", tint = Color.White) }
