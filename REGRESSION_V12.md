@@ -109,3 +109,8 @@ Manual on device (UNTESTED by me, no device available):
 - JVM timing on synthetic full-size data (6236 ayahs, 77k words): Quran text 7.0 MB read 86 ms, pronunciation 4.7 MB read 227 ms (cold JVM). Real JSON parse time was not measured on a phone.
 - Khatma reminder repeat: interval in minutes (1..1440) and repeat count (1..50) typed by the user; empty interval = no repeat.
 - Hide ayahs: hides the whole shown page and the opening basmala (v21.1 hid only the selected ayah(s), so selecting the one-word first ayah of Al-Baqarah looked like only the basmala hid). Flag HIDE_ONLY_SELECTED restores the old behaviour. Reading-mushaf basmala line now follows hide too.
+
+## v22.1 (7916183, tag apk-v22.1)
+- Same release key. Device untested.
+- Hide ayahs (full-screen reader): hides exactly the selected ayahs' words (ayah 1 also hides its basmala box); no selection or a selection on another page hides nothing; the hide button with no selection shows a hint toast and does not switch modes. Flag HIDE_ONLY_SELECTED=false gives the v22 whole-page behaviour. Memorization tab 0 hide button is unchanged (whole page).
+- Mushaf basmala line no longer follows hide (that view is not shown while hide is on).
