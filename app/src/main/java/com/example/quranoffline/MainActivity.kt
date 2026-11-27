@@ -1117,7 +1117,7 @@ private fun quarterRangeLabel(first: Int, last: Int): String =
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
-private fun AyahBlock(
+internal fun AyahBlock(
     ayah: QuranAyah,
     hidden: Boolean,
     evaluation: com.example.quranoffline.data.RecitationEvaluation?,
@@ -1133,13 +1133,14 @@ private fun AyahBlock(
     onPlayAyah: (Int, Int) -> Unit,
     onPlayBasmala: (Int) -> Unit,
     onReadFromHere: (Int, Int) -> Unit,
+    onPlainTap: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val onlySpoken = com.example.quranoffline.data.WordDisplayRules.onlySpoken(androidx.compose.ui.platform.LocalContext.current)
     val openingBasmala = if (ayah.ayah == 1) com.example.quranoffline.data.QuranPresentation.openingBasmalaForSurah(ayah.surah) else null
     Column(
         verticalArrangement = Arrangement.spacedBy(5.dp),
-        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { menuExpanded = true }),
+        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { onPlainTap?.invoke() }, onLongClick = { menuExpanded = true }),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("﴿${ayah.ayah}﴾", color = Color(0xFFB6844A), style = MaterialTheme.typography.labelMedium)
@@ -1673,67 +1674,101 @@ private fun ReaderScreen(
                 onOpenAyahActions = { surah, ayah -> actionSurah = surah; actionAyah = ayah; showReaderActions = true },
                 textScale = readerTextScale,
                 onTapAyah = onTapAyah,
-                onLongPressAyah = onLongPressAyah,
+                onLongPressAyah = { surah, ayah -> actionSurah = surah; actionAyah = ayah; showReaderActions = true },
             )
         }
         }
         if (showReaderActions && sheetAyah != null) {
-            val sheetMetadata = state.metadata?.ayah(sheetAyah.surah, sheetAyah.ayah)
-            ModalBottomSheet(onDismissRequest = { showReaderActions = false }) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text("الاستماع إلى", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        "سورة ${state.metadata?.sura(sheetAyah.surah)?.arabicName ?: sheetAyah.surah} • الآية ${sheetAyah.ayah} • الصفحة ${sheetMetadata?.page ?: state.currentPage}",
-                        color = Color(0xFF66736C),
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Right,
-                    )
-                    val actions = listOf(
-                        "الآية الحالية" to com.example.quranoffline.data.ReaderScope.AYAH,
-                        "الصفحة الحالية" to com.example.quranoffline.data.ReaderScope.PAGES,
-                        "السورة كاملة من هنا" to com.example.quranoffline.data.ReaderScope.SURAH,
-                        "الجزء الحالي" to com.example.quranoffline.data.ReaderScope.JUZ,
-                        "الحزب والربع الحالي" to com.example.quranoffline.data.ReaderScope.HIZB,
-                        "القرآن كاملاً من هنا" to com.example.quranoffline.data.ReaderScope.QURAN,
-                    )
-                    actions.forEach { (label, scope) ->
-                        ListItem(
-                            headlineContent = { Text(label) },
-                            supportingContent = { Text("يبدأ من ${sheetAyah.surah}:${sheetAyah.ayah} وبالترتيب المصحفي") },
-                            modifier = Modifier.fillMaxWidth().combinedClickable(
-                                onClick = {
-                                    showReaderActions = false
-                                    if (scope == com.example.quranoffline.data.ReaderScope.AYAH) onPlayAyah(sheetAyah.surah, sheetAyah.ayah)
-                                    else onPlayScopeFromHere(scope, sheetAyah.surah, sheetAyah.ayah)
-                                },
-                                onLongClick = {},
-                            ),
-                        )
-                    }
-                    ListItem(
-                        headlineContent = { Text("حفظ هذا الموضع كمرجع") },
-                        supportingContent = { Text("سيظهر المرجع في السجل ويمكن فتحه واستئنافه لاحقاً") },
-                        modifier = Modifier.fillMaxWidth().combinedClickable(
-                            onClick = {
-                                showReaderActions = false
-                                onBookmark(sheetAyah.surah, sheetAyah.ayah)
-                            },
-                            onLongClick = {},
-                        ),
-                    )
-                    if (state.readerPlaying) {
-                        OutlinedButton(onClick = { showReaderActions = false; onStop() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("إيقاف الاستماع")
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                }
-                        }
+            ReaderAyahActionsSheet(
+                state = state, sheetAyah = sheetAyah, onDismiss = { showReaderActions = false },
+                onPlayAyah = onPlayAyah, onPlayScopeFromHere = onPlayScopeFromHere, onBookmark = onBookmark, onStop = onStop,
+                onSelect = onLongPressAyah, onSetStart = onSetStart, onMemorizeFromHere = onMemorizeFromHere,
+            )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+internal fun ReaderAyahActionsSheet(
+    state: com.example.quranoffline.data.QuranUiState,
+    sheetAyah: QuranAyah,
+    onDismiss: () -> Unit,
+    onPlayAyah: (Int, Int) -> Unit,
+    onPlayScopeFromHere: (com.example.quranoffline.data.ReaderScope, Int, Int) -> Unit,
+    onBookmark: (Int, Int) -> Unit,
+    onStop: () -> Unit,
+    onSelect: (Int, Int) -> Unit,
+    onSetStart: (Int, Int, Int, Boolean) -> Unit,
+    onMemorizeFromHere: (Int, Int) -> Unit,
+) {
+    val sheetMetadata = state.metadata?.ayah(sheetAyah.surah, sheetAyah.ayah)
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text("الاستماع إلى", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "سورة ${state.metadata?.sura(sheetAyah.surah)?.arabicName ?: sheetAyah.surah} • الآية ${sheetAyah.ayah} • الصفحة ${sheetMetadata?.page ?: state.currentPage}",
+                color = Color(0xFF66736C),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Right,
+            )
+            val actions = listOf(
+                "الآية الحالية" to com.example.quranoffline.data.ReaderScope.AYAH,
+                "الصفحة الحالية" to com.example.quranoffline.data.ReaderScope.PAGES,
+                "السورة كاملة من هنا" to com.example.quranoffline.data.ReaderScope.SURAH,
+                "الجزء الحالي" to com.example.quranoffline.data.ReaderScope.JUZ,
+                "الحزب والربع الحالي" to com.example.quranoffline.data.ReaderScope.HIZB,
+                "القرآن كاملاً من هنا" to com.example.quranoffline.data.ReaderScope.QURAN,
+            )
+            actions.forEach { (label, scope) ->
+                ListItem(
+                    headlineContent = { Text(label) },
+                    supportingContent = { Text("يبدأ من ${sheetAyah.surah}:${sheetAyah.ayah} وبالترتيب المصحفي") },
+                    modifier = Modifier.fillMaxWidth().combinedClickable(
+                        onClick = {
+                            onDismiss()
+                            if (scope == com.example.quranoffline.data.ReaderScope.AYAH) onPlayAyah(sheetAyah.surah, sheetAyah.ayah)
+                            else onPlayScopeFromHere(scope, sheetAyah.surah, sheetAyah.ayah)
+                        },
+                        onLongClick = {},
+                    ),
+                )
+            }
+            ListItem(
+                headlineContent = { Text("حفظ هذا الموضع كمرجع") },
+                supportingContent = { Text("سيظهر المرجع في السجل ويمكن فتحه واستئنافه لاحقاً") },
+                modifier = Modifier.fillMaxWidth().combinedClickable(
+                    onClick = {
+                        onDismiss()
+                        onBookmark(sheetAyah.surah, sheetAyah.ayah)
+                    },
+                    onLongClick = {},
+                ),
+            )
+            ListItem(
+                headlineContent = { Text("تحديد هذه الآية (لتشغيل عدة آيات)") },
+                modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { onDismiss(); onSelect(sheetAyah.surah, sheetAyah.ayah) }, onLongClick = {}),
+            )
+            ListItem(
+                headlineContent = { Text("تعيين بداية الحفظ من هنا") },
+                modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { onDismiss(); onSetStart(sheetAyah.surah, sheetAyah.ayah, 0, false) }, onLongClick = {}),
+            )
+            ListItem(
+                headlineContent = { Text("ابدأ التسميع من هنا") },
+                modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { onDismiss(); onMemorizeFromHere(sheetAyah.surah, sheetAyah.ayah) }, onLongClick = {}),
+            )
+            if (state.readerPlaying) {
+                OutlinedButton(onClick = { onDismiss(); onStop() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("إيقاف الاستماع")
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+                }
+
 }
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
@@ -2135,7 +2170,7 @@ private fun readerScopeLabel(scope: com.example.quranoffline.data.ReaderScope): 
 
 /** Notice about long madd plus, for surahs that open with disjoined letters, a way to start after them. */
 @Composable
-private fun MuqattaatOpeningCard(
+internal fun MuqattaatOpeningCard(
     state: com.example.quranoffline.data.QuranUiState,
     onFromBeginning: (Int, Int) -> Unit,
     onAfterOpening: (Int, Int, Int) -> Unit,

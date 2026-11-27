@@ -15,6 +15,20 @@ import com.example.quranoffline.data.AudioDownloadManager
 import com.example.quranoffline.data.AudioPackSizes
 import com.example.quranoffline.data.QuranSuraMetadata
 
+/** Runs [compute] off the main thread on a slow poll. Settings used to walk tens of thousands of files on the UI thread on every download tick. */
+@Composable
+private fun <T> pollBg(initial: T, everyMs: Long = 2500L, enabled: Boolean = true, compute: () -> T): T {
+    var v by remember { mutableStateOf(initial) }
+    val latest by rememberUpdatedState(compute)
+    LaunchedEffect(enabled) {
+        if (enabled) while (true) {
+            v = withContext(kotlinx.coroutines.Dispatchers.IO) { latest() }
+            kotlinx.coroutines.delay(everyMs)
+        }
+    }
+    return v
+}
+
 private fun mb(b: Long) = "%.1f ميغابايت".format(b / 1048576.0)
 
 /** Compact reciter dropdown, shared by Settings and the reader screen. Selection is remembered. */
@@ -50,8 +64,9 @@ fun AudioDownloadSettingsCard(suras: List<QuranSuraMetadata>) {
     var confirmAll by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf(com.example.quranoffline.data.Reciters.run { ensureLoaded(ctx); currentId }) }
     val rec = com.example.quranoffline.data.Reciters.byId(picked)
-    val usedAll = remember(rev, jobs) { mgr.usedBytesAll() }
-    val usedRec = remember(rev, jobs, picked) { mgr.usedBytes(picked) }
+    val usedAll = pollBg(0L) { mgr.usedBytesAll() }
+    val usedRec = pollBg(0L) { mgr.usedBytes(picked) }
+    val ayahCounts = pollBg(IntArray(115), 1500L, expanded) { mgr.store(picked).countsBySurah() }
     val total = remember(rev, picked) { mgr.totalSize(picked) }
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -74,7 +89,7 @@ fun AudioDownloadSettingsCard(suras: List<QuranSuraMetadata>) {
             OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(if (expanded) "إخفاء قائمة السور" else "اختيار السور للتنزيل") }
             if (expanded) suras.forEach { s ->
                 val job = jobs[mgr.key(picked, s.index)] ?: AudioDownloadManager.JobState()
-                val have = remember(rev, jobs, picked) { mgr.store(picked).surahCount(s.index) }
+                val have = ayahCounts[s.index]
                 val complete = have == s.ayahCount
                 val size = mgr.surahSize(picked, s.index)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -149,7 +164,8 @@ fun WordAudioSettingsCard(suras: List<QuranSuraMetadata>) {
     val rev by mgr.revision.collectAsState()
     var expanded by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
-    val used = remember(rev, jobs) { mgr.wordStore.usedBytes() }
+    val used = pollBg(0L, 4000L) { mgr.wordStore.usedBytes() }
+    val wordCounts = pollBg(IntArray(115), 2500L, expanded) { mgr.wordStore.countsBySurah() }
     val (total, exact) = remember(rev) { mgr.wordTotal() }
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -160,7 +176,7 @@ fun WordAudioSettingsCard(suras: List<QuranSuraMetadata>) {
             OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(if (expanded) "إخفاء قائمة السور" else "اختيار السور لتنزيل صوت الكلمات") }
             if (expanded) suras.forEach { s ->
                 val job = jobs[s.index] ?: AudioDownloadManager.JobState()
-                val have = remember(rev, jobs) { mgr.wordStore.surahCount(s.index) }
+                val have = wordCounts[s.index]
                 val size = mgr.wordSurahSize(s.index)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("${s.index}. ${s.arabicName}  (${size?.let { mb(it) } ?: "حجم غير مقاس"})", fontWeight = FontWeight.SemiBold)
@@ -210,9 +226,13 @@ fun BulkDownloadCard(suras: List<QuranSuraMetadata>) {
     }
     pending?.let { kind ->
         val free = mgr.freeBytes()
-        val (total, exact, have) = if (kind == AudioDownloadManager.BulkKind.AYAH)
-            Triple(mgr.totalSize(reciter.id), true, mgr.usedBytes(reciter.id))
-        else mgr.wordTotal().let { Triple(it.first as Long?, it.second, mgr.wordStore.usedBytes()) }
+        val have by produceState(0L, kind) {
+            value = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                if (kind == AudioDownloadManager.BulkKind.AYAH) mgr.usedBytes(reciter.id) else mgr.wordStore.usedBytes()
+            }
+        }
+        val (total, exact) = if (kind == AudioDownloadManager.BulkKind.AYAH) mgr.totalSize(reciter.id) to true
+        else mgr.wordTotal().let { (it.first as Long?) to it.second }
         val remaining = total?.let { (it - have).coerceAtLeast(0) }
         val enough = remaining != null && free >= remaining + 100L * 1024 * 1024
         AlertDialog(onDismissRequest = { pending = null },

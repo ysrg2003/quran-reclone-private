@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import android.app.Activity
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,6 +44,8 @@ internal fun ImmersiveReader(
     onExit: () -> Unit,
 ) {
     var barsVisible by rememberSaveable { mutableStateOf(true) }
+    var sheetSurah by rememberSaveable { mutableStateOf(0) }
+    var sheetAyahNo by rememberSaveable { mutableStateOf(0) }
     BackHandler(onBack = onExit)
     val view = LocalView.current
     val activity = LocalContext.current as? Activity
@@ -61,7 +65,58 @@ internal fun ImmersiveReader(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 6.dp, vertical = 4.dp),
         ) {
-            MushafPageSurface(
+            // Tasmee/hide/results use the same word view as the memorization section, so colours, hide-ayahs,
+            // only-spoken-words, opening basmala and long-press options follow exactly the same rules.
+            val tasmeeView = state.listening || state.hidden || state.evaluation != null || state.openingBasmalaActive
+            if (tasmeeView) {
+                val offsets = remember(state.ayahs) {
+                    IntArray(state.ayahs.size).also { arr -> var o = 0; state.ayahs.forEachIndexed { k, a -> arr[k] = o; o += a.words.size } }
+                }
+                Column(
+                    Modifier.fillMaxWidth().pointerInput(state.currentPage, state.totalPages) {
+                        var drag = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { drag = 0f },
+                            onHorizontalDrag = { _, d -> drag += d },
+                            onDragEnd = {
+                                val t = com.example.quranoffline.data.pageAfterHorizontalSwipe(state.currentPage, state.totalPages, drag)
+                                if (t != state.currentPage) viewModel.goToPage(t)
+                                drag = 0f
+                            },
+                        )
+                    },
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MuqattaatOpeningCard(state, viewModel::startMemorizationFrom, viewModel::startMemorizationAfterOpening)
+                    if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
+                        Text(
+                            state.currentSpokenWord.orEmpty(),
+                            modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF0B5D4B),
+                        )
+                    }
+                    state.ayahs.forEachIndexed { index, ayah ->
+                        AyahBlock(
+                            ayah = ayah,
+                            hidden = state.hidden,
+                            evaluation = state.evaluation,
+                            openingBasmalaEvaluation = state.openingBasmalaEvaluation,
+                            openingBasmalaWordIndex = state.openingBasmalaWordIndex,
+                            wordOffset = state.pageWordOffset + offsets.getOrElse(index) { 0 },
+                            listening = state.listening,
+                            currentSpokenWord = state.currentSpokenWord,
+                            currentSpokenWordIndex = state.currentSpokenWordIndex,
+                            onSetStart = viewModel::setMemorizationStart,
+                            onMemorizeFromHere = viewModel::startMemorizationFrom,
+                            onStartAfterOpening = viewModel::startMemorizationAfterOpening,
+                            onPlayAyah = viewModel::playAyah,
+                            onPlayBasmala = viewModel::playOpeningBasmala,
+                            onReadFromHere = viewModel::playFromHere,
+                            onPlainTap = toggle,
+                        )
+                    }
+                }
+            } else MushafPageSurface(
                 pageAyahs = state.ayahs,
                 state = state,
                 onSetStart = viewModel::setMemorizationStart,
@@ -76,9 +131,20 @@ internal fun ImmersiveReader(
                 onOpenAyahActions = { _, _ -> },
                 textScale = scale,
                 onTapAyah = viewModel::tapAyahSelection,
-                onLongPressAyah = viewModel::beginAyahSelection,
+                onLongPressAyah = { surah, ayah -> sheetSurah = surah; sheetAyahNo = ayah },
                 onPlainTap = toggle,
             )
+        }
+        sheetAyahNo.takeIf { it > 0 }?.let { no ->
+            state.allAyahs.firstOrNull { it.surah == sheetSurah && it.ayah == no }?.let { target ->
+                ReaderAyahActionsSheet(
+                    state = state, sheetAyah = target, onDismiss = { sheetAyahNo = 0 },
+                    onPlayAyah = viewModel::playAyah, onPlayScopeFromHere = viewModel::playReaderScopeFromHere,
+                    onBookmark = viewModel::saveBookmark, onStop = viewModel::stopReader,
+                    onSelect = viewModel::beginAyahSelection, onSetStart = viewModel::setMemorizationStart,
+                    onMemorizeFromHere = viewModel::startMemorizationFrom,
+                )
+            }
         }
         if (barsVisible) {
             Surface(

@@ -15,6 +15,12 @@ class AudioPackStore(private val root: File) {
         root.listFiles { f -> f.name.endsWith(".mp3") && f.name.startsWith("%03d".format(surah)) }?.toList().orEmpty()
     fun surahBytes(surah: Int): Long = surahFiles(surah).sumOf { it.length() }
     fun surahCount(surah: Int): Int = surahFiles(surah).size
+    /** One directory pass for all 114 surahs (index 1..114). Replaces 114 separate directory scans. */
+    fun countsBySurah(): IntArray {
+        val out = IntArray(115)
+        root.list()?.forEach { n -> if (n.endsWith(".mp3") && n.length >= 3) n.substring(0, 3).toIntOrNull()?.let { if (it in 1..114) out[it]++ } }
+        return out
+    }
     fun usedBytes(): Long = root.listFiles()?.sumOf { it.length() } ?: 0L
     fun deleteSurah(surah: Int) {
         root.listFiles { f -> f.name.startsWith("%03d".format(surah)) }?.forEach { it.delete() }

@@ -15,6 +15,12 @@ class WordPackStore(private val root: File) {
     private fun surahFiles(s: Int) = root.listFiles { f -> f.name.endsWith(".mp3") && f.name.startsWith("%03d_".format(s)) }?.toList().orEmpty()
     fun surahCount(s: Int) = surahFiles(s).size
     fun surahBytes(s: Int) = surahFiles(s).sumOf { it.length() }
+    /** One directory pass for all 114 surahs (index 1..114). */
+    fun countsBySurah(): IntArray {
+        val out = IntArray(115)
+        root.list()?.forEach { n -> if (n.endsWith(".mp3") && n.length >= 4 && n[3] == '_') n.substring(0, 3).toIntOrNull()?.let { if (it in 1..114) out[it]++ } }
+        return out
+    }
     fun usedBytes() = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
     fun deleteSurah(s: Int) { root.listFiles { f -> f.name.startsWith("%03d".format(s)) }?.forEach { it.delete() } }
     fun deleteAll() { root.deleteRecursively() }
@@ -22,15 +28,35 @@ class WordPackStore(private val root: File) {
     /** Index lines: "n<TAB>ayah<TAB>wordCount" and "w<TAB>ayah<TAB>pos<TAB>imlaei<TAB>uthmani" (normalized). */
     fun writeIndex(s: Int, lines: List<String>) { ensureDir(); index(s).writeText(lines.joinToString("\n")) }
 
+    private companion object { val indexCache = HashMap<String, ParsedIndex>() }
+
+    private class ParsedIndex(val stamp: Long, val counts: Map<Int, Int>, val words: Map<Long, Pair<String, String>>)
+
+    /** The per-surah index is parsed once and reused while the file is unchanged (it used to be re-read for every word played, on the main thread). */
+    private fun indexFor(s: Int): ParsedIndex? {
+        val f = index(s)
+        val stamp = f.lastModified() * 31 + f.length()
+        synchronized(indexCache) {
+            indexCache["${root.path}#$s"]?.takeIf { it.stamp == stamp }?.let { return it }
+        }
+        val rows = runCatching { f.readLines().map { it.split('\t') } }.getOrNull() ?: return null
+        val counts = HashMap<Int, Int>()
+        val words = HashMap<Long, Pair<String, String>>()
+        rows.forEach { r ->
+            if (r.size == 3 && r[0] == "n") { val a = r[1].toIntOrNull(); val n = r[2].toIntOrNull(); if (a != null && n != null) counts.putIfAbsent(a, n) }
+            else if (r.size == 5 && r[0] == "w") { val a = r[1].toIntOrNull(); val w = r[2].toIntOrNull(); if (a != null && w != null) words.putIfAbsent(a * 1000 + w + 0L, r[3] to r[4]) }
+        }
+        return ParsedIndex(stamp, counts, words).also { synchronized(indexCache) { indexCache["${root.path}#$s"] = it } }
+    }
+
     /** Local file for a word only if complete and the API's word identity and count match what the app asks for. */
     fun localWord(s: Int, a: Int, w: Int, count: Int, normalizedText: String): File? {
         val f = file(s, a, w)
         if (!f.isFile || f.length() == 0L) return null
-        val rows = runCatching { index(s).readLines().map { it.split('\t') } }.getOrNull() ?: return null
-        val n = rows.firstOrNull { it.size == 3 && it[0] == "n" && it[1] == a.toString() }?.get(2)?.toIntOrNull()
-        if (n != count) return null
-        val row = rows.firstOrNull { it.size == 5 && it[0] == "w" && it[1] == a.toString() && it[2] == w.toString() } ?: return null
-        if (normalizedText.isEmpty() || (normalizedText != row[3] && normalizedText != row[4])) return null
+        val idx = indexFor(s) ?: return null
+        if (idx.counts[a] != count) return null
+        val row = idx.words[a * 1000 + w + 0L] ?: return null
+        if (normalizedText.isEmpty() || (normalizedText != row.first && normalizedText != row.second)) return null
         return f
     }
 }

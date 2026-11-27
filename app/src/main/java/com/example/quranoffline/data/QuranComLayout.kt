@@ -189,12 +189,17 @@ object QuranComLayoutStore {
     fun readCached(context: Context): String? = runCatching { file(context).takeIf { it.isFile }?.readText() }.getOrNull()
 
     /** Downloads 604 pages (a few MB total), builds, validates, then writes atomically. Blocking: call off the main thread. */
-    fun downloadAndInstall(context: Context, onProgress: (Int) -> Unit): Result<Unit> = runCatching {
+    fun downloadAndInstall(
+        context: Context,
+        loadedAyahs: List<QuranAyah>? = null,
+        loadedBundled: WordReferenceLayout? = null,
+        onProgress: (Int) -> Unit,
+    ): Result<Unit> = runCatching {
         val appContext = context.applicationContext
-        val repo = QuranRepository(appContext)
-        val allAyahs = repo.allAyahs()
+        // Reuse what the app already loaded, instead of parsing the 77k-word Quran and the layout again.
+        val allAyahs = loadedAyahs?.takeIf { it.size == 6236 } ?: QuranRepository(appContext).allAyahs()
         val ayahMap = allAyahs.associateBy { "${it.surah}:${it.ayah}" }
-        val bundled = WordReferenceLayout.loadBundled(appContext)
+        val bundled = loadedBundled ?: WordReferenceLayout.loadBundled(appContext)
         val suraTexts = HashMap<Int, String>()
         var bismillah: String? = null
         bundled.pages.forEach { p ->

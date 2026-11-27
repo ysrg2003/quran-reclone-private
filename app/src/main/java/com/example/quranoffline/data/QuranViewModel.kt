@@ -154,7 +154,8 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 if (!QuranComLayoutStore.shouldAutoDownload(app, System.currentTimeMillis())) return@launch
                 if (!hasInternet(app)) return@launch
                 QuranComLayoutStore.markAttempt(app, System.currentTimeMillis())
-                QuranComLayoutStore.downloadAndInstall(app) { }
+                val loaded = state.value
+                QuranComLayoutStore.downloadAndInstall(app, loaded.allAyahs, loaded.wordReferenceLayout?.takeIf { !it.source.startsWith("quran.com") }) { }
             }
             // Initial apply (an installed layout is already loaded at startup, so only react to changes).
             QuranComLayoutStore.revision.collect { rev ->
