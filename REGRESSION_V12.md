@@ -102,3 +102,10 @@ Manual on device (UNTESTED by me, no device available):
 - Root cause of line-wide selection: the bundled line data lists only some ayahs per line (an ayah starting mid-line is missing from ayahKeys). Segments now come from end markers.
 - New res/raw/khatma_duff.wav (synthesized in-house), channel khatma_reminders_v3. Repeat up to 3 times while wird not done. Wird units ayahs/pages/surahs (pages and surahs approximate).
 - Hide ayahs: with a selection on another page the old rule hid nothing; now hides the whole page unless a selected ayah is on it.
+
+## v22 (54a2378, tag apk-v22)
+- 212 tests pass (JVM), 4 skipped. Same release key. Device untested.
+- ParsedCache: first launch parses the JSON as before, then writes parsed Quran text (with recognizer forms), pronunciation reference and bundled layout to files/parsed_cache/*.bin (atomic temp+rename, on the loading thread already off main). Next launches read the binary. Header = magic, format, app install time, expected size; end marker; any mismatch, truncation, exception or old app build => delete and rebuild from JSON. Downloaded quran.com layout still takes precedence as before.
+- JVM timing on synthetic full-size data (6236 ayahs, 77k words): Quran text 7.0 MB read 86 ms, pronunciation 4.7 MB read 227 ms (cold JVM). Real JSON parse time was not measured on a phone.
+- Khatma reminder repeat: interval in minutes (1..1440) and repeat count (1..50) typed by the user; empty interval = no repeat.
+- Hide ayahs: hides the whole shown page and the opening basmala (v21.1 hid only the selected ayah(s), so selecting the one-word first ayah of Al-Baqarah looked like only the basmala hid). Flag HIDE_ONLY_SELECTED restores the old behaviour. Reading-mushaf basmala line now follows hide too.
