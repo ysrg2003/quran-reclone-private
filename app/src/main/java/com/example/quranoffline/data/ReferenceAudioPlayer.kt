@@ -246,6 +246,8 @@ class ReferenceAudioPlayer(private val context: Context) {
         stop()
         val ticket=audioGeneration
         if(QuranComAudio.isReference(source)){
+            // Optional offline pack: a complete private local file wins; otherwise stream as in v11.
+            localAyahFile(source)?.let{playResolvedDataSource(it.absolutePath,null,null,onFinished);return}
             audioTask=audioWorker.submit{
                 val resolved=runCatching{QuranComAudio.resolve(source)}
                 mainHandler.post{if(ticket==audioGeneration){resolved.onSuccess{url->
@@ -258,6 +260,11 @@ class ReferenceAudioPlayer(private val context: Context) {
         }
         playResolvedDataSource(source,assetPath,segment,onFinished)
     }
+
+    private fun localAyahFile(source:String):java.io.File?=runCatching{
+        val u=java.net.URI(source);if(u.host!="ayah")return null
+        val p=u.path.trim('/').split('/');AudioPackStore(context).localAyah(p[0].toInt(),p[1].toInt())
+    }.getOrNull()
 
     private fun playResolvedDataSource(source:String,assetPath:String?,segment:TimingSegment?,onFinished:()->Unit){
         val mediaPlayer = MediaPlayer()
