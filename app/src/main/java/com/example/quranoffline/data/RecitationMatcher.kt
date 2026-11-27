@@ -163,6 +163,10 @@ private fun writtenSpellingFormsRaw(wordText: String): Set<String> {
     if (Regex("$fathTanween\\p{M}*ا\\p{M}*$").containsMatchIn(nfc) || Regex("ا\\p{M}*$fathTanween\\p{M}*$").containsMatchIn(nfc)) {
         forms += forms.filter { it.length > 2 && it.endsWith("ا") }.map { it.dropLast(1) }
     }
+    // Tanween is pronounced as a final nun, and recognizers often spell it that way (عليما -> عليمن).
+    if (nfc.any { it in "\u064B\u064C\u064D\u0657\u08F0\u08F1\u08F2" }) {
+        forms += forms.map { it + "ن" }
+    }
     // A final alif carrying the small round-rectangle zero (أَنَا۠, ٱلظُّنُونَا۠, قَوَارِيرَا۠) is pronounced
     // only when stopping; reciting on, the word ends at the consonant. Accept both readings.
     if (Regex("ا\\p{M}*\u06E0\\p{M}*$").containsMatchIn(nfc)) {

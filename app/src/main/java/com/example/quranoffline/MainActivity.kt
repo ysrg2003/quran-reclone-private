@@ -907,16 +907,16 @@ private fun CorrectionSettingsCard(
             Text("متى تُقرأ الآية كاملة؟", fontWeight = FontWeight.SemiBold, color = Color(0xFF183D33))
             Text("تُقرأ الكلمة فقط قبل هذا العدد، وتُقرأ الكلمة الأولى ثم الآية كاملة عند بلوغه في الآية نفسها.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF66736C))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                (1..CorrectionSettings.MAX_ERROR_THRESHOLD).forEach { count ->
+                (0..CorrectionSettings.MAX_ERROR_THRESHOLD).forEach { count ->
                     FilterChip(
                         selected = settings.wholeAyahAfterConsecutiveErrors == count,
                         enabled = controlsEnabled,
                         onClick = { onUpdate { it.copy(wholeAyahAfterConsecutiveErrors = count) } },
-                        label = { Text("$count") },
+                        label = { Text(if (count == 0) "إيقاف" else "$count") },
                     )
                 }
             }
-            Text("الافتراضي الحالي: 3 أخطاء متتالية في الآية نفسها.", style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C))
+            Text("الافتراضي الحالي: 3 أخطاء متتالية في الآية نفسها. «إيقاف» يعطّل قراءة الآية كاملة.", style = MaterialTheme.typography.labelSmall, color = Color(0xFF66736C))
             SettingSwitchRow(
                 title = "تشغيل مقطع أول خطأ قبل الآية",
                 description = "عند اختيار الآية كاملة: شغّل مقطع أول خطأ ثم الآية، أو الآية وحدها.",

@@ -23,8 +23,9 @@ import java.util.Calendar
  * The notification plays one short frame-drum hit (bundled, synthesized for this app).
  */
 object KhatmaReminders {
-    private const val CHANNEL_PREFIX = "khatma_reminders_duff_"
-    private val LEGACY_CHANNELS = listOf("khatma_reminders_v3")
+    private const val CHANNEL_PREFIX = "khatma_reminders_system_"
+    // v24.6: the reminder uses the phone own notification sound, so the duff channels are retired.
+    private val LEGACY_CHANNELS = listOf("khatma_reminders_v3") + (1..4).map { "khatma_reminders_duff_$it" }
 
     /** Number of duff hits in the reminder sound (1..4, default 2). One sound file and one channel per count: a channel's sound cannot change after creation. */
     fun duffHits(context: Context): Int =
@@ -95,9 +96,8 @@ object KhatmaReminders {
     private fun ensureChannel(context: Context): String {
         val hits = duffHits(context)
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val sound = Uri.parse("android.resource://${context.packageName}/${soundRes(hits)}")
-        val ch = NotificationChannel(channelId(hits), "تذكير الختمة (دف $hits)", NotificationManager.IMPORTANCE_HIGH).apply {
-            setSound(sound, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+        // No setSound: the channel keeps the phone default notification sound.
+        val ch = NotificationChannel(channelId(hits), "تذكير الختمة", NotificationManager.IMPORTANCE_HIGH).apply {
             enableVibration(true)
         }
         nm.createNotificationChannel(ch)
@@ -120,7 +120,7 @@ object KhatmaReminders {
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("تذكير الختمة").setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setSound(Uri.parse("android.resource://${context.packageName}/${soundRes(duffHits(context))}"))
+            .setSound(android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION))
             .setContentIntent(open).setAutoCancel(true).build()
         if (!notificationsAllowed(context)) return false
         return runCatching { NotificationManagerCompat.from(context).notify(7200 + s.kind.ordinal, n) }.isSuccess

@@ -91,6 +91,9 @@ class RecitationProgressTracker(
     private var pendingWordPrefix: String? = null
     private var muqattaatLeftover: List<MuqattaatLetter> = emptyList()
     private var stopProcessingSegment = false
+    // Consecutive issues counted across recognizer segments, not only inside one segment (v24.6).
+    private var consecutiveIssueAyah = -1
+    private var consecutiveIssues = 0
     private var cachedEvaluation = RecitationEvaluation(
         words = evaluationWords.toList(),
         matched = 0,
@@ -356,6 +359,7 @@ class RecitationProgressTracker(
         return when {
             exactCurrent -> {
                 markMatched(current, token)
+                noteMatch()
                 nextWordInAyah = current + 1
                 clearCorrectionIfResolved(globalWordIndex(currentAyahIndex, current))
                 if (nextWordInAyah >= expected.size) advanceAyah()
@@ -365,6 +369,7 @@ class RecitationProgressTracker(
                 // A reader may go back within the same ayah to repair or restart.
                 resetFollowingWordsToUncertain(rollbackMatch)
                 markMatched(rollbackMatch, token)
+                noteMatch()
                 nextWordInAyah = rollbackMatch + 1
                 clearCorrectionIfResolved(globalWordIndex(currentAyahIndex, rollbackMatch))
                 null
@@ -381,7 +386,7 @@ class RecitationProgressTracker(
                     ayahIndex = currentAyahIndex,
                     localWordIndex = current,
                     observed = token,
-                    readWholeAyah = shouldReadWholeAyah(consecutiveIssueCount(expectedWords, current, segment, segmentIndex)),
+                    readWholeAyah = shouldReadWholeAyah(maxOf(noteIssue(), consecutiveIssueCount(expectedWords, current, segment, segmentIndex))),
                     stopProcessingSegment = true,
                 )
             }
@@ -410,7 +415,7 @@ class RecitationProgressTracker(
                     ayahIndex = currentAyahIndex,
                     localWordIndex = current,
                     observed = token,
-                    readWholeAyah = shouldReadWholeAyah(consecutiveIssueCount(expectedWords, current, segment, segmentIndex)),
+                    readWholeAyah = shouldReadWholeAyah(maxOf(noteIssue(), consecutiveIssueCount(expectedWords, current, segment, segmentIndex))),
                     stopProcessingSegment = true,
                 )
                 nextWordInAyah = current
@@ -609,8 +614,17 @@ class RecitationProgressTracker(
         return CorrectionRequest(kind, ayahIndex, localWordIndex, observed, key, readWholeAyah = readWholeAyah, rangeEndLocalWordIndex = end, stopProcessingSegment = stopProcessingSegment)
     }
 
+    /** One issue event, counted across segments so the whole-ayah rule can actually reach its threshold. */
+    private fun noteIssue(): Int {
+        if (consecutiveIssueAyah != currentAyahIndex) { consecutiveIssueAyah = currentAyahIndex; consecutiveIssues = 0 }
+        consecutiveIssues++
+        return consecutiveIssues
+    }
+
+    private fun noteMatch() { consecutiveIssueAyah = currentAyahIndex; consecutiveIssues = 0 }
+
     private fun shouldReadWholeAyah(issueCount: Int): Boolean =
-        issueCount >= settings.wholeAyahAfterConsecutiveErrors
+        settings.wholeAyahAfterConsecutiveErrors > 0 && issueCount >= settings.wholeAyahAfterConsecutiveErrors
 
     private fun clearCorrectionIfResolved(globalIndex: Int?) {
         if (globalIndex != null && globalIndex == activeCorrectionGlobalIndex) {
@@ -639,6 +653,8 @@ class RecitationProgressTracker(
         }
         currentAyahIndex++
         nextWordInAyah = 0
+        consecutiveIssueAyah = -1
+        consecutiveIssues = 0
     }
 
     private fun currentGlobalWordIndex(): Int {

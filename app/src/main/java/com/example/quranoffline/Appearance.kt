@@ -115,6 +115,7 @@ fun AppearanceSpec.resolve(): Appearance {
 
 object AppearanceStore {
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("quran_appearance", Context.MODE_PRIVATE)
+    private const val KEY_JUZ_FIRST_V246 = "tab_order_juz_first_v246"
 
     fun normalizeOrder(raw: List<Int>): List<Int> {
         val want = AppearanceSpec.DEFAULT_TAB_ORDER
@@ -124,8 +125,15 @@ object AppearanceStore {
     fun load(c: Context): AppearanceSpec {
         val p = prefs(c)
         fun opt(k: String): Long? = if (p.contains(k)) p.getLong(k, 0L) else null
-        val order = normalizeOrder(p.getString("tab_order", null)?.split(',')?.mapNotNull { it.trim().toIntOrNull() }.orEmpty())
-        val migrated = if (order == AppearanceSpec.LEGACY_DEFAULT_TAB_ORDER) AppearanceSpec.DEFAULT_TAB_ORDER else order
+        val stored = normalizeOrder(p.getString("tab_order", null)?.split(',')?.mapNotNull { it.trim().toIntOrNull() }.orEmpty())
+        var migrated = if (stored == AppearanceSpec.LEGACY_DEFAULT_TAB_ORDER) AppearanceSpec.DEFAULT_TAB_ORDER else stored
+        // v24.6: Juz must be the first tab and the tab the app opens on, on every install, including
+        // upgrades that still carry an older saved order (a saved order was overriding the new default).
+        // This runs once; after that a deliberate reorder is kept.
+        if (!p.getBoolean(KEY_JUZ_FIRST_V246, false)) {
+            migrated = listOf(2) + migrated.filter { it != 2 }
+            p.edit().putBoolean(KEY_JUZ_FIRST_V246, true).putString("tab_order", migrated.joinToString(",")).apply()
+        }
         return AppearanceSpec(p.getString("preset", "green") ?: "green", opt("accent"), opt("paper"), opt("text"), migrated)
     }
 

@@ -1887,7 +1887,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         if (items.isEmpty()) return null
         val md = state.value.metadata
         fun nm(s: Int) = md?.sura(s)?.arabicName ?: s.toString()
-        val body = items.joinToString(" ") { "${it.text} ﴿${toArabicDigits(it.ayah)}﴾" }
+        val body = items.joinToString(" ") { "﴿${it.text}﴾ ﴿${toArabicDigits(it.ayah)}﴾" }
         val f = items.first(); val l = items.last()
         val ref = if (items.size == 1 || f.surah == l.surah && f.ayah == l.ayah) "[سورة ${nm(f.surah)}: ${f.ayah}]"
             else if (f.surah == l.surah) "[سورة ${nm(f.surah)}: ${f.ayah}-${l.ayah}]"

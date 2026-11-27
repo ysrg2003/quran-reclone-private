@@ -56,7 +56,8 @@ class WordPackStore(private val root: File) {
         val idx = indexFor(s) ?: return null
         if (idx.counts[a] != count) return null
         val row = idx.words[a * 1000 + w + 0L] ?: return null
-        if (normalizedText.isEmpty() || (normalizedText != row.first && normalizedText != row.second)) return null
+        val probe = normalizedText.replace(" ", "")
+        if (probe.isEmpty() || (probe != row.first.replace(" ", "") && probe != row.second.replace(" ", ""))) return null
         return f
     }
 }

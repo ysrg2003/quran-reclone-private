@@ -10,6 +10,11 @@ object QuranComAudio {
  const val API="https://api.quran.com/api/v4"
  fun ayah(surah:Int,ayah:Int):String {require(surah in 1..114&&ayah>0);return "quranapi://ayah/$surah/$ayah"}
  fun word(surah:Int,ayah:Int,index:Int,text:String,count:Int):String {require(index>=0);return "quranapi://word/$surah/$ayah/${index+1}?count=$count&text="+java.net.URLEncoder.encode(text,"UTF-8")}
+ // Waqf/pause marks and the spaces the API puts before them are not part of the word identity.
+ fun normalizedWord(text:String)=normalized(waqfMarks.replace(text,"")).replace(Regex("\\s"),"")
+  .replace('\u0649','\u064A') // alif maqsura and ya are the same sound; the asset and the API disagree
+  .replace('\u0629','\u0647') // ta marbuta and ha are the same sound
+ private val waqfMarks=Regex("[\\u0615\\u06D6-\\u06ED]")
  fun normalized(text:String)=java.text.Normalizer.normalize(text,java.text.Normalizer.Form.NFKD).replace(Regex("[\\p{M}ـ]"),"").replace('ٱ','ا').replace('أ','ا').replace('إ','ا').replace('آ','ا')
  fun isReference(source:String)=source.startsWith("quranapi://")
  private fun read(path:String):JSONObject {
@@ -27,7 +32,7 @@ object QuranComAudio {
   val key="$surah:$ayah"
   return when(u.host){
    "ayah"->{require(parts.size==2);val root=read("/recitations/${Reciters.currentId}/by_ayah/$key");val rows=root.getJSONArray("audio_files");require(rows.length()==1);val row=rows.getJSONObject(0);require(row.getString("verse_key")==key);media(row.getString("url"),"https://verses.quran.com/")}
-   "word"->{require(parts.size==3);val position=parts[2].toInt();val verse=read("/verses/by_key/$key?words=true&word_fields=audio_url,text_uthmani,text_imlaei").getJSONObject("verse");require(verse.getString("verse_key")==key);val words=verse.getJSONArray("words");val query=u.rawQuery.split("&").associate{val pair=it.split("=",limit=2);pair[0] to java.net.URLDecoder.decode(pair[1],"UTF-8")};require((0 until words.length()).count{words.getJSONObject(it).getString("char_type_name")=="word"}==query.getValue("count").toInt()){ "Word count differs; refusing guessed alignment" };val matches=(0 until words.length()).map{words.getJSONObject(it)}.filter{it.getInt("position")==position&&it.getString("char_type_name")=="word"};require(matches.size==1){"Exact word audio unavailable"};val row=matches.single();require(normalized(query.getValue("text")) in listOf(normalized(row.getString("text_uthmani")),normalized(row.getString("text_imlaei")))){"Word identity differs; refusing guessed alignment"};media(matches.single().getString("audio_url"),"https://audio.qurancdn.com/")}
+   "word"->{require(parts.size==3);val position=parts[2].toInt();val verse=read("/verses/by_key/$key?words=true&word_fields=audio_url,text_uthmani,text_imlaei").getJSONObject("verse");require(verse.getString("verse_key")==key);val words=verse.getJSONArray("words");val query=u.rawQuery.split("&").associate{val pair=it.split("=",limit=2);pair[0] to java.net.URLDecoder.decode(pair[1],"UTF-8")};require((0 until words.length()).count{words.getJSONObject(it).getString("char_type_name")=="word"}==query.getValue("count").toInt()){ "Word count differs; refusing guessed alignment" };val matches=(0 until words.length()).map{words.getJSONObject(it)}.filter{it.getInt("position")==position&&it.getString("char_type_name")=="word"};require(matches.size==1){"Exact word audio unavailable"};val row=matches.single();require(normalizedWord(query.getValue("text")) in listOf(normalizedWord(row.getString("text_uthmani")),normalizedWord(row.getString("text_imlaei")))){"Word identity differs; refusing guessed alignment"};media(matches.single().getString("audio_url"),"https://audio.qurancdn.com/")}
    else->error("Unknown audio reference")
   }
  }

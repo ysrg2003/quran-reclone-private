@@ -49,7 +49,8 @@ data class CorrectionSettings(
 
     companion object {
         const val DEFAULT_WHOLE_AYAH_AFTER_CONSECUTIVE_ERRORS = 3
-        const val MIN_ERROR_THRESHOLD = 1
+        /** 0 turns the whole-ayah correction off. */
+        const val MIN_ERROR_THRESHOLD = 0
         const val MAX_ERROR_THRESHOLD = 6
         const val DEFAULT_WORD_REPEAT_COUNT = 1
         const val DEFAULT_WHOLE_AYAH_REPEAT_COUNT = 1
