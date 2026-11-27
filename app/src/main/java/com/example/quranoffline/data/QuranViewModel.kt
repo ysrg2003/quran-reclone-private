@@ -310,6 +310,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                     check(pronunciationReference.size() == allAyahs.size) { "Word-derived pronunciation ayah count does not match Word Quran text" }
                     // Build the 77k-word tracker tables here, off the main thread.
                     RecitationProgressTracker.prewarm(allAyahs)
+                    AyahLookup.of(allAyahs).let { it.byStringKey; it.indexByStringKey; it.wordOffsetsList } // shared lookups, built once off the main thread
                     val requestedSurahAyahs = parsedRepository.ayahsForSurah(requestedSurah).ifEmpty { parsedRepository.ayahsForSurah(1) }
                     val selectedSurah = requestedSurahAyahs.firstOrNull()?.surah ?: 1
                     val totalAyahs = parsedRepository.ayahsForSurah(selectedSurah).size
@@ -423,7 +424,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val visible = layout?.ayahKeysForPage(actualPage)
-            ?.mapNotNull { (surah, ayah) -> state.value.allAyahs.firstOrNull { it.surah == surah && it.ayah == ayah } }
+            ?.mapNotNull { (surah, ayah) -> val lk = AyahLookup.of(state.value.allAyahs); lk.indexOf(surah, ayah).takeIf { it >= 0 }?.let { state.value.allAyahs[it] } }
             ?.takeIf { it.isNotEmpty() }
             ?: page(state.value.allAyahs, metadata, actualPage)
         val pageSurah = visible.firstOrNull()?.surah ?: state.value.selectedSurah
@@ -1700,6 +1701,9 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val index = searchIndexCache?.takeIf { searchIndexFor == all.size } ?: QuranSearch.buildIndex(all).also { searchIndexCache = it; searchIndexFor = all.size }
         QuranSearch.search(all, index, query, surah)
     }
+
+    /** Builds the search index off the main thread ahead of the first query. */
+    fun warmSearchIndex() { viewModelScope.launch { searchAyahs("x", null) } }
 
     fun pageOfAyah(surah: Int, ayah: Int): Int? = state.value.metadata?.let { QuickNav.pageForAyah(it, surah, ayah) }
 

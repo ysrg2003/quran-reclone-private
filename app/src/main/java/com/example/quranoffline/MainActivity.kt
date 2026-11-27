@@ -1830,16 +1830,12 @@ internal fun MushafPageSurface(
     var horizontalDrag by remember { mutableFloatStateOf(0f) }
     // Build the expensive lookup structures once per page surface. Reusing
     // them across lines avoids O(lineCount * allAyahCount) recomposition work.
-    val allAyahsByKey = remember(state.allAyahs) {
-        state.allAyahs.associateBy { it.selectionKey() }
-    }
+    val allAyahsByKey = remember(state.allAyahs) { com.example.quranoffline.data.AyahLookup.of(state.allAyahs).byStringKey }
     val pageAyahsByKey = remember(pageAyahs) {
         pageAyahs.associateBy { it.selectionKey() }
     }
-    val ayahIndexByKey = remember(state.allAyahs) {
-        state.allAyahs.mapIndexed { index, ayah -> ayah.selectionKey() to index }.toMap()
-    }
-    val wordOffsets = remember(state.allAyahs) { buildWordOffsets(state.allAyahs) }
+    val ayahIndexByKey = remember(state.allAyahs) { com.example.quranoffline.data.AyahLookup.of(state.allAyahs).indexByStringKey }
+    val wordOffsets = remember(state.allAyahs) { com.example.quranoffline.data.AyahLookup.of(state.allAyahs).wordOffsetsList }
     val selectedIndices = remember(state.selectedAyahIndices) { state.selectedAyahIndices.toSet() }
     val isOpeningPage = state.currentPage <= 2
     Card(

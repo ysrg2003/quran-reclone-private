@@ -165,8 +165,9 @@ object QuranPageLayout {
         firstVisibleAyah: QuranAyah?,
     ): Int {
         if (firstVisibleAyah == null) return 0
-        val index = allAyahs.indexOfFirst { it.surah == firstVisibleAyah.surah && it.ayah == firstVisibleAyah.ayah }
-        return if (index < 0) 0 else allAyahs.take(index).sumOf { it.words.size }
+        val lookup = AyahLookup.of(allAyahs)
+        val index = lookup.indexOf(firstVisibleAyah.surah, firstVisibleAyah.ayah)
+        return if (index < 0) 0 else lookup.wordOffsets[index]
     }
 
     fun pageForAyahIndex(

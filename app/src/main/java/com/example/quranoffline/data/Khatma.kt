@@ -36,7 +36,14 @@ object KhatmaLogic {
         return state.copy(covered = out, completed = completed, lastIndex = valid.last(), dayKey = dayKey, today = today)
     }
 
-    fun encode(bits: BitSet): String = bits.toByteArray().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    private const val HEX = "0123456789abcdef"
+
+    fun encode(bits: BitSet): String {
+        val bytes = bits.toByteArray()
+        val out = CharArray(bytes.size * 2)
+        for (i in bytes.indices) { val v = bytes[i].toInt() and 0xff; out[i * 2] = HEX[v shr 4]; out[i * 2 + 1] = HEX[v and 15] }
+        return String(out)
+    }
 
     fun decode(hex: String?): BitSet {
         if (hex.isNullOrEmpty() || hex.length % 2 != 0) return BitSet(TOTAL)

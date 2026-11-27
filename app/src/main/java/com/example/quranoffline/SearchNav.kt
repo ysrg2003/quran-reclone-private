@@ -49,6 +49,7 @@ fun QuranSearchOverlay(state: QuranUiState, viewModel: QuranViewModel, onClose: 
     var outcome by remember { mutableStateOf<SearchOutcome?>(null) }
     var scopeOpen by remember { mutableStateOf(false) }
     val suras = state.metadata?.suras.orEmpty()
+    LaunchedEffect(Unit) { viewModel.warmSearchIndex() }
     LaunchedEffect(query, scopeSurah) {
         if (query.isBlank()) { outcome = null; return@LaunchedEffect }
         delay(300) // debounce typing
