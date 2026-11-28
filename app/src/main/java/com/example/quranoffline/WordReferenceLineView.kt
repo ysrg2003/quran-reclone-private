@@ -164,7 +164,7 @@ internal fun WordReferenceLineView(
             val playKey = state.readerCurrentKey
             val playing = androidx.compose.runtime.remember(segments, playKey) { if (playKey == null) emptyList() else segments.filter { it.first == playKey } }
             Text(
-                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, revealJudged, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys, playing) {
+                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, revealJudged, state.selectedAyahIndices, state.listening, state.currentAyahIndex, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys, playing) {
                     val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets, textColor, revealJudged)
                     if (selectedKeys.isEmpty() && playing.isEmpty()) base else buildAnnotatedString {
                         append(base)
@@ -218,51 +218,63 @@ private fun annotatedWordReferenceLine(
     revealJudged: Boolean = false,
 ): AnnotatedString {
     val shownText = line.displayText()
-    // v24.8: in hide mode the whole line is transparent except the words already said or judged, which show their correct text
-    // in the status colour (same rule as the old per-ayah view: a judged word shows the right text, wrong ones in red).
     if (line.type != "ayah") return AnnotatedString(shownText)
-    // Reading tab and full-screen reader keep the plain hide (whole line transparent, no colouring), as before v24.8.
+    // Reading tab page and the plain hide keep the old behaviour (whole line transparent by the caller, no colouring).
     if (state.hidden && !revealJudged) return AnnotatedString(shownText)
     val hiddenMode = state.hidden
     val evaluation = state.evaluation
-    if (evaluation == null) {
-        return if (hiddenMode) buildAnnotatedString { append(shownText); addStyle(SpanStyle(color = Color.Transparent), 0, shownText.length) } else AnnotatedString(shownText)
+    // v25.1: while tasmee runs on a selection, only the selected ayahs are drawn (the rest of the page stays blank in place).
+    val selKeys: Set<String>? = if (revealJudged && (state.listening || evaluation != null) && state.selectedAyahIndices.isNotEmpty())
+        state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.selectionKey() }.toSet() else null
+    if (!hiddenMode && selKeys == null) {
+        if (evaluation == null) return AnnotatedString(shownText)
     }
-
+    // Earlier user decision kept: hide with a selection and no tasmee running hides only the selected ayahs, the rest stays visible.
+    val hideSel: Set<String>? = if (revealJudged && hiddenMode && selKeys == null && state.selectedAyahIndices.isNotEmpty())
+        state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.selectionKey() }.toSet() else null
     val ranges = mutableListOf<Triple<Int, Int, Color>>()
-    val revealed = mutableListOf<Pair<Int, Int>>()
+    val visible = mutableListOf<Pair<Int, Int>>()
+    val judgedAll = HashMap<String, Boolean>()
     var lineCursor = 0
     line.ayahKeys.forEach { key ->
         val ayah = ayahsByKey[key] ?: return@forEach
         val ayahIndex = ayahIndexByKey[key] ?: return@forEach
+        val inSel = selKeys == null || key in selKeys
         val range = line.wordRanges[key]
         var searchFrom = if (range != null) lineCursor else 0
+        var allJudged = true
         ayah.words.forEachIndexed { localIndex, word ->
+            val wordEval = evaluation?.words?.getOrNull(wordOffsets.getOrNull(ayahIndex)?.plus(localIndex) ?: -1)
+            val status = wordEval?.status
+            val judged = status != null && status != WordStatus.UNCERTAIN
+            if (!judged) allJudged = false
             if (range != null && (localIndex < range.first || localIndex >= range.second)) return@forEachIndexed
             val start = line.text.indexOf(word.text, searchFrom)
             if (start < 0) return@forEachIndexed
             val end = start + word.text.length
-            val globalIndex = wordOffsets.getOrNull(ayahIndex)?.plus(localIndex) ?: return@forEachIndexed
-            val wordEval = evaluation.words.getOrNull(globalIndex)
-            val status = wordEval?.status
             val color = statusHighlightColor(status)
-            if (color != null) ranges += Triple(start, end, color)
-            // revealed in hide mode: judged (not merely pending) or an observed word
-            if (hiddenMode && com.example.quranoffline.data.WordDisplayRules.pageWordVisible(true, status, wordEval?.observed != null)) revealed += start to end
+            if (color != null && inSel) ranges += Triple(start, end, color)
+            val show = inSel && (hideSel != null && key !in hideSel || !hiddenMode || com.example.quranoffline.data.WordDisplayRules.pageWordVisible(true, status, wordEval?.observed != null))
+            if (show) visible += start to end
             searchFrom = end
             if (range != null) lineCursor = end
         }
+        // The ayah is finished when all its words are judged, or the recitation has moved on past it.
+        val passed = (state.listening || evaluation != null) && state.currentAyahIndex > ayahIndex
+        judgedAll[key] = allJudged || passed
     }
-
+    // The ayah-end number follows the same rule as its ayah: shown with the text when not hidden, revealed once the ayah is finished.
+    val numberSpans = line.ayahNumbers.mapNotNull { n ->
+        val key = line.ayahKeys.firstOrNull { it.substringAfter(':').toIntOrNull() == n.number } ?: return@mapNotNull null
+        val inSel = selKeys == null || key in selKeys
+        if (inSel && (!hiddenMode || (hideSel != null && key !in hideSel) || judgedAll[key] == true)) n.start to n.end else null
+    }
     return buildAnnotatedString {
         append(shownText)
-        if (hiddenMode) {
-            addStyle(SpanStyle(color = Color.Transparent), 0, shownText.length)
-            revealed.forEach { (a, b) -> addStyle(SpanStyle(color = revealColor), a, b) }
-        }
-        ranges.forEach { (start, end, color) ->
-            addStyle(SpanStyle(background = color.copy(alpha = 0.34f)), start, end)
-        }
+        if (hiddenMode || selKeys != null) addStyle(SpanStyle(color = Color.Transparent), 0, shownText.length)
+        if (hiddenMode || selKeys != null) visible.forEach { (a, b) -> addStyle(SpanStyle(color = revealColor), a, b) }
+        if (hiddenMode || selKeys != null) numberSpans.forEach { (a, b) -> addStyle(SpanStyle(color = revealColor), a.coerceIn(0, shownText.length), b.coerceIn(0, shownText.length)) }
+        ranges.forEach { (start, end, color) -> addStyle(SpanStyle(background = color.copy(alpha = 0.34f)), start, end) }
     }
 }
 

@@ -46,3 +46,10 @@ class HifzMushafLayoutRegressionTest {
         assertEquals(3, CorrectionSettings.DEFAULTS.wholeAyahAfterConsecutiveErrors)
     }
 }
+
+class PageWordRevealRulesTest {
+    @Test fun pendingWordStaysHiddenJudgedWordShows() {
+        org.junit.Assert.assertFalse(R.pageWordVisible(true, WordStatus.UNCERTAIN, false))
+        org.junit.Assert.assertTrue(R.pageWordVisible(true, WordStatus.MATCHED, false))
+    }
+}

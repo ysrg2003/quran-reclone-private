@@ -200,3 +200,9 @@ Manual on device (UNTESTED by me, no device available):
 ## v25.0
 - Copy supersedes the v24.9 "(text) only" rule: each ayah in plain parentheses, then one bracket with surah name and ayah number or range in Arabic-Indic digits. One ayah: (text) [البقرة: ٥]. Two: (a) (b) [البقرة: ٥-٦]. Across surahs: [A: ٢٨٦ - B: ١]. No image. Test: AyahShareFormatTest. Format chosen by main; user gave the content (text, number, surah name).
 - Nothing else changed. Not tested on a phone. Full JVM suite passes.
+
+## v25.1
+- Reading (full-screen reader): the mic/tasmee view no longer draws the old per-ayah memorization cards. It uses the same mushaf page surface and reveal rules as the Hifz/Tasmee tab. Toolbars, radial menu, selection and hide button unchanged.
+- Ayah-end number: in hide mode it is revealed together with its ayah once all its words are judged or recitation has moved past it (Hifz tab, Reading tab page, full-screen reader).
+- Selection + tasmee: only the selected ayahs are drawn, the rest of the page stays blank in place (not the whole page). Hide with a selection and no tasmee still hides only the selected ayahs (earlier decision kept).
+- Not tested on a phone. JVM suite passes; these are Compose rendering changes with no JVM test.
