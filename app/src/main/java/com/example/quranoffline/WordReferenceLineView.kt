@@ -262,15 +262,12 @@ private fun annotatedWordReferenceLine(
         val passed = (state.listening || evaluation != null) && state.currentAyahIndex > ayahIndex
         judgedAll[key] = allJudged || passed
     }
-    // The ayah-end number follows the same rule as its ayah: shown with the text when not hidden, revealed once the ayah is finished.
+    // The ayah-end number is always visible, also while the ayah text is hidden.
     val numberSpans = if (selKeys != null) emptyList() else line.ayahNumbers.mapNotNull { n ->
         val key = line.ayahKeys.firstOrNull { it.substringAfter(':').toIntOrNull() == n.number } ?: return@mapNotNull null
-        if (!hiddenMode || judgedAll[key] == true) n.start to n.end else null
+        n.start to n.end   // v25.4 (user 28993633): the ayah number is never hidden
     }
-    val blankNumbers = if (selKeys == null) emptyList() else line.ayahNumbers.mapNotNull { n ->
-        val key = line.ayahKeys.firstOrNull { it.substringAfter(':').toIntOrNull() == n.number } ?: return@mapNotNull null
-        if (key in selKeys && judgedAll[key] != true) n.start to n.end else null
-    }
+    val blankNumbers = emptyList<Pair<Int, Int>>()
     return buildAnnotatedString {
         append(shownText)
         if (hiddenMode) {
