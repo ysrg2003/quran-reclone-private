@@ -216,3 +216,6 @@ Manual on device (UNTESTED by me, no device available):
 ## v25.3
 - Selection tasmee (Hifz tab and mic-launched tasmee in the full-screen reader): only the selected ayahs are hidden (judged words and the ayah number reveal as recited); the ayahs before and after on the same page stay visible. User, Telegram 28959716.
 - Reading screen unchanged from v25.2 (which equals v25.0 apart from the mic-launched tasmee view). Not tested on a phone; JVM suite passes.
+
+## v25.4
+- Ayah-end number is never hidden (user, Telegram 28993633): replaces the v25.1 "reveal the number after its ayah". Applies to hide and tasmee in the Hifz tab and the mic-launched tasmee view. Reading screen unchanged from v25.2/v25.3. Not tested on a phone; JVM suite passes.
