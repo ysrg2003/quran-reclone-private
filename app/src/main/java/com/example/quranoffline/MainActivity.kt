@@ -1804,6 +1804,7 @@ private fun ReaderScreen(
             }
         }
         item {
+          CompositionLocalProvider(LocalRevealJudgedWhenHidden provides true) {
             MushafPageSurface(
                 pageAyahs = state.ayahs,
                 state = state,
@@ -1827,6 +1828,7 @@ private fun ReaderScreen(
                 onTapAyah = onTapAyah,
                 onLongPressAyah = { surah, ayah -> actionSurah = surah; actionAyah = ayah; showReaderActions = true },
             )
+          }
         }
         }
         if (showReaderActions && sheetAyah != null) {
