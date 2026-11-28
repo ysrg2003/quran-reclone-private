@@ -206,3 +206,9 @@ Manual on device (UNTESTED by me, no device available):
 - Ayah-end number: in hide mode it is revealed together with its ayah once all its words are judged or recitation has moved past it (Hifz tab, Reading tab page, full-screen reader).
 - Selection + tasmee: only the selected ayahs are drawn, the rest of the page stays blank in place (not the whole page). Hide with a selection and no tasmee still hides only the selected ayahs (earlier decision kept).
 - Not tested on a phone. JVM suite passes; these are Compose rendering changes with no JVM test.
+
+## v25.2
+- Reading screen restored to its v25.0 look and behaviour: the Reading page tab and the full-screen reader's normal view and hide (hide with a selection hides only the selected ayahs, per-ayah view) are as before v25.1.
+- The only change is the mic-launched tasmee in the full-screen reader (while listening, with results, or opening basmala): it shows the current Hifz/Tasmee tab view (mushaf page, same reveal rules, ayah number revealed after its ayah, selection tasmee draws only the selected ayahs). The old per-ayah memorization cards no longer appear there.
+- Hifz tab: hide is whole page again, no selection-only hiding.
+- Not tested on a phone; JVM suite passes, Compose changes unverified on screen.
