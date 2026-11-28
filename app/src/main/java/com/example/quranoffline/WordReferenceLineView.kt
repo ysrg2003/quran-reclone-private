@@ -221,16 +221,17 @@ private fun annotatedWordReferenceLine(
     if (line.type != "ayah") return AnnotatedString(shownText)
     // Reading tab page and the plain hide keep the old behaviour (whole line transparent by the caller, no colouring).
     if (state.hidden && !revealJudged) return AnnotatedString(shownText)
-    val hiddenMode = state.hidden
     val evaluation = state.evaluation
-    // v25.1: while tasmee runs on a selection, only the selected ayahs are drawn (the rest of the page stays blank in place).
+    // v25.3: while tasmee runs on a selection, only the selected ayahs are hidden (judged words reveal); the rest of the page stays visible.
     val selKeys: Set<String>? = if (revealJudged && (state.listening || evaluation != null) && state.selectedAyahIndices.isNotEmpty())
         state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.selectionKey() }.toSet() else null
+    val hiddenMode = state.hidden && selKeys == null
     if (!hiddenMode && selKeys == null) {
         if (evaluation == null) return AnnotatedString(shownText)
     }
     val ranges = mutableListOf<Triple<Int, Int, Color>>()
     val visible = mutableListOf<Pair<Int, Int>>()
+    val blank = mutableListOf<Pair<Int, Int>>()   // selection tasmee: only these ranges are hidden, the rest of the page stays visible
     val judgedAll = HashMap<String, Boolean>()
     var lineCursor = 0
     line.ayahKeys.forEach { key ->
@@ -251,8 +252,9 @@ private fun annotatedWordReferenceLine(
             val end = start + word.text.length
             val color = statusHighlightColor(status)
             if (color != null && inSel) ranges += Triple(start, end, color)
-            val show = inSel && (!hiddenMode || com.example.quranoffline.data.WordDisplayRules.pageWordVisible(true, status, wordEval?.observed != null))
+            val show = if (selKeys != null) false else (!hiddenMode || com.example.quranoffline.data.WordDisplayRules.pageWordVisible(true, status, wordEval?.observed != null))
             if (show) visible += start to end
+            if (selKeys != null && inSel && !com.example.quranoffline.data.WordDisplayRules.pageWordVisible(true, status, wordEval?.observed != null)) blank += start to end
             searchFrom = end
             if (range != null) lineCursor = end
         }
@@ -261,16 +263,22 @@ private fun annotatedWordReferenceLine(
         judgedAll[key] = allJudged || passed
     }
     // The ayah-end number follows the same rule as its ayah: shown with the text when not hidden, revealed once the ayah is finished.
-    val numberSpans = line.ayahNumbers.mapNotNull { n ->
+    val numberSpans = if (selKeys != null) emptyList() else line.ayahNumbers.mapNotNull { n ->
         val key = line.ayahKeys.firstOrNull { it.substringAfter(':').toIntOrNull() == n.number } ?: return@mapNotNull null
-        val inSel = selKeys == null || key in selKeys
-        if (inSel && (!hiddenMode || judgedAll[key] == true)) n.start to n.end else null
+        if (!hiddenMode || judgedAll[key] == true) n.start to n.end else null
+    }
+    val blankNumbers = if (selKeys == null) emptyList() else line.ayahNumbers.mapNotNull { n ->
+        val key = line.ayahKeys.firstOrNull { it.substringAfter(':').toIntOrNull() == n.number } ?: return@mapNotNull null
+        if (key in selKeys && judgedAll[key] != true) n.start to n.end else null
     }
     return buildAnnotatedString {
         append(shownText)
-        if (hiddenMode || selKeys != null) addStyle(SpanStyle(color = Color.Transparent), 0, shownText.length)
-        if (hiddenMode || selKeys != null) visible.forEach { (a, b) -> addStyle(SpanStyle(color = revealColor), a, b) }
-        if (hiddenMode || selKeys != null) numberSpans.forEach { (a, b) -> addStyle(SpanStyle(color = revealColor), a.coerceIn(0, shownText.length), b.coerceIn(0, shownText.length)) }
+        if (hiddenMode) {
+            addStyle(SpanStyle(color = Color.Transparent), 0, shownText.length)
+            visible.forEach { (a, b) -> addStyle(SpanStyle(color = revealColor), a, b) }
+            numberSpans.forEach { (a, b) -> addStyle(SpanStyle(color = revealColor), a.coerceIn(0, shownText.length), b.coerceIn(0, shownText.length)) }
+        }
+        (blank + blankNumbers).forEach { (a, b) -> addStyle(SpanStyle(color = Color.Transparent), a.coerceIn(0, shownText.length), b.coerceIn(0, shownText.length)) }
         ranges.forEach { (start, end, color) -> addStyle(SpanStyle(background = color.copy(alpha = 0.34f)), start, end) }
     }
 }
