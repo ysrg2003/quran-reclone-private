@@ -196,3 +196,7 @@ Manual on device (UNTESTED by me, no device available):
 - Copy of an ayah is now exactly "(" + ayah text + ")" in plain parentheses with nothing added (no ayah number, no surah reference, no plus sign). A multi-ayah copy is "(a) (b)". Test: AyahShareFormatTest.
 - Hide: the reveal-judged-words behaviour is limited to the Hifz/Tasmee tab. The Reading tab and the full-screen reader hide exactly as before v24.8 (whole line transparent, no colouring). The full-screen reader code is untouched.
 - Not tested on a phone. Full JVM suite passes.
+
+## v25.0
+- Copy supersedes the v24.9 "(text) only" rule: each ayah in plain parentheses, then one bracket with surah name and ayah number or range in Arabic-Indic digits. One ayah: (text) [البقرة: ٥]. Two: (a) (b) [البقرة: ٥-٦]. Across surahs: [A: ٢٨٦ - B: ١]. No image. Test: AyahShareFormatTest. Format chosen by main; user gave the content (text, number, surah name).
+- Nothing else changed. Not tested on a phone. Full JVM suite passes.
