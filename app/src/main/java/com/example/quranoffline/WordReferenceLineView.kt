@@ -170,7 +170,8 @@ internal fun WordReferenceLineView(
                         append(base)
                         selectedKeys.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = appearance.selectedHighlight), st, en) }
                         playing.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = appearance.playingHighlight), st, en) }
-                        if (state.readerWordIndex >= 0 && playKey != null) playingWordSpan(line, ayahsByKey[playKey], playKey, state.readerWordIndex)?.let { (st, en) -> addStyle(SpanStyle(background = Color(0xFFF2C94C).copy(alpha = 0.7f)), st, en) }
+                        // v25.10: same look as tasmee: words already recited in the playing ayah get the tasmee 'matched' colour, following the reciter's audio
+                        if (state.readerWordIndex >= 0 && playKey != null) playingWordSpans(line, ayahsByKey[playKey], playKey, state.readerWordIndex).forEach { (st, en) -> addStyle(SpanStyle(background = Color(0xFF5CB889).copy(alpha = 0.34f)), st, en) }
                     }
                 },
                 onTextLayout = { r ->
@@ -304,18 +305,20 @@ internal const val READER_EDGE_MARGIN_DP = 12
 /** True only inside the Hifz/Tasmee tab: a hidden page reveals the words already said or judged. */
 val LocalRevealJudgedWhenHidden = androidx.compose.runtime.compositionLocalOf { false }
 
-/** v25.9: character span of one word of [ayah] inside this mushaf line, or null when that word is not on the line. */
-private fun playingWordSpan(line: WordReferenceLine, ayah: QuranAyah?, key: String, wordIndex: Int): Pair<Int, Int>? {
-    if (ayah == null || key !in line.ayahKeys) return null
+/** v25.10: character spans of words 0..[wordIndex] of [ayah] that sit on this mushaf line (tasmee-style "already recited" words). */
+private fun playingWordSpans(line: WordReferenceLine, ayah: QuranAyah?, key: String, wordIndex: Int): List<Pair<Int, Int>> {
+    if (ayah == null || key !in line.ayahKeys) return emptyList()
     val range = line.wordRanges[key]
+    val out = ArrayList<Pair<Int, Int>>()
     var from = 0
     ayah.words.forEachIndexed { i, w ->
-        if (range != null && i < range.first) return@forEachIndexed // those words sit on the previous line
+        if (i > wordIndex) return@forEachIndexed
+        if (range != null && i < range.first) return@forEachIndexed
         val st = line.text.indexOf(w.text, from)
         if (st < 0) return@forEachIndexed
         val en = st + w.text.length
-        if (i == wordIndex) return if (range == null || (i >= range.first && i < range.second)) st to en else null
+        if (range == null || i < range.second) out += st to en
         from = en
     }
-    return null
+    return out
 }
