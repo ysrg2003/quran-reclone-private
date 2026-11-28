@@ -229,9 +229,6 @@ private fun annotatedWordReferenceLine(
     if (!hiddenMode && selKeys == null) {
         if (evaluation == null) return AnnotatedString(shownText)
     }
-    // Earlier user decision kept: hide with a selection and no tasmee running hides only the selected ayahs, the rest stays visible.
-    val hideSel: Set<String>? = if (revealJudged && hiddenMode && selKeys == null && state.selectedAyahIndices.isNotEmpty())
-        state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.selectionKey() }.toSet() else null
     val ranges = mutableListOf<Triple<Int, Int, Color>>()
     val visible = mutableListOf<Pair<Int, Int>>()
     val judgedAll = HashMap<String, Boolean>()
@@ -254,7 +251,7 @@ private fun annotatedWordReferenceLine(
             val end = start + word.text.length
             val color = statusHighlightColor(status)
             if (color != null && inSel) ranges += Triple(start, end, color)
-            val show = inSel && (hideSel != null && key !in hideSel || !hiddenMode || com.example.quranoffline.data.WordDisplayRules.pageWordVisible(true, status, wordEval?.observed != null))
+            val show = inSel && (!hiddenMode || com.example.quranoffline.data.WordDisplayRules.pageWordVisible(true, status, wordEval?.observed != null))
             if (show) visible += start to end
             searchFrom = end
             if (range != null) lineCursor = end
@@ -267,7 +264,7 @@ private fun annotatedWordReferenceLine(
     val numberSpans = line.ayahNumbers.mapNotNull { n ->
         val key = line.ayahKeys.firstOrNull { it.substringAfter(':').toIntOrNull() == n.number } ?: return@mapNotNull null
         val inSel = selKeys == null || key in selKeys
-        if (inSel && (!hiddenMode || (hideSel != null && key !in hideSel) || judgedAll[key] == true)) n.start to n.end else null
+        if (inSel && (!hiddenMode || judgedAll[key] == true)) n.start to n.end else null
     }
     return buildAnnotatedString {
         append(shownText)

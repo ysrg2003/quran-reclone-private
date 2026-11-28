@@ -96,7 +96,10 @@ internal fun ImmersiveReader(
             // Tasmee/hide/results use the same word view as the memorization section, so colours, hide-ayahs,
             // only-spoken-words, opening basmala and long-press options follow exactly the same rules.
             val tasmeeView = state.listening || state.hidden || state.evaluation != null || state.openingBasmalaActive
-            if (tasmeeView) {
+            // v25.2: the mic-launched tasmee (listening, results, opening basmala) shows the current Hifz/Tasmee tab view (mushaf page);
+            // the Reading screen's own hide with a selection keeps its old per-ayah view exactly as before.
+            val tasmeeRunning = state.listening || state.evaluation != null || state.openingBasmalaActive
+            if (tasmeeRunning) {
                 MuqattaatOpeningCard(state, viewModel::startMemorizationFrom, viewModel::startMemorizationAfterOpening)
                 if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
                     Text(
@@ -131,6 +134,67 @@ internal fun ImmersiveReader(
                     fullBleed = true,
                     minHeightDp = (view.height / LocalDensity.current.density).toInt().coerceAtLeast(LocalConfiguration.current.screenHeightDp),
                 )
+                }
+            } else if (tasmeeView) {
+                val offsets = remember(state.ayahs) {
+                    IntArray(state.ayahs.size).also { arr -> var o = 0; state.ayahs.forEachIndexed { k, a -> arr[k] = o; o += a.words.size } }
+                }
+                Column(
+                    Modifier.fillMaxWidth().pointerInput(state.currentPage, state.totalPages) {
+                        var drag = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { drag = 0f },
+                            onHorizontalDrag = { _, d -> drag += d },
+                            onDragEnd = {
+                                val t = com.example.quranoffline.data.pageAfterHorizontalSwipe(state.currentPage, state.totalPages, drag)
+                                if (t != state.currentPage) viewModel.goToPage(t)
+                                drag = 0f
+                            },
+                        )
+                    },
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MuqattaatOpeningCard(state, viewModel::startMemorizationFrom, viewModel::startMemorizationAfterOpening)
+                    if (state.hidden && state.listening && !state.currentSpokenWord.isNullOrBlank()) {
+                        Text(
+                            state.currentSpokenWord.orEmpty(),
+                            modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = LocalAppearance.current.readerText,
+                        )
+                    }
+                    val selKeys = remember(state.selectedAyahIndices, state.allAyahs) { state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it)?.let { a -> a.surah to a.ayah } }.toSet() }
+                    val tasmeeActive = state.listening || state.evaluation != null
+                    // v23: with a selection the tasmee view shows only the selected ayahs (a copy of the tasmee tab for them).
+                    val onlySelected = tasmeeActive && selKeys.isNotEmpty() && state.ayahs.any { (it.surah to it.ayah) in selKeys }
+                    val pageKeys = remember(state.ayahs) { state.ayahs.map { it.surah to it.ayah } }
+                    state.ayahs.forEachIndexed { index, ayah ->
+                      if (onlySelected && (ayah.surah to ayah.ayah) !in selKeys) return@forEachIndexed
+                      val blockStart = state.pageWordOffset + offsets.getOrElse(index) { 0 }
+                      val holdsLive = ayah.ayah == 1 || state.currentSpokenWordIndex in blockStart until (blockStart + ayah.words.size)
+                      Box(Modifier.onGloballyPositioned { ayahY["${ayah.surah}:${ayah.ayah}"] = it.positionInParent().y.toInt() }) {
+                        AyahBlock(
+                            ayah = ayah,
+                            // With a selection, tasmee hides only the selected ayahs; the rest stay visible.
+                            hidden = com.example.quranoffline.data.ayahHiddenInTasmee(state.hidden, selKeys, pageKeys, ayah.surah to ayah.ayah, tasmeeActive),
+                            evaluation = state.evaluation,
+                            openingBasmalaEvaluation = state.openingBasmalaEvaluation,
+                            openingBasmalaWordIndex = state.openingBasmalaWordIndex,
+                            wordOffset = state.pageWordOffset + offsets.getOrElse(index) { 0 },
+                            listening = state.listening,
+                            // v23.3: only the ayah that holds the word being said (and surah openings, for the basmala) gets the live word,
+                            // so a recognizer update recomposes one block instead of every block on the page.
+                            currentSpokenWord = if (holdsLive) state.currentSpokenWord else null,
+                            currentSpokenWordIndex = if (holdsLive) state.currentSpokenWordIndex else -1,
+                            onSetStart = viewModel::setMemorizationStart,
+                            onMemorizeFromHere = viewModel::startMemorizationFrom,
+                            onStartAfterOpening = viewModel::startMemorizationAfterOpening,
+                            onPlayAyah = viewModel::playAyah,
+                            onPlayBasmala = viewModel::playOpeningBasmala,
+                            onReadFromHere = viewModel::playFromHere,
+                            onPlainTap = toggle,
+                        )
+                      }
+                    }
                 }
             } else MushafPageSurface(
                 pageAyahs = state.ayahs,

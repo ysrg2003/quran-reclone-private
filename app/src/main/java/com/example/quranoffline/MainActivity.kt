@@ -1804,7 +1804,7 @@ private fun ReaderScreen(
             }
         }
         item {
-          CompositionLocalProvider(LocalRevealJudgedWhenHidden provides true) {
+          run {
             MushafPageSurface(
                 pageAyahs = state.ayahs,
                 state = state,
