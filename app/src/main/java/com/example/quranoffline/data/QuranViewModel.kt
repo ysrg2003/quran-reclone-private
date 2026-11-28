@@ -591,7 +591,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val a = key.substringAfter(':').toIntOrNull() ?: return
         val rid = Reciters.currentId
         readerWordJob = viewModelScope.launch {
-            val segs = withContext(Dispatchers.IO) { WordTimingRepository.get(rid, s, a) }
+            val segs = withContext(Dispatchers.IO) { WordTimingRepository.get(AudioPackStore(getApplication(), rid), rid, s, a) }
             if (segs.isEmpty()) return@launch
             var last = -1
             while (generation == readerGeneration && state.value.readerCurrentKey == key) {

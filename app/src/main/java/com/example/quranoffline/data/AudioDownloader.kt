@@ -37,6 +37,7 @@ class AudioDownloader(
             }
             bytes += store.file(surah, a).length(); done++; progress(done, ayahCount)
         }
+        runCatching { WordTimingRepository.saveForDownload(store, reciterId, surah) } // v25.11: word timings are stored with the audio (best effort)
         return Result.Done(done, bytes)
     }
 

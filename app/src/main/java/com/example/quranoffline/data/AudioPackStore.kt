@@ -8,6 +8,8 @@ class AudioPackStore(private val root: File) {
     constructor(context: Context, reciterId: Int = Reciters.DEFAULT_ID) : this(dirFor(context, reciterId))
 
     fun file(surah: Int, ayah: Int) = File(root, "%03d%03d.mp3".format(surah, ayah))
+    /** v25.11: word timings of a downloaded surah, stored with its audio (deleted with it). */
+    fun timingsFile(surah: Int) = File(root, "%03d.timings.json".format(surah))
     fun part(surah: Int, ayah: Int) = File(root, "%03d%03d.mp3.part".format(surah, ayah))
     /** A file counts only when complete; partial downloads live in .part files. */
     fun localAyah(surah: Int, ayah: Int): File? = file(surah, ayah).takeIf { it.isFile && it.length() > 0 }
