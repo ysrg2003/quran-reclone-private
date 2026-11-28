@@ -164,12 +164,13 @@ internal fun WordReferenceLineView(
             val playKey = state.readerCurrentKey
             val playing = androidx.compose.runtime.remember(segments, playKey) { if (playKey == null) emptyList() else segments.filter { it.first == playKey } }
             Text(
-                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, revealJudged, state.selectedAyahIndices, state.listening, state.currentAyahIndex, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys, playing) {
+                text = androidx.compose.runtime.remember(line, state.evaluation, state.hidden, revealJudged, state.selectedAyahIndices, state.listening, state.currentAyahIndex, state.readerWordIndex, ayahsByKey, ayahIndexByKey, wordOffsets, selectedKeys, playing) {
                     val base = annotatedWordReferenceLine(line, state, ayahsByKey, ayahIndexByKey, wordOffsets, textColor, revealJudged)
                     if (selectedKeys.isEmpty() && playing.isEmpty()) base else buildAnnotatedString {
                         append(base)
                         selectedKeys.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = appearance.selectedHighlight), st, en) }
                         playing.forEach { (_, st, en) -> if (en > st) addStyle(SpanStyle(background = appearance.playingHighlight), st, en) }
+                        if (state.readerWordIndex >= 0 && playKey != null) playingWordSpan(line, ayahsByKey[playKey], playKey, state.readerWordIndex)?.let { (st, en) -> addStyle(SpanStyle(background = Color(0xFFF2C94C).copy(alpha = 0.7f)), st, en) }
                     }
                 },
                 onTextLayout = { r ->
@@ -302,3 +303,19 @@ internal const val READER_EDGE_MARGIN_DP = 12
 
 /** True only inside the Hifz/Tasmee tab: a hidden page reveals the words already said or judged. */
 val LocalRevealJudgedWhenHidden = androidx.compose.runtime.compositionLocalOf { false }
+
+/** v25.9: character span of one word of [ayah] inside this mushaf line, or null when that word is not on the line. */
+private fun playingWordSpan(line: WordReferenceLine, ayah: QuranAyah?, key: String, wordIndex: Int): Pair<Int, Int>? {
+    if (ayah == null || key !in line.ayahKeys) return null
+    val range = line.wordRanges[key]
+    var from = 0
+    ayah.words.forEachIndexed { i, w ->
+        if (range != null && i < range.first) return@forEachIndexed // those words sit on the previous line
+        val st = line.text.indexOf(w.text, from)
+        if (st < 0) return@forEachIndexed
+        val en = st + w.text.length
+        if (i == wordIndex) return if (range == null || (i >= range.first && i < range.second)) st to en else null
+        from = en
+    }
+    return null
+}

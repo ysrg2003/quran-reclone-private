@@ -67,6 +67,8 @@ data class QuranUiState(
     val readerPlaying: Boolean = false,
     val readerScope: ReaderScope = ReaderScope.AYAH,
     val readerCurrentKey: String? = null,
+    /** v25.9: 0-based index of the word being recited in readerCurrentKey's ayah, or -1 (no word timings). */
+    val readerWordIndex: Int = -1,
     val selectedAyahIndices: List<Int> = emptyList(),
     /** The long-pressed ayah. Extending toward earlier and later ayahs moves each side on its own around it. */
     val selectionBase: Int = -1,
@@ -580,6 +582,28 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    private var readerWordJob: Job? = null
+    /** v25.9: follows the playback position and publishes the word being recited. Needs the reciter's own ayah file (streamed or downloaded pack), not the bundled offline assets. */
+    private fun trackReaderWords(generation: Long, key: String) {
+        readerWordJob?.cancel()
+        if (BuildConfig.OFFLINE_DISTRIBUTION) return
+        val s = key.substringBefore(':').toIntOrNull() ?: return
+        val a = key.substringAfter(':').toIntOrNull() ?: return
+        val rid = Reciters.currentId
+        readerWordJob = viewModelScope.launch {
+            val segs = withContext(Dispatchers.IO) { WordTimingRepository.get(rid, s, a) }
+            if (segs.isEmpty()) return@launch
+            var last = -1
+            while (generation == readerGeneration && state.value.readerCurrentKey == key) {
+                val pos = referenceAudioPlayer.positionMs()
+                val w = if (pos >= 0) (WordTimingRepository.wordAt(segs, pos)?.minus(1) ?: -1) else last
+                if (w != last) { last = w; state.value = state.value.copy(readerWordIndex = w) }
+                kotlinx.coroutines.delay(50)
+            }
+            if (generation == readerGeneration) state.value = state.value.copy(readerWordIndex = -1)
+        }
+    }
+
     fun playFromHere(surah: Int, ayah: Int) = startReader(ReaderScope.QURAN, surah, ayah)
 
     fun playSurahFromHere(surah: Int, ayah: Int) = startReader(ReaderScope.SURAH, surah, ayah)
@@ -618,7 +642,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         state.value = state.value.copy(readerPlaying = true, readerScope = ReaderScope.AYAH, readerCurrentKey = items.first().key, notice = "تُقرأ $label…")
         referenceAudioPlayer.playQueue(
             items = items,
-            onItemStarted = { key -> if (generation == readerGeneration) { state.value = state.value.copy(readerCurrentKey = key); recordReadFromKey(key) } },
+            onItemStarted = { key -> if (generation == readerGeneration) { state.value = state.value.copy(readerCurrentKey = key, readerWordIndex = -1); trackReaderWords(generation, key); recordReadFromKey(key) } },
             onFinished = { if (generation == readerGeneration) state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "اكتملت قراءة $label.") },
         )
     }
@@ -657,7 +681,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         state.value = state.value.copy(readerPlaying = true, readerScope = scope, readerCurrentKey = items.first().key, notice = "تُقرأ ${readerScopeLabel(scope)}…")
         referenceAudioPlayer.playQueue(
             items = items,
-            onItemStarted = { key -> if (generation == readerGeneration) { state.value = state.value.copy(readerCurrentKey = key); recordReadFromKey(key) } },
+            onItemStarted = { key -> if (generation == readerGeneration) { state.value = state.value.copy(readerCurrentKey = key, readerWordIndex = -1); trackReaderWords(generation, key); recordReadFromKey(key) } },
             onFinished = { if (generation == readerGeneration) state.value = state.value.copy(readerPlaying = false, readerCurrentKey = null, notice = "اكتملت قراءة ${readerScopeLabel(scope)}.") },
         )
     }

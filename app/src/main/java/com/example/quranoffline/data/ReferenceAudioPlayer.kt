@@ -363,6 +363,9 @@ class ReferenceAudioPlayer(private val context: Context) {
         }
     }
 
+    /** v25.9: playback position of the current ayah file in ms, or -1 when nothing is playing. */
+    fun positionMs(): Int = runCatching { player?.takeIf { it.isPlaying }?.currentPosition }.getOrNull() ?: -1
+
     fun stop() {
         audioGeneration++;audioTask?.cancel(true);audioTask=null
         stopRunnable?.let(mainHandler::removeCallbacks)
