@@ -212,3 +212,7 @@ Manual on device (UNTESTED by me, no device available):
 - The only change is the mic-launched tasmee in the full-screen reader (while listening, with results, or opening basmala): it shows the current Hifz/Tasmee tab view (mushaf page, same reveal rules, ayah number revealed after its ayah, selection tasmee draws only the selected ayahs). The old per-ayah memorization cards no longer appear there.
 - Hifz tab: hide is whole page again, no selection-only hiding.
 - Not tested on a phone; JVM suite passes, Compose changes unverified on screen.
+
+## v25.3
+- Selection tasmee (Hifz tab and mic-launched tasmee in the full-screen reader): only the selected ayahs are hidden (judged words and the ayah number reveal as recited); the ayahs before and after on the same page stay visible. User, Telegram 28959716.
+- Reading screen unchanged from v25.2 (which equals v25.0 apart from the mic-launched tasmee view). Not tested on a phone; JVM suite passes.
