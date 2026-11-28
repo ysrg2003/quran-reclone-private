@@ -48,6 +48,9 @@ internal fun ImmersiveReader(
     onExit: () -> Unit,
 ) {
     var barsVisible by rememberSaveable { mutableStateOf(true) }
+    var pendingClear by remember { mutableStateOf<String?>(null) }
+    var pendingSeen by remember { mutableStateOf(false) }
+    var circleClosedFor by remember { mutableStateOf<List<Int>?>(null) }
     var radialCenter by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var listenAnchor by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var tasmeeRange by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -127,6 +130,7 @@ internal fun ImmersiveReader(
                     onTapAyah = viewModel::tapAyahSelection,
                     onLongPressAyah = { surah, ayah ->
                         viewModel.beginAyahSelection(surah, ayah)
+                        circleClosedFor = null; pendingClear = null; pendingSeen = false
                         radialCenter = androidx.compose.ui.geometry.Offset(lastTouch[0], lastTouch[1])
                     },
                     onPlainTap = toggle,
@@ -213,7 +217,8 @@ internal fun ImmersiveReader(
                 onTapAyah = viewModel::tapAyahSelection,
                 onLongPressAyah = { surah, ayah ->
                     viewModel.beginAyahSelection(surah, ayah)
-                    radialCenter = androidx.compose.ui.geometry.Offset(lastTouch[0], lastTouch[1])
+                    circleClosedFor = null; pendingClear = null; pendingSeen = false
+                        radialCenter = androidx.compose.ui.geometry.Offset(lastTouch[0], lastTouch[1])
                 },
                 onPlainTap = toggle,
                 onClearSelection = viewModel::clearAyahSelection,
@@ -221,8 +226,20 @@ internal fun ImmersiveReader(
                 minHeightDp = (view.height / LocalDensity.current.density).toInt().coerceAtLeast(LocalConfiguration.current.screenHeightDp),
             )
         }
+        // Selection stays while the chosen action runs and clears when it completes (user, v25.5).
+        val actionActive = when (pendingClear) {
+            "play" -> state.readerPlaying
+            "tasmee" -> state.listening || state.evaluation != null || state.openingBasmalaEvaluation != null
+            "info" -> infoAyah != null
+            else -> false
+        }
+        LaunchedEffect(pendingClear, actionActive) {
+            if (pendingClear == null) return@LaunchedEffect
+            if (actionActive) pendingSeen = true
+            else if (pendingSeen) { viewModel.clearAyahSelection(); pendingClear = null; pendingSeen = false }
+        }
         val firstSel = state.selectedAyahIndices.firstOrNull()?.let { state.allAyahs.getOrNull(it) }
-        if (firstSel != null) {
+        if (firstSel != null && circleClosedFor != state.selectedAyahIndices) {
             val rs = firstSel.surah; val ra = firstSel.ayah
             val shown = if (radialCenter == androidx.compose.ui.geometry.Offset.Zero) androidx.compose.ui.geometry.Offset(view.width * 0.85f, view.height * 0.5f) else radialCenter
             // Actions use the whole selection (first to last selected ayah). The circle stays until its middle button is tapped.
@@ -231,7 +248,7 @@ internal fun ImmersiveReader(
                 btnDp = state.correctionSettings.selectionCircleDp,
                 onMove = { radialCenter = it },
                 onCloseAll = viewModel::clearAyahSelection,
-                actions = listOf(
+                actions = listOf<Triple<androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit>>(
                     Triple(Icons.Default.PlayArrow, "استماع المحدد فقط") { viewModel.playSelectionOrAyah(rs, ra) },
                     Triple(Icons.Default.ContentCopy, "نسخ المحدد") { viewModel.ayahShareText(rs, ra)?.let { clipboard.setText(androidx.compose.ui.text.AnnotatedString(it)) } },
                     Triple(Icons.Default.Share, "مشاركة المحدد") {
@@ -243,7 +260,16 @@ internal fun ImmersiveReader(
                     Triple(Icons.Default.Bookmark, "حفظ علامة") { viewModel.saveBookmark(rs, ra) },
                     Triple(Icons.Default.Mic, "تسميع المحدد فقط") { if (state.listening) viewModel.stopListening() else { viewModel.prepareTasmeeForSelection(rs, ra); onStartListening() } },
                     Triple(Icons.Default.Info, "معلومات الآية") { infoAyah = rs to ra },
-                ),
+                ).map { (ic, d, a) -> Triple(ic, d) {
+                    circleClosedFor = state.selectedAyahIndices
+                    a()
+                    when (d) {
+                        "استماع المحدد فقط" -> { pendingClear = "play"; pendingSeen = false }
+                        "تسميع المحدد فقط" -> { pendingClear = "tasmee"; pendingSeen = false }
+                        "معلومات الآية" -> { pendingClear = "info"; pendingSeen = true }
+                        else -> { viewModel.clearAyahSelection(); pendingClear = null }
+                    }
+                } },
             )
         }
         tasmeeRange?.let { (ts, ta) ->

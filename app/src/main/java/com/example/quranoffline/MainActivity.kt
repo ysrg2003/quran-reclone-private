@@ -427,7 +427,7 @@ private fun QuranOfflineApp(
         )
         if (showSearch) QuranSearchOverlay(
             state = state, viewModel = viewModel, onClose = { showSearch = false },
-            onOpenAyah = { surah, ayah -> viewModel.pageOfAyah(surah, ayah)?.let { viewModel.jumpToPage(it) }; showSearch = false; tab = 4 },
+            onOpenAyah = { surah, ayah -> viewModel.pageOfAyah(surah, ayah)?.let { viewModel.jumpToPage(it) }; viewModel.beginAyahSelection(surah, ayah); showSearch = false; tab = 4 },
         )
         if (showGoTo) GoToDialog(state = state, viewModel = viewModel, onDismiss = { showGoTo = false }, onGo = { page -> viewModel.jumpToPage(page); showGoTo = false; tab = 4 })
         }

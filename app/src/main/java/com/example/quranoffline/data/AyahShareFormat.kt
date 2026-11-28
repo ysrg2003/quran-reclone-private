@@ -1,21 +1,23 @@
 package com.example.quranoffline.data
 
 /**
- * Copy/share format (user, v25.0): each ayah as "(" + text + ")", then one bracket with the surah name and the
- * ayah number or range in Arabic-Indic digits, e.g. (...) [البقرة: ٥] or (a) (b) [البقرة: ٥-٦]. No image, nothing else.
+ * Copy/share format (user, v25.5): ONE block in curly braces, each ayah preceded by its number marker exactly as the
+ * reading screen draws it (﴿n﴾ text), then the reference [سورة اسم : n] or [سورة اسم : a-b]. Nothing else.
  */
 object AyahShareFormat {
     fun digits(n: Int): String = n.toString().map { '٠' + (it - '0') }.joinToString("")
 
-    fun body(texts: List<String>): String = texts.joinToString(" ") { "($it)" }
+    /** items = (surah, ayah, text) */
+    fun body(numbers: List<Int>, texts: List<String>): String =
+        "{" + texts.indices.joinToString(" ") { "\uFD3F${numbers[it]}\uFD3E ${texts[it]}" } + "}"
 
     fun reference(firstSurahName: String, firstAyah: Int, lastSurahName: String, lastAyah: Int, sameSurah: Boolean, count: Int): String =
         when {
-            count <= 1 || (sameSurah && firstAyah == lastAyah) -> "[$firstSurahName: ${digits(firstAyah)}]"
-            sameSurah -> "[$firstSurahName: ${digits(firstAyah)}-${digits(lastAyah)}]"
-            else -> "[$firstSurahName: ${digits(firstAyah)} - $lastSurahName: ${digits(lastAyah)}]"
+            count <= 1 || (sameSurah && firstAyah == lastAyah) -> "[سورة $firstSurahName : ${digits(firstAyah)}]"
+            sameSurah -> "[سورة $firstSurahName : ${digits(firstAyah)}-${digits(lastAyah)}]"
+            else -> "[سورة $firstSurahName : ${digits(firstAyah)} - سورة $lastSurahName : ${digits(lastAyah)}]"
         }
 
-    fun text(texts: List<String>, firstSurahName: String, firstAyah: Int, lastSurahName: String, lastAyah: Int, sameSurah: Boolean): String =
-        body(texts) + " " + reference(firstSurahName, firstAyah, lastSurahName, lastAyah, sameSurah, texts.size)
+    fun text(numbers: List<Int>, texts: List<String>, firstSurahName: String, lastSurahName: String, sameSurah: Boolean): String =
+        body(numbers, texts) + " " + reference(firstSurahName, numbers.first(), lastSurahName, numbers.last(), sameSurah, texts.size)
 }

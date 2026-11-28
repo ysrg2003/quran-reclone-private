@@ -5,8 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class AyahShareFormatTest {
-    @Test fun singleAyah() = assertEquals("(نص) [البقرة: ٥]", F.text(listOf("نص"), "البقرة", 5, "البقرة", 5, true))
-    @Test fun twoAyahs() = assertEquals("(أ) (ب) [البقرة: ٥-٦]", F.text(listOf("أ", "ب"), "البقرة", 5, "البقرة", 6, true))
-    @Test fun acrossSurahs() = assertEquals("(أ) (ب) [البقرة: ٢٨٦ - آل عمران: ١]", F.text(listOf("أ", "ب"), "البقرة", 286, "آل عمران", 1, false))
-    @Test fun multiDigit() = assertEquals("[الفاتحة: ١٢٣]", F.reference("الفاتحة", 123, "الفاتحة", 123, true, 1))
+    @Test fun singleAyah() = assertEquals("{\uFD3F5\uFD3E نص} [سورة البقرة : ٥]", F.text(listOf(5), listOf("نص"), "البقرة", "البقرة", true))
+    @Test fun multiAyahSelection() = assertEquals("{\uFD3F4\uFD3E أ \uFD3F5\uFD3E ب \uFD3F6\uFD3E ج \uFD3F7\uFD3E د} [سورة آل عمران : ٤-٧]",
+        F.text(listOf(4, 5, 6, 7), listOf("أ", "ب", "ج", "د"), "آل عمران", "آل عمران", true))
+    @Test fun acrossSurahs() = assertEquals("{\uFD3F286\uFD3E أ \uFD3F1\uFD3E ب} [سورة البقرة : ٢٨٦ - سورة آل عمران : ١]", F.text(listOf(286, 1), listOf("أ", "ب"), "البقرة", "آل عمران", false))
 }

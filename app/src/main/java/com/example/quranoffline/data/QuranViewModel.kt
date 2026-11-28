@@ -1940,7 +1940,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
         val md = state.value.metadata
         fun nm(n: Int) = md?.sura(n)?.arabicName ?: n.toString()
         val f = items.first(); val l = items.last()
-        return AyahShareFormat.text(items.map { it.text }, nm(f.surah), f.ayah, nm(l.surah), l.ayah, f.surah == l.surah)
+        return AyahShareFormat.text(items.map { it.ayah }, items.map { it.text }, nm(f.surah), nm(l.surah), f.surah == l.surah)
     }
 
     /** Radial menu "tasmee": start at the first selected ayah (or the tapped one) and stop after the last selected one. */
