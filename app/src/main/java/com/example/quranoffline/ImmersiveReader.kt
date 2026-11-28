@@ -127,7 +127,7 @@ internal fun ImmersiveReader(
                     onOpenReaderActions = {},
                     onOpenAyahActions = { _, _ -> },
                     textScale = scale,
-                    onTapAyah = viewModel::tapAyahSelection,
+                    onTapAyah = { s0, a0 -> if (state.selectedAyahIndices.isEmpty() || circleClosedFor != state.selectedAyahIndices) viewModel.tapAyahSelection(s0, a0) },
                     onLongPressAyah = { surah, ayah ->
                         viewModel.beginAyahSelection(surah, ayah)
                         circleClosedFor = null; pendingClear = null; pendingSeen = false
@@ -214,7 +214,7 @@ internal fun ImmersiveReader(
                 onOpenReaderActions = {},
                 onOpenAyahActions = { _, _ -> },
                 textScale = scale,
-                onTapAyah = viewModel::tapAyahSelection,
+                onTapAyah = { s0, a0 -> if (state.selectedAyahIndices.isEmpty() || circleClosedFor != state.selectedAyahIndices) viewModel.tapAyahSelection(s0, a0) },
                 onLongPressAyah = { surah, ayah ->
                     viewModel.beginAyahSelection(surah, ayah)
                     circleClosedFor = null; pendingClear = null; pendingSeen = false
@@ -262,6 +262,7 @@ internal fun ImmersiveReader(
                     Triple(Icons.Default.Info, "معلومات الآية") { infoAyah = rs to ra },
                 ).map { (ic, d, a) -> Triple(ic, d) {
                     circleClosedFor = state.selectedAyahIndices
+                    barsVisible = false // user 29460087: top and bottom bars hide once an action is taken
                     a()
                     when (d) {
                         "استماع المحدد فقط" -> { pendingClear = "play"; pendingSeen = false }

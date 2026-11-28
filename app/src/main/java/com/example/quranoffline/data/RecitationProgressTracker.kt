@@ -376,6 +376,15 @@ class RecitationProgressTracker(
                 clearCorrectionIfResolved(globalWordIndex(currentAyahIndex, rollbackMatch))
                 null
             }
+            laterMatch == current + 1 && isConjunctionWord(expectedWords[current].matchText) && confirmsNext(segment, segmentIndex, laterMatch) -> {
+                // v25.7 (user 29457342): the recognizer dropped a short conjunction word (وكفى) and returned the next word.
+                // The next words follow in order, so this is the recognizer's omission, not a skipped word.
+                markMatched(current, "")
+                noteMatch()
+                nextWordInAyah = current + 1
+                clearCorrectionIfResolved(globalWordIndex(currentAyahIndex, current))
+                acceptStableToken(token, segment, segmentIndex)
+            }
             laterMatch != null -> {
                 // A later token never validates the words after the first gap.
                 // Keep this ayah locked and return all following words to the
@@ -424,6 +433,18 @@ class RecitationProgressTracker(
                 request
             }
         }
+    }
+
+    private fun isConjunctionWord(matchText: String): Boolean {
+        val n = normalizeArabicForComparison(matchText)
+        return n.length in 4..5 && (n.startsWith("و") || n.startsWith("ف"))
+    }
+
+    /** The token after [segmentIndex] also matches the word after [laterIndex] (or [laterIndex] is the ayah's last word and the token is the last of the segment). */
+    private fun confirmsNext(segment: List<String>, segmentIndex: Int, laterIndex: Int): Boolean {
+        val expected = ayahs[currentAyahIndex].words
+        return if (laterIndex + 1 < expected.size) segmentIndex + 1 < segment.size && matchesWord(currentAyahIndex, laterIndex + 1, segment[segmentIndex + 1])
+        else segmentIndex + 1 >= segment.size
     }
 
     private fun isPreviousAyahStart(segment: List<String>, segmentIndex: Int): Boolean {

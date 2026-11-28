@@ -133,7 +133,7 @@ internal fun RadialAyahMenu(
 /**
  * v23 actions circle: stays on screen while a selection exists. It does not intercept touches outside its buttons, so the
  * user can keep tapping ayahs to extend or shrink the selection. Tapping the middle button closes it and clears the
- * selection (onCloseAll). Dragging the middle button moves the whole circle.
+ * selection (onCloseAll). The circle is fixed where the long press happened (v25.7: no dragging).
  */
 @Composable
 internal fun ActionsCircle(
@@ -169,11 +169,6 @@ internal fun ActionsCircle(
         val centerNow = androidx.compose.runtime.rememberUpdatedState(Offset(cx, cy))
         Box(
             Modifier.offset { IntOffset(cx.roundToInt() - half, cy.roundToInt() - half) }.size(btn).background(Color(0xFFD94A1E), CircleShape)
-                .pointerInput(Unit) {
-                    detectDragGestures { change, drag ->
-                        change.consume(); onMove(centerNow.value + drag)
-                    }
-                }
                 .clickable(onClickLabel = "إغلاق الدائرة وإلغاء التحديد") { onCloseAll() },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Default.Close, "إغلاق", tint = Color.White, modifier = Modifier.size(iconSize)) }

@@ -13,3 +13,4 @@ app/src/offline/assets/quran/audio/husary/*.mp3
 app/src/offline/assets/quran/audio/husary/*_transcription_*
 app/src/offline/assets/quran/audio/husary_aac/*.m4a
 app/src/offline/assets/models/*.zip
+.kotlin/
