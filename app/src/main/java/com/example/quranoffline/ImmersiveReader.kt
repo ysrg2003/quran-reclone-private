@@ -68,7 +68,7 @@ internal fun ImmersiveReader(
         controller?.hide(WindowInsetsCompat.Type.systemBars())
         onDispose { controller?.show(WindowInsetsCompat.Type.systemBars()) }
     }
-    val toggle = { barsVisible = !barsVisible }
+    val toggle = { if (pendingClear == null && infoAyah == null) barsVisible = !barsVisible }
     val scroll = rememberScrollState()
     val ayahY = remember { HashMap<String, Int>() }
     // The shown page follows tasmee; start each new page at its top, then bring the ayah being recited into view.
@@ -287,7 +287,7 @@ internal fun ImmersiveReader(
                 onPlayAyah = viewModel::playAyah, onPlayScope = viewModel::playReaderScopeFromHere, onCustom = viewModel::playCustomRange,
             )
         }
-        if (barsVisible) {
+        if (barsVisible && pendingClear == null && infoAyah == null) { // v25.8: bars stay hidden for the whole action
             Surface(
                 color = LocalAppearance.current.primary.copy(alpha = 0.95f), contentColor = Color.White,
                 modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding(),
