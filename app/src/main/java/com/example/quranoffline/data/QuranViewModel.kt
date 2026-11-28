@@ -799,6 +799,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                 isFinal = true,
                 segmentCompleted = true,
                 providerText = text,
+                endOfUtterance = true,
             ),
         )
     }
@@ -938,6 +939,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                             transcript = basmalaTranscript,
                             isFinal = update.isFinal,
                             segmentCompleted = update.segmentCompleted,
+                            endOfUtterance = update.endOfUtterance,
                         ),
                     )
                     val basmalaCorrection = basmalaProgress.correction
@@ -989,6 +991,7 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
                         transcript = filteredTranscript,
                         isFinal = update.isFinal,
                         segmentCompleted = update.segmentCompleted,
+                        endOfUtterance = update.endOfUtterance,
                     ),
                 )
                 val crossedToNewSurah = crossedIntoRequiredBasmala(previousState.currentAyahIndex, result.currentAyahIndex)

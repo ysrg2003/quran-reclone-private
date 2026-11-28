@@ -182,6 +182,35 @@ internal fun ActionsCircle(
 
 @Composable
 internal fun AyahInfoDialog(state: QuranUiState, surah: Int, ayah: Int, onDismiss: () -> Unit) {
+    // v25.6 (user 29258668): with several ayahs selected the info describes the whole selection as one block.
+    val sel = state.selectedAyahIndices.mapNotNull { state.allAyahs.getOrNull(it) }
+    val first = sel.firstOrNull(); val last = sel.lastOrNull()
+    if (sel.size > 1 && first != null && last != null) {
+        val metas = sel.mapNotNull { state.metadata?.ayah(it.surah, it.ayah) }
+        fun nm(n: Int) = state.metadata?.sura(n)?.arabicName ?: "$n"
+        val surahs = sel.map { it.surah }.distinct()
+        val pages = metas.map { it.page }; val juzs = metas.map { it.juz }
+        val hizbs = metas.map { (it.quarter - 1) / 4 + 1 }
+        fun rng(v: List<Int>) = if (v.isEmpty()) "—" else if (v.min() == v.max()) "${v.min()}" else "${v.min()} - ${v.max()}"
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("معلومات الآيات المحددة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("عدد الآيات: ${sel.size}")
+                    Text(if (surahs.size == 1) "السورة: ${nm(first.surah)} (${first.surah})" else "السور: " + surahs.joinToString("، ") { nm(it) })
+                    Text("من: ${nm(first.surah)} آية ${first.ayah}")
+                    Text("إلى: ${nm(last.surah)} آية ${last.ayah}")
+                    Text("الصفحة: ${rng(pages)}")
+                    Text("الجزء: ${rng(juzs)}")
+                    Text("الحزب: ${rng(hizbs)}")
+                    Text("عدد الكلمات: ${sel.sumOf { it.words.size }}")
+                }
+            },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("حسناً") } },
+        )
+        return
+    }
     val md = state.metadata?.ayah(surah, ayah)
     val name = state.metadata?.sura(surah)?.arabicName ?: "$surah"
     AlertDialog(

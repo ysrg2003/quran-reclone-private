@@ -10,6 +10,8 @@ sealed interface RecognitionUpdate {
         val segmentCompleted: Boolean = false,
         /** The exact primary candidate from the most recent recognizer callback. */
         val providerText: String = value,
+        /** True only when the recognizer finished an utterance (not a mid-speech cut): a trailing partial word is then judged, not held back. */
+        val endOfUtterance: Boolean = false,
     ) : RecognitionUpdate
     data class Failed(val message: String) : RecognitionUpdate
     data object Stopped : RecognitionUpdate

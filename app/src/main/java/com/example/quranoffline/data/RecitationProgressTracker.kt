@@ -7,6 +7,8 @@ data class RecitationProgressInput(
     val transcript: String,
     val isFinal: Boolean,
     val segmentCompleted: Boolean,
+    /** The recognizer ended an utterance: a trailing token that is only the start of the expected word is judged now (v25.6). */
+    val endOfUtterance: Boolean = false,
 )
 
 enum class CorrectionKind {
@@ -227,7 +229,7 @@ class RecitationProgressTracker(
                         index++
                     }
                 }
-                if (isPotentialWordPrefix(token) && index == newTokens.lastIndex) {
+                if (!input.endOfUtterance && isPotentialWordPrefix(token) && index == newTokens.lastIndex) {
                     pendingWordPrefix = token
                     spokenGlobalWordIndex = currentGlobalWordIndex()
                     break

@@ -78,7 +78,7 @@ class WhisperSpeechSession(
             if (size >= RATE / 2) {
                 val words = StablePrefix.dropLoop(StablePrefix.words(WhisperNative.nativeTranscribe(handle, buffer.copyOf(size), threads)))
                 val text = listOf(committed, words.joinToString(" ")).filter { it.isNotBlank() }.joinToString(" ")
-                if (text.isNotBlank() && text != lastText) onUpdate(RecognitionUpdate.Text(text, FloatArray(0), true, true, words.joinToString(" ")))
+                if (text.isNotBlank() && text != lastText) onUpdate(RecognitionUpdate.Text(text, FloatArray(0), true, true, words.joinToString(" "), endOfUtterance = true))
             }
         } catch (t: Throwable) {
             fail("خطأ في Whisper: ${t.message ?: t.javaClass.simpleName}")

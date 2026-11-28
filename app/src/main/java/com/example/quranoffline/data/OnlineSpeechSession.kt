@@ -97,6 +97,7 @@ class OnlineSpeechSession(
                         isFinal = isFinal,
                         segmentCompleted = isFinal,
                         providerText = text,
+                        endOfUtterance = isFinal,
                     ),
                 )
             }
@@ -134,6 +135,7 @@ class OnlineSpeechSession(
                     isFinal = true,
                     segmentCompleted = true,
                     providerText = currentPartialText,
+                    endOfUtterance = true,
                 ),
             )
         }
